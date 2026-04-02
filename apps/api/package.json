@@ -17,14 +17,17 @@
   "dependencies": {
     "@lcb/flows": "workspace:*",
     "@lcb/shared": "workspace:*",
+    "@prisma/client": "^7.6.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2"
   },
   "devDependencies": {
+    "@prisma/config": "^7.6.0",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/node": "^22.10.2",
+    "prisma": "^7.6.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }
