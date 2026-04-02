@@ -1,0 +1,61 @@
+import { Obligation, ObligationStatus, ObligationType } from "@lcb/shared";
+
+export const sampleObligations: Obligation[] = [
+  {
+    id: "obl_1",
+    type: ObligationType.SUBSCRIPTION,
+    title: "Netflix Subscription",
+    description: "Monthly streaming subscription",
+    vendor: "Netflix",
+    amount: 15.49,
+    dueDate: new Date(Date.now() + 86400000).toISOString(),
+    source: "manual",
+    confidenceScore: 0.95,
+    urgencyScore: 80,
+    importanceScore: 60,
+    effortLevel: "low",
+    impactLevel: "medium",
+    status: ObligationStatus.ACTIVE,
+    suggestedActions: ["Review subscription", "Keep for now", "Cancel later"],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: "obl_2",
+    type: ObligationType.BILL,
+    title: "Credit Card Bill",
+    description: "Monthly card payment",
+    vendor: "Chase",
+    amount: 245.0,
+    dueDate: new Date(Date.now() + 2 * 86400000).toISOString(),
+    source: "manual",
+    confidenceScore: 0.97,
+    urgencyScore: 90,
+    importanceScore: 90,
+    effortLevel: "medium",
+    impactLevel: "high",
+    status: ObligationStatus.ACTIVE,
+    suggestedActions: ["Review bill", "Remind me later", "Mark as handled"],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: "obl_3",
+    type: ObligationType.RENEWAL,
+    title: "Car Insurance Renewal",
+    description: "Policy renewal coming up",
+    vendor: "Geico",
+    amount: null,
+    dueDate: new Date(Date.now() + 5 * 86400000).toISOString(),
+    source: "manual",
+    confidenceScore: 0.88,
+    urgencyScore: 70,
+    importanceScore: 85,
+    effortLevel: "medium",
+    impactLevel: "high",
+    status: ObligationStatus.ACTIVE,
+    suggestedActions: ["Review renewal", "Renew later", "Ignore for now"],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }
+];

@@ -4,14 +4,9 @@ dist
 build
 coverage
 .env
-.env.*
-!.env.example
-pnpm-lock.yaml
+.env.local
+.env.*.local
 *.log
 .DS_Store
-turbo
-.prisma
-generated
 uploads
 tmp
-
