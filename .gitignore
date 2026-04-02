@@ -1,0 +1,17 @@
+node_modules
+.next
+dist
+build
+coverage
+.env
+.env.*
+!.env.example
+pnpm-lock.yaml
+*.log
+.DS_Store
+turbo
+.prisma
+generated
+uploads
+tmp
+
