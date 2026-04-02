@@ -103,134 +103,146 @@ Observability
 ```
 ---
 
-## 5. Detailed Architecture
+## 5. Logical Components
 
 ### 5.1 Web App
 
 The web app is the primary user interface.
 
-1. Responsibilities
-2. Render Today Feed.
-3. Capture natural-language commands.
-4. Show obligation details.
-5. Show resolution guidance.
-6. Collect user feedback.
-7. Support manual entry and document upload.
-8. Primary Screens
-9. Secondary Screens
-10. Home / Today Feed
-11. Obligation Detail
-12. Command Result
-13. Add Obligation
-14. Upload / Import
-15. Settings / Data Controls
+<b>Responsibilities</b>
+
+- Render Today Feed.
+- Capture natural-language commands.
+- Show obligation details.
+- Show resolution guidance.
+- Collect user feedback.
+- Support manual entry and document upload.
+
+<b>Primary Screens</b>
+
+- Home / Today Feed
+- Obligation Detail
+- Command Result
+- Add Obligation
+- Upload / Import
+- Settings / Data Controls
 
 ### 5.2 API Service
 
 The API service is the main application backend.
 
-1. Responsibilities
-    1.1 Expose REST endpoints.
-    1.2 Validate requests.
-    1.3 Orchestrate command processing.
-    1.4 Read and write domain objects.
-    1.5 Trigger asynchronous jobs.
-    1.6 Return UI-ready responses.
+<b> Responsibilities</b>
 
-2. Core Modules
-    2.1 Command controller/service
-    2.2 Obligation controller/service
-    2.3 Today Feed controller/service
-    2.4 Feedback controller/service
-    2.5 Upload controller/service
-    2.6 Reminder controller/service
+1. Expose REST endpoints.
+2. Validate requests.
+3. Orchestrate command processing.
+4. Read and write domain objects.
+5. Trigger asynchronous jobs.
+6. Return  UI-ready responses.
+
+<b>Core Modules</b>
+
+1. Command controller/service
+2. Obligation controller/service
+3. Today Feed controller/service
+4. Feedback controller/service
+5. Upload controller/service
+6. Reminder controller/service
 
 ### 5.3 Command Orchestrator
 
 The command orchestrator converts natural-language input into domain actions.
 
-Responsibilities
-Classify command intent.
-Extract entities.
-Resolve the target obligation, if one exists.
-Map command input to one of:
-existing obligation lookup
-new obligation creation
-resolution flow trigger
-clarification request
+<b>Responsibilities</b>
 
-Example
+1. Classify command intent.
+2. Extract entities.
+3. Resolve the target obligation, if one exists.
+4. Map command input to one of:
+    - existing obligation lookup
+    - new obligation creation
+    - resolution flow trigger
+    - clarification request
 
-Input:
+<b>Example</b>
+
+<b>Input</b>
 
 Prepare to cancel Netflix
 
-Output:
+<b>Output</b>
 
-Identify target obligation: Netflix subscription
-Trigger subscription resolution flow
-Return recommendation, steps, and primary action
+- Identify target obligation: Netflix subscription
+- Trigger subscription resolution flow
+- Return recommendation, steps, and primary action
 
 ### 5.4 Obligation Detection Engine
 
 The obligation detection engine converts raw input into structured obligation objects.
 
-Input Sources in v1
-Manual entry
-Assisted input
-Uploaded documents
-Forwarded emails
-Inferred suggestions later
-Responsibilities
-Detect obligation type.
-Extract due date, amount, vendor, and title.
-Assign source and confidence.
-Generate normalized obligation objects.
-Require confirmation or edit when confidence is low.
+<b>Input Sources in v1</b>
 
-This is a hybrid system:
+- Manual entry
+- Assisted input
+- Uploaded documents
+- Forwarded emails
+- Inferred suggestions later
 
-Rule and pattern extraction for obvious cases
-LLM extraction for unstructured input
-User confirmation for uncertain output
-5.5 Context and Memory Layer
+<b>Responsibilities</b>
+
+- Detect obligation type.
+- Extract due date, amount, vendor, and title.
+- Assign source and confidence.
+- Generate normalized obligation objects.
+- Require confirmation or edit when confidence is low.
+
+<b>This is a hybrid system</b>
+
+- Rule and pattern extraction for obvious cases
+- LLM extraction for unstructured input
+- User confirmation for uncertain output
+
+### 5.5 Context and Memory Layer
 
 The context and memory layer stores durable state about obligations and user interactions.
 
-Responsibilities
-Store obligations.
-Store user preferences.
-Store action history.
-Store feedback events.
-Store reminders.
-Provide context to prioritization and flow generation.
+<b>Responsibilities</b>
 
-Use relational storage first. Do not overbuild a vector-memory system for the POC.
+- Store obligations.
+- Store user preferences.
+- Store action history.
+- Store feedback events.
+- Store reminders.
+- Provide context to prioritization and flow generation.
+
+<b>Use relational storage first. Do not overbuild a vector-memory system for the POC.</b>
 
 ### 5.6 Prioritization Engine
 
 The prioritization engine ranks obligations for the Today Feed.
 
-Inputs
-Due date proximity
-Urgency
-Financial or penalty impact
-Confidence
-Effort estimate
-User history
-Unresolved age
-Quick-win potential
-Output
+<b>Inputs</b>
 
-A ranked set of candidate obligations, from which only 3–5 are shown.
+- Due date proximity
+- Urgency
+- Financial or penalty impact
+- Confidence
+- Effort estimate
+- User history
+- Unresolved age
+- Quick-win potential
 
-Feed Rule
+<b>Output</b>
+
+- A ranked set of candidate obligations, from which only 3–5 are shown.
+
+<b>Feed Rule</b>
 
 The Today Feed must include at least one:
 
-urgent item
-money-related item
-or high-confidence quick win
+- urgent item
+- money-related item
+- or high-confidence quick win
 
 This prevents the feed from feeling empty or low value.
 
@@ -238,83 +250,109 @@ This prevents the feed from feeling empty or low value.
 
 The Resolution Flow Engine is the core product engine and primary differentiator.
 
-Responsibilities
+<b>Responsibilities</b>
 
 For each obligation:
 
-Identify the applicable flow template.
-Generate decision options.
-Recommend a default path.
-Generate clear step-by-step guidance.
-Surface one primary action.
-Limit secondary actions to 2–3.
-v1 Flow Families
-Subscription
-Bill
-Renewal
-Commitment
-Resolution Quality Bar
+1. Identify the applicable flow template.
+2. Generate decision options.
+3. Recommend a default path.
+4. Generate clear step-by-step guidance.
+5. Surface one primary action.
+6. Limit secondary actions to 2–3.
+
+<b>v1 Flow Families</b>
+
+- Subscription
+- Bill
+- Renewal
+- Commitment
+
+<b>Example</b>
+
+<b>Subscription</b>
+
+- Cancel
+- Pause
+- Downgrade
+- Keep
+
+<b>Renewal</b>
+
+- Renew
+- Cancel
+- Change plan
+
+<b>Commitment</b>
+
+1. Fulfill
+2. Renegotiate
+3. Cancel
+
+<b>Resolution Quality Bar</b>
 
 Each flow must:
 
-Reduce user thinking.
-Remove at least one manual step.
-Provide non-obvious context where possible.
-Feel faster than doing it manually.
-Deliver a clear primary action within seconds.
+1. Reduce user thinking.
+2. Remove at least one manual step.
+3. Provide non-obvious context where possible.
+4. Feel faster than doing it manually.
+5. Deliver a clear primary action within seconds.
 
 ### 5.8 Today Feed Engine
 
 The Today Feed Engine builds the daily feed.
 
-Responsibilities
-Pull active obligations.
-Apply ranking.
-Apply the 3–5 item cap.
-Enrich top items with flow output.
-Generate cards that answer:
-why
-what
-how hard
-Feed Item Contract
+<b>Responsibilities</b>
 
+1. Pull active obligations.
+2. Apply ranking.
+3. Apply the 3–5 item cap.
+4. Enrich top items with flow output.
+5. Generate cards that answer:
+    - why
+    - what
+    - how hard
+
+<b>Feed Item Contract</b>
 Each feed item should include:
 
-Obligation summary
-Why it matters
-Recommended action
-Effort
-Impact
-Confidence
-Primary action
-Secondary actions
-State metadata
+1. Obligation summary
+2. Why it matters
+3. Recommended action
+4. Effort
+5. Impact
+6. Confidence
+7. Primary action
+8. Secondary actions
+9. State metadata
 
 ### 5.9 Feedback and Learning Layer
 
 The Feedback and Learning Layer closes the loop and enables compounding system quality.
 
-Responsibilities
+<b>Responsibilities</b>
 
 Capture:
 
-accepted recommendation
-ignored
-modified
-completed
-postponed
-rejected
-not relevant
-wrong info
-don’t show again
+1. accepted recommendation
+2. ignored
+3. modified
+4. completed
+5. postponed
+6. rejected
+7. not relevant
+8. wrong info
+9. don’t show again
 
-Use outcomes to:
+<b>Use outcomes to:</b>
 
-Improve confidence
-Personalize future suggestions
-Tune prioritization
-Tune flow recommendations
-v1 Design
+1. Improve confidence
+2. Personalize future suggestions
+3. Tune prioritization
+4. Tune flow recommendations
+
+<b>v1 Design</b>
 
 This is rules plus stored signals, not a self-learning autonomous system.
 
@@ -322,28 +360,33 @@ This is rules plus stored signals, not a self-learning autonomous system.
 
 The failure and recovery model handles wrong or weak system output gracefully.
 
-Per-Item Recovery Actions
-Not relevant
-Wrong info
-Edit
-Don’t show again
-Mark done
-Postpone
-Purpose
-Preserve trust
-Improve future feed quality
-Supply feedback signals for learning
+<b>Per-Item Recovery Actions</b>
+
+- Not relevant
+- Wrong info
+- Edit
+- Don’t show again
+- Mark done
+- Postpone
+
+<b>Purpose</b>
+
+- Preserve trust
+- Improve future feed quality
+- Supply feedback signals for learning
 
 ### 5.11 Reminder Service
 
 The reminder service supports internal reminders only.
 
-Responsibilities
-Create reminders from obligations
-Create reminders from user commands
-Schedule reminder jobs
-Feed reminder state back into obligation history
-v1 Boundary
+<b>Responsibilities</b>
+
+- Create reminders from obligations
+- Create reminders from user commands
+- Schedule reminder jobs
+- Feed reminder state back into obligation history
+
+<b>v1 Boundary</b>
 
 No external transactional action. Internal reminders only.
 
@@ -353,249 +396,256 @@ No external transactional action. Internal reminders only.
 
 PostgreSQL
 
-Why PostgreSQL
-Obligations are structured.
-Relationships matter.
-Auditability matters.
-Ranking queries matter.
-It is simpler and more reliable than overusing vector storage for the POC.
+<b>Why PostgreSQL</b>
+
+- Obligations are structured.
+- Relationships matter.
+- Auditability matters.
+- Ranking queries matter.
+- It is simpler and more reliable than overusing vector storage for the POC.
 
 ### 6.2 Cache and Queue
 
 Redis
 
-Uses
-Asynchronous job queue
-Background processing
-Short-lived cache
-Reminder scheduling support
+<b>Uses</b>
+
+- Asynchronous job queue
+- Background processing
+- Short-lived cache
+- Reminder scheduling support
 
 ### 6.3 Object Storage
 
 Use local storage for the POC or S3-compatible storage if desired.
 
-Uses
-Uploaded PDFs and images
-Source artifacts
-Future exports if needed
+<b>Uses</b>
+
+- Uploaded PDFs and images
+- Source artifacts
+- Future exports if needed
 
 ### 6.4 Audit and Event Log
 
 Store domain events in PostgreSQL initially.
 
-Event Examples
-obligation_created
-obligation_confirmed
-feed_generated
-recommendation_accepted
-item_postponed
-item_rejected
+<b>Event Examples</b>
+
+- obligation_created
+- obligation_confirmed
+- feed_generated
+- recommendation_accepted
+- item_postponed
+- item_rejected
 
 ## 7. Core Domain Model
 
 ### 7.1 Main Entities
 
-User
+<b  >User</b>
 
 Stores basic account, preferences, and profile settings.
 
-Obligation
+<b>Obligation</b>
 
 Core domain object.
 
 Typical fields:
 
-id
-type
-title
-vendor
-due_date
-amount
-recurrence
-source
-confidence_score
-urgency_score
-importance_score
-effort_level
-impact_level
-status
-FeedItem
+1. id
+2. type
+3. title
+4. vendor
+5. due_date
+6. amount
+7. recurrence
+8. source
+9. confidence_score
+10. urgency_score
+11. importance_score
+12. effort_level
+13. impact_level
+14. status
 
-Materialized or generated representation for Today Feed.
+<b>FeedItem</b>
 
-ResolutionFlowTemplate
+- Materialized or generated representation for Today Feed.
 
-Structured template for obligation family and subtype.
+<b>ResolutionFlowTemplate</b>
 
-ResolutionRecommendation
+- Structured template for obligation family and subtype.
 
-Generated recommendation for a specific obligation instance.
+<b>ResolutionRecommendation</b>
 
-FeedbackEvent
+- Generated recommendation for a specific obligation instance.
 
-Represents user response to system guidance.
+<b>FeedbackEvent</b>
 
-Reminder
+- Represents user response to system guidance.
 
-Represents a scheduled internal reminder.
+<b>Reminder</b>
 
-AuditEvent
+- Represents a scheduled internal reminder.
 
-Represents system or user domain events.
+<b>AuditEvent</b>
+
+- Represents system or user domain events.
 
 ## 8. Core Processing Flows
 
 ### 8.1 Flow A — Manual Add Obligation
-User enters: Track my car insurance renewal
-API sends text to Command Orchestrator
-Intent classified as new obligation creation
-Detection Engine extracts:
-type = renewal
-title = car insurance
-Obligation created with confidence
-Feed refresh job triggered
-Today Feed updated
+- User enters: Track my car insurance renewal
+- API sends text to Command Orchestrator
+- Intent classified as new obligation creation
+- Detection Engine extracts:
+    - type = renewal
+    - title = car insurance
+- Obligation created with confidence
+- Feed refresh job triggered
+- Today Feed updated
 
 ### 8.2 Flow B — Upload Bill or Document
-User uploads document
-File stored
-Async detection job triggered
-Detection engine extracts structured fields
-Obligation created as draft or confirmed candidate
-User confirms or edits if needed
-Obligation enters active set
-Feed refresh runs
+- User uploads document
+- File stored
+- Async detection job triggered
+- Detection engine extracts structured fields
+- Obligation created as draft or confirmed candidate
+- User confirms or edits if needed
+- Obligation enters active set
+- Feed refresh runs
 
 ### 8.3 Flow C — Query Today Feed
-User opens app or asks command
-API requests current feed
-Today Feed Engine ranks active obligations
-Resolution Flow Engine enriches top items
-API returns 3–5 cards
+- User opens app or asks command
+- API requests current feed
+- Today Feed Engine ranks active obligations
+- Resolution Flow Engine enriches top items
+- API returns 3–5 cards
 
 ### 8.4 Flow D — Resolution Guidance
-User asks: Help me handle this
-Command refers to an existing obligation
-Resolution Flow Engine selects template
-Recommendation and steps returned
-User can act, postpone, or reject
+- User asks: Help me handle this
+- Command refers to an existing obligation
+- Resolution Flow Engine selects template
+- Recommendation and steps returned
+- User can act, postpone, or reject
 
 ### 8.5 Flow E — Feedback Loop
-User clicks Not relevant
-Feedback event stored
-Obligation or feed state updated
-Learning job updates confidence or suppression rules
-Future feed quality improves
+- User clicks Not relevant
+- Feedback event stored
+- Obligation or feed state updated
+- Learning job updates confidence or suppression rules
+- Future feed quality improves
 
 ## 9. API Surface (High Level)
 
 ### 9.1 Command APIs
-POST /commands/parse
-POST /commands/execute
+- POST /commands/parse
+- POST /commands/execute
 
 ### 9.2 Obligation APIs
-GET /obligations
-POST /obligations
-PATCH /obligations/:id
-POST /obligations/:id/confirm
-POST /obligations/:id/postpone
-POST /obligations/:id/dismiss
+- GET /obligations
+- POST /obligations
+- GET /obligations/:id
+- PATCH /obligations/:id
+- POST /obligations/:id/confirm
+- POST /obligations/:id/postpone
+- POST /obligations/:id/dismiss
 
 ### 9.3 Today Feed APIs
-GET /today-feed
-POST /today-feed/refresh
+- GET /today-feed
+- POST /today-feed/refresh
 
 ### 9.4 Feedback APIs
-POST /feedback
-POST /obligations/:id/dismiss
-POST /obligations/:id/mark-done
+- POST /feedback
+- POST /obligations/:id/dismiss
+- POST /obligations/:id/mark-done
 
 ### 9.5 Upload APIs
-POST /uploads
-POST /imports/email-forward
+- POST /uploads
+- POST /imports/email-forward
 
 ### 9.6 Reminder APIs
-POST /reminders
-GET /reminders
+- POST /reminders
+- GET /reminders
 
 ## 10. Deployment Architecture for POC
 
 For the POC, the Raspberry Pi cluster should be used as the application and control plane, while model inference remains external.
 
 ### 10.1 On the Pi Cluster
-Web app
-API service
-Worker service
-PostgreSQL
-Redis
-Observability stack
+- Web app
+- API service
+- Worker service
+- PostgreSQL
+- Redis
+- Observability stack
 
 ### 10.2 External or Hosted Services
-LLM API
-Optional OCR or document parsing API
-Optional email provider
+- LLM API
+- Optional OCR or document parsing API
+- Optional email provider
 
 This keeps the POC realistic, low-cost, and aligned with earlier infrastructure decisions.
 
 ## 11. Security and Privacy Architecture
 
 ### 11.1 v1 Requirements
-Encrypted transport
-Hashed auth and session secrets
-Least-privilege data access
-User-visible data ownership and deletion controls
-No bank access
-No autonomous payments
+- Encrypted transport
+- Hashed auth and session secrets
+- Least-privilege data access
+- User-visible data ownership and deletion controls
+- No bank access
+- No autonomous payments
 
 ### 11.2 Trust Requirements
 
 Each surfaced item should clearly indicate:
 
-source of detection
-confidence
-why it appeared
-what action is recommended
+- source of detection
+- confidence
+- why it appeared
+- what action is recommended
 
 ## 12. Observability Architecture
 
 ### 12.1 Metrics
 
-Track:
+<b>Track:</b>
 
-Command parse success rate
-Detection accuracy
-Feed generation latency
-Feed action rate
-not relevant rate
-Recommendation acceptance rate
-Time-to-value
-Daily interactions per user
+- Command parse success rate
+- Detection accuracy
+- Feed generation latency
+- Feed action rate
+- not relevant rate
+- Recommendation acceptance rate
+- Time-to-value
+- Daily interactions per user
 
 ### 12.2 Logs
-Command processing logs
-Detection logs
-Worker job logs
-API request logs
+- Command processing logs
+- Detection logs
+- Worker job logs
+- API request logs
 
 ### 12.3 Dashboards
-Onboarding and value dashboard
-Feed quality dashboard
-Resolution flow performance dashboard
-System health dashboard
+- Onboarding and value dashboard
+- Feed quality dashboard
+- Resolution flow performance dashboard
+- System health dashboard
 
 ## 13. Scalability and Evolution
 
 ### 13.1 v1 Scale Assumptions
-Low concurrency
-Small document volume
-Limited users
-Hosted LLM usage
+- Low concurrency
+- Small document volume
+- Limited users
+- Hosted LLM usage
 
 ### 13.2 Future-Ready Decisions
-Resolution Flow Engine isolated as its own module/package
-Worker-based async processing
-Clear command orchestration layer
-Feedback events stored from day one
+- Resolution Flow Engine
+- isolated as its own module/package
+- Worker-based async processing
+- Clear command orchestration layer
+- Feedback events stored from day one
 
 This supports future expansion into more flow types, low-risk automation, vendor integrations, and predictive obligation detection.
 
@@ -623,27 +673,28 @@ Should email entry begin with forwarding-mailbox support, or wait for OAuth inbo
 
 Should v1 remain rule-based, or include light model-assisted personalization?
 
-Recommended v1 Answers
-Hybrid command routing
-Compute on read with light caching
-Code-defined templates first
-Forwarding mailbox first
-Rule-based learning first
+<b>Recommended v1 Answers</b>
 
-##15. Recommended v1 Technology Decisions
+- Hybrid command routing
+- Compute on read with light caching
+- Code-defined templates first
+- Forwarding mailbox first
+- Rule-based learning first
+
+## 15. Recommended v1 Technology Decisions
 
 To keep the build tight and practical:
 
-Monorepo
-Next.js web app
-Express API
-PostgreSQL
-Redis
-Worker service
-Code-defined resolution flow templates
-External LLM API
-Manual + upload-first ingestion
-On-demand Today Feed generation
+- Monorepo
+- Next.js web app
+- Express API
+- PostgreSQL
+- Redis
+- Worker service
+- Code-defined resolution flow templates
+- External LLM API
+- Manual + upload-first ingestion
+- On-demand Today Feed generation
 
 ## 16. System Summary
 

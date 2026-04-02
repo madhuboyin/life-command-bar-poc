@@ -1,0 +1,267 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ObligationType {
+  BILL
+  SUBSCRIPTION
+  RENEWAL
+  COMMITMENT
+}
+
+enum ObligationSource {
+  MANUAL
+  EMAIL
+  DOCUMENT
+  INFERRED
+}
+
+enum ObligationStatus {
+  DRAFT
+  ACTIVE
+  POSTPONED
+  RESOLVED
+  IGNORED
+}
+
+enum EffortLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum ImpactLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum ReminderStatus {
+  SCHEDULED
+  TRIGGERED
+  CANCELLED
+}
+
+enum UploadStatus {
+  UPLOADED
+  PROCESSING
+  PROCESSED
+  FAILED
+}
+
+enum ImportSourceType {
+  MANUAL
+  EMAIL
+  DOCUMENT
+}
+
+enum FeedbackType {
+  ACCEPTED
+  IGNORED
+  MODIFIED
+  COMPLETED
+  POSTPONED
+  REJECTED
+  NOT_RELEVANT
+  WRONG_INFO
+  DONT_SHOW_AGAIN
+}
+
+enum ResolutionConfidence {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  timezone  String   @default("America/New_York")
+  locale    String?
+
+  obligations    Obligation[]
+  reminders      Reminder[]
+  feedbackEvents FeedbackEvent[]
+  auditEvents    AuditEvent[]
+  uploads        Upload[]
+  importSources  ImportSource[]
+  resolutionRuns ResolutionRun[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+model Obligation {
+  id String @id @default(cuid())
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type        ObligationType
+  title       String
+  description String?
+  vendor      String?
+
+  amount   Decimal? @db.Decimal(12, 2)
+  currency String?  @db.VarChar(3)
+
+  dueDate    DateTime? @map("due_date")
+  recurrence String?
+
+  source ObligationSource
+  status ObligationStatus @default(DRAFT)
+
+  confidenceScore Decimal @default(0.0) @db.Decimal(5, 4) @map("confidence_score")
+  urgencyScore    Decimal @default(0.0) @db.Decimal(7, 4) @map("urgency_score")
+  importanceScore Decimal @default(0.0) @db.Decimal(7, 4) @map("importance_score")
+
+  effortLevel EffortLevel @default(MEDIUM) @map("effort_level")
+  impactLevel ImpactLevel @default(MEDIUM) @map("impact_level")
+
+  lastShownAt DateTime? @map("last_shown_at")
+  lastActedAt DateTime? @map("last_acted_at")
+
+  reminders      Reminder[]
+  feedbackEvents FeedbackEvent[]
+  auditEvents    AuditEvent[]
+  resolutionRuns ResolutionRun[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, status], map: "idx_obligations_user_id_status")
+  @@index([userId, dueDate], map: "idx_obligations_user_id_due_date")
+  @@index([userId, type], map: "idx_obligations_user_id_type")
+  @@index([userId, lastShownAt], map: "idx_obligations_user_id_last_shown_at")
+  @@index([userId, vendor], map: "idx_obligations_user_id_vendor")
+  @@map("obligations")
+}
+
+model Reminder {
+  id String @id @default(cuid())
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  obligationId String?     @map("obligation_id")
+  obligation   Obligation? @relation(fields: [obligationId], references: [id], onDelete: SetNull)
+
+  title        String
+  scheduledFor DateTime       @map("scheduled_for")
+  status       ReminderStatus @default(SCHEDULED)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, scheduledFor], map: "idx_reminders_user_id_scheduled_for")
+  @@index([status], map: "idx_reminders_status")
+  @@index([obligationId], map: "idx_reminders_obligation_id")
+  @@map("reminders")
+}
+
+model FeedbackEvent {
+  id String @id @default(cuid())
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  obligationId String?     @map("obligation_id")
+  obligation   Obligation? @relation(fields: [obligationId], references: [id], onDelete: SetNull)
+
+  feedItemId String? @map("feed_item_id")
+
+  type FeedbackType
+  note String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt], map: "idx_feedback_events_user_id_created_at")
+  @@index([obligationId], map: "idx_feedback_events_obligation_id")
+  @@index([feedItemId], map: "idx_feedback_events_feed_item_id")
+  @@map("feedback_events")
+}
+
+model AuditEvent {
+  id String @id @default(cuid())
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  obligationId String?     @map("obligation_id")
+  obligation   Obligation? @relation(fields: [obligationId], references: [id], onDelete: SetNull)
+
+  eventType String @map("event_type")
+  metadata  Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt], map: "idx_audit_events_user_id_created_at")
+  @@index([obligationId], map: "idx_audit_events_obligation_id")
+  @@index([eventType], map: "idx_audit_events_event_type")
+  @@map("audit_events")
+}
+
+model Upload {
+  id String @id @default(cuid())
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  fileName    String @map("file_name")
+  fileType    String @map("file_type")
+  fileSize    Int    @map("file_size")
+  storagePath String @map("storage_path")
+
+  status UploadStatus @default(UPLOADED)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt], map: "idx_uploads_user_id_created_at")
+  @@index([status], map: "idx_uploads_status")
+  @@map("uploads")
+}
+
+model ImportSource {
+  id String @id @default(cuid())
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type    ImportSourceType
+  rawData Json?            @map("raw_data")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt], map: "idx_import_sources_user_id_created_at")
+  @@index([type], map: "idx_import_sources_type")
+  @@map("import_sources")
+}
+
+model ResolutionRun {
+  id String @id @default(cuid())
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  obligationId String     @map("obligation_id")
+  obligation   Obligation @relation(fields: [obligationId], references: [id], onDelete: Cascade)
+
+  flowKey           String               @map("flow_key")
+  recommendedOption String               @map("recommended_option")
+  confidence        ResolutionConfidence
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt], map: "idx_resolution_runs_user_id_created_at")
+  @@index([obligationId], map: "idx_resolution_runs_obligation_id")
+  @@index([flowKey], map: "idx_resolution_runs_flow_key")
+  @@map("resolution_runs")
+}
