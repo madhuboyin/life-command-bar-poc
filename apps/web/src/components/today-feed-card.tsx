@@ -10,43 +10,20 @@ import {
   postponeObligation
 } from "../lib/api";
 import type { ResolutionResponse, TodayFeedItem } from "../lib/types";
+import {
+  buttonStyles,
+  cardStyles,
+  colors,
+  formatDateTime,
+  getHookBadgeStyle
+} from "../lib/ui";
 import ResolutionModal from "./resolution-modal";
+import StatusMessage from "./ui/status-message";
 
 type Props = {
   item: TodayFeedItem;
   onRefresh: () => Promise<void>;
 };
-
-function formatDueDate(value?: string | null) {
-  if (!value) return "No due date";
-  return new Date(value).toLocaleString();
-}
-
-function badgeStyle(label: string) {
-  const base = {
-    display: "inline-block",
-    padding: "4px 8px",
-    borderRadius: 999,
-    fontSize: 12,
-    fontWeight: 600,
-    background: "#eef2ff",
-    color: "#3730a3"
-  } as const;
-
-  if (label === "urgent") {
-    return { ...base, background: "#fee2e2", color: "#991b1b" };
-  }
-
-  if (label === "money") {
-    return { ...base, background: "#dcfce7", color: "#166534" };
-  }
-
-  if (label === "quick_win") {
-    return { ...base, background: "#fef3c7", color: "#92400e" };
-  }
-
-  return { ...base, background: "#e5e7eb", color: "#374151" };
-}
 
 export default function TodayFeedCard({ item, onRefresh }: Props) {
   const [loading, setLoading] = useState<string | null>(null);
@@ -129,15 +106,7 @@ export default function TodayFeedCard({ item, onRefresh }: Props) {
 
   return (
     <>
-      <article
-        style={{
-          border: "1px solid #e5e7eb",
-          borderRadius: 16,
-          padding: 18,
-          background: "#fff",
-          boxShadow: "0 1px 2px rgba(0,0,0,0.05)"
-        }}
-      >
+      <article style={cardStyles.item}>
         <div
           style={{
             display: "flex",
@@ -149,12 +118,12 @@ export default function TodayFeedCard({ item, onRefresh }: Props) {
         >
           <div>
             <h3 style={{ margin: "0 0 6px 0", fontSize: 18 }}>{item.obligation.title}</h3>
-            <div style={{ fontSize: 13, color: "#6b7280" }}>
-              {item.obligation.type} · Due: {formatDueDate(item.obligation.dueDate)}
+            <div style={{ fontSize: 13, color: colors.textMuted }}>
+              {item.obligation.type} · Due: {formatDateTime(item.obligation.dueDate)}
             </div>
           </div>
 
-          <span style={badgeStyle(item.hookType)}>{item.hookType}</span>
+          <span style={getHookBadgeStyle(item.hookType)}>{item.hookType}</span>
         </div>
 
         <div style={{ display: "grid", gap: 8, marginBottom: 14 }}>
@@ -173,19 +142,19 @@ export default function TodayFeedCard({ item, onRefresh }: Props) {
           <button
             onClick={handleShowResolution}
             disabled={loading !== null}
-            style={primaryButton}
+            style={buttonStyles.primary}
           >
             {loading === "resolution" ? "Loading..." : item.primaryAction.label}
           </button>
 
-          <Link href={`/obligations/${item.obligationId}`} style={linkButton}>
+          <Link href={`/obligations/${item.obligationId}`} style={buttonStyles.link}>
             View details
           </Link>
 
           <button
             onClick={handleMarkDone}
             disabled={loading !== null}
-            style={secondaryButton}
+            style={buttonStyles.secondary}
           >
             {loading === "done" ? "Saving..." : "Mark done"}
           </button>
@@ -193,7 +162,7 @@ export default function TodayFeedCard({ item, onRefresh }: Props) {
           <button
             onClick={handlePostpone}
             disabled={loading !== null}
-            style={secondaryButton}
+            style={buttonStyles.secondary}
           >
             {loading === "postpone" ? "Saving..." : "Postpone 1 day"}
           </button>
@@ -201,32 +170,19 @@ export default function TodayFeedCard({ item, onRefresh }: Props) {
           <button
             onClick={handleDismiss}
             disabled={loading !== null}
-            style={dangerButton}
+            style={buttonStyles.danger}
           >
             {loading === "dismiss" ? "Saving..." : "Dismiss"}
           </button>
         </div>
 
-        {item.secondaryActions.length > 0 && (
-          <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 10 }}>
+        {item.secondaryActions.length > 0 ? (
+          <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 10 }}>
             Secondary actions: {item.secondaryActions.map((a) => a.label).join(", ")}
           </div>
-        )}
+        ) : null}
 
-        {error && (
-          <div
-            style={{
-              marginTop: 12,
-              padding: 10,
-              borderRadius: 10,
-              background: "#fef2f2",
-              color: "#991b1b",
-              fontSize: 14
-            }}
-          >
-            {error}
-          </div>
-        )}
+        {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
       </article>
 
       <ResolutionModal
@@ -237,45 +193,3 @@ export default function TodayFeedCard({ item, onRefresh }: Props) {
     </>
   );
 }
-
-const primaryButton: React.CSSProperties = {
-  border: "none",
-  background: "#111827",
-  color: "#fff",
-  borderRadius: 10,
-  padding: "10px 14px",
-  fontWeight: 600,
-  cursor: "pointer"
-};
-
-const secondaryButton: React.CSSProperties = {
-  border: "1px solid #d1d5db",
-  background: "#fff",
-  color: "#111827",
-  borderRadius: 10,
-  padding: "10px 14px",
-  fontWeight: 600,
-  cursor: "pointer"
-};
-
-const dangerButton: React.CSSProperties = {
-  border: "1px solid #fecaca",
-  background: "#fff5f5",
-  color: "#b91c1c",
-  borderRadius: 10,
-  padding: "10px 14px",
-  fontWeight: 600,
-  cursor: "pointer"
-};
-
-const linkButton: React.CSSProperties = {
-  border: "1px solid #d1d5db",
-  background: "#fff",
-  color: "#111827",
-  borderRadius: 10,
-  padding: "10px 14px",
-  fontWeight: 600,
-  textDecoration: "none",
-  display: "inline-flex",
-  alignItems: "center"
-};

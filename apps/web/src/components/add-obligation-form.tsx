@@ -2,6 +2,9 @@
 
 import { FormEvent, useState } from "react";
 import { createObligation } from "../lib/api";
+import { buttonStyles, inputStyles } from "../lib/ui";
+import SectionCard from "./ui/section-card";
+import StatusMessage from "./ui/status-message";
 
 type Props = {
   onCreated: () => Promise<void>;
@@ -62,29 +65,17 @@ export default function AddObligationForm({ onCreated }: Props) {
   }
 
   return (
-    <section
-      style={{
-        background: "#fff",
-        borderRadius: 18,
-        padding: 20,
-        boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-        marginBottom: 24
-      }}
+    <SectionCard
+      title="Add Obligation"
+      description="Manually seed obligations for the Today Feed"
     >
-      <div style={{ marginBottom: 14 }}>
-        <h2 style={{ margin: 0 }}>Add Obligation</h2>
-        <p style={{ margin: "6px 0 0 0", color: "#6b7280" }}>
-          Manually seed obligations for the Today Feed
-        </p>
-      </div>
-
       <form onSubmit={handleSubmit}>
         <div style={{ display: "grid", gap: 12 }}>
           <div style={grid2}>
             <select
               value={form.type}
               onChange={(e) => setForm((prev) => ({ ...prev, type: e.target.value }))}
-              style={inputStyle}
+              style={inputStyles.input}
             >
               <option value="BILL">Bill</option>
               <option value="SUBSCRIPTION">Subscription</option>
@@ -97,7 +88,7 @@ export default function AddObligationForm({ onCreated }: Props) {
               onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
               placeholder="Title"
               required
-              style={inputStyle}
+              style={inputStyles.input}
             />
           </div>
 
@@ -106,7 +97,7 @@ export default function AddObligationForm({ onCreated }: Props) {
               value={form.vendor}
               onChange={(e) => setForm((prev) => ({ ...prev, vendor: e.target.value }))}
               placeholder="Vendor (optional)"
-              style={inputStyle}
+              style={inputStyles.input}
             />
 
             <input
@@ -115,7 +106,7 @@ export default function AddObligationForm({ onCreated }: Props) {
               value={form.amount}
               onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
               placeholder="Amount (optional)"
-              style={inputStyle}
+              style={inputStyles.input}
             />
           </div>
 
@@ -124,7 +115,7 @@ export default function AddObligationForm({ onCreated }: Props) {
               type="datetime-local"
               value={form.dueDate}
               onChange={(e) => setForm((prev) => ({ ...prev, dueDate: e.target.value }))}
-              style={inputStyle}
+              style={inputStyles.input}
             />
 
             <select
@@ -132,7 +123,7 @@ export default function AddObligationForm({ onCreated }: Props) {
               onChange={(e) =>
                 setForm((prev) => ({ ...prev, effortLevel: e.target.value }))
               }
-              style={inputStyle}
+              style={inputStyles.input}
             >
               <option value="LOW">Effort: Low</option>
               <option value="MEDIUM">Effort: Medium</option>
@@ -144,7 +135,7 @@ export default function AddObligationForm({ onCreated }: Props) {
               onChange={(e) =>
                 setForm((prev) => ({ ...prev, impactLevel: e.target.value }))
               }
-              style={inputStyle}
+              style={inputStyles.input}
             >
               <option value="LOW">Impact: Low</option>
               <option value="MEDIUM">Impact: Medium</option>
@@ -153,16 +144,16 @@ export default function AddObligationForm({ onCreated }: Props) {
           </div>
 
           <div>
-            <button type="submit" disabled={loading} style={primaryButton}>
+            <button type="submit" disabled={loading} style={buttonStyles.primary}>
               {loading ? "Creating..." : "Create obligation"}
             </button>
           </div>
         </div>
       </form>
 
-      {error && <div style={errorBox}>{error}</div>}
-      {success && <div style={successBox}>{success}</div>}
-    </section>
+      {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
+      {success ? <StatusMessage variant="success">{success}</StatusMessage> : null}
+    </SectionCard>
   );
 }
 
@@ -176,39 +167,4 @@ const grid3: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "1fr 1fr 1fr",
   gap: 12
-};
-
-const inputStyle: React.CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: 12,
-  border: "1px solid #d1d5db",
-  fontSize: 14,
-  width: "100%",
-  boxSizing: "border-box"
-};
-
-const primaryButton: React.CSSProperties = {
-  border: "none",
-  background: "#111827",
-  color: "#fff",
-  borderRadius: 10,
-  padding: "12px 14px",
-  fontWeight: 600,
-  cursor: "pointer"
-};
-
-const errorBox: React.CSSProperties = {
-  marginTop: 14,
-  padding: 10,
-  borderRadius: 10,
-  background: "#fef2f2",
-  color: "#991b1b"
-};
-
-const successBox: React.CSSProperties = {
-  marginTop: 14,
-  padding: 10,
-  borderRadius: 10,
-  background: "#ecfdf5",
-  color: "#166534"
 };

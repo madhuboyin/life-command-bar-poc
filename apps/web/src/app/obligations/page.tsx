@@ -1,28 +1,25 @@
 import Link from "next/link";
+import PageHeader from "../../components/ui/page-header";
 import { getObligations } from "../../lib/api";
 import type { Obligation } from "../../lib/types";
-
-function formatDueDate(value?: string | null) {
-  if (!value) return "No due date";
-  return new Date(value).toLocaleString();
-}
+import { cardStyles, colors, formatDateTime, pageStyles } from "../../lib/ui";
 
 export default async function ObligationsPage() {
   const data = await getObligations();
   const items: Obligation[] = data.items ?? [];
 
   return (
-    <main style={{ maxWidth: 980, margin: "40px auto", padding: 24 }}>
+    <main style={pageStyles.shell}>
       <div style={{ marginBottom: 20 }}>
         <Link href="/" style={{ color: "#2563eb", textDecoration: "none" }}>
           ← Back to Today Feed
         </Link>
       </div>
 
-      <h1 style={{ marginBottom: 8 }}>All Obligations</h1>
-      <p style={{ color: "#6b7280", marginBottom: 24 }}>
-        Current obligations loaded from Postgres via Prisma.
-      </p>
+      <PageHeader
+        title="All Obligations"
+        description="Current obligations loaded from Postgres via Prisma."
+      />
 
       <div style={{ display: "grid", gap: 14 }}>
         {items.map((item) => (
@@ -30,18 +27,15 @@ export default async function ObligationsPage() {
             key={item.id}
             href={`/obligations/${item.id}`}
             style={{
-              background: "#fff",
-              border: "1px solid #e5e7eb",
-              borderRadius: 14,
-              padding: 16,
+              ...cardStyles.item,
               textDecoration: "none",
-              color: "#111827",
+              color: colors.text,
               display: "block"
             }}
           >
             <h3 style={{ margin: "0 0 8px 0" }}>{item.title}</h3>
-            <div style={{ color: "#6b7280", fontSize: 14 }}>
-              {item.type} · {item.status} · Due: {formatDueDate(item.dueDate)}
+            <div style={{ color: colors.textMuted, fontSize: 14 }}>
+              {item.type} · {item.status} · Due: {formatDateTime(item.dueDate)}
             </div>
           </Link>
         ))}

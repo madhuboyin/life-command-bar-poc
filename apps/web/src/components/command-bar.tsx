@@ -8,6 +8,9 @@ import type {
   Obligation,
   TodayFeedItem
 } from "../lib/types";
+import { buttonStyles, cardStyles, colors, inputStyles } from "../lib/ui";
+import SectionCard from "./ui/section-card";
+import StatusMessage from "./ui/status-message";
 
 type Props = {
   onFeedReplace: (items: TodayFeedItem[]) => void;
@@ -58,22 +61,10 @@ export default function CommandBar({ onFeedReplace }: Props) {
   }
 
   return (
-    <section
-      style={{
-        background: "#fff",
-        borderRadius: 18,
-        padding: 20,
-        boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-        marginBottom: 24
-      }}
+    <SectionCard
+      title="Command Bar"
+      description="Try: “What do I need to handle today?” or “Track Netflix renewal”"
     >
-      <div style={{ marginBottom: 14 }}>
-        <h2 style={{ margin: 0 }}>Command Bar</h2>
-        <p style={{ margin: "6px 0 0 0", color: "#6b7280" }}>
-          Try: “What do I need to handle today?” or “Track Netflix renewal”
-        </p>
-      </div>
-
       <form onSubmit={handleExecute}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <input
@@ -81,57 +72,59 @@ export default function CommandBar({ onFeedReplace }: Props) {
             onChange={(e) => setInput(e.target.value)}
             placeholder="Type a command..."
             style={{
+              ...inputStyles.input,
               flex: 1,
-              minWidth: 260,
-              padding: "12px 14px",
-              borderRadius: 12,
-              border: "1px solid #d1d5db",
-              fontSize: 14
+              minWidth: 260
             }}
           />
 
-          <button type="button" onClick={handleParse} disabled={parsing || executing} style={secondaryButton}>
+          <button
+            type="button"
+            onClick={handleParse}
+            disabled={parsing || executing}
+            style={buttonStyles.secondary}
+          >
             {parsing ? "Parsing..." : "Parse"}
           </button>
 
-          <button type="submit" disabled={executing || parsing} style={primaryButton}>
+          <button
+            type="submit"
+            disabled={executing || parsing}
+            style={buttonStyles.primary}
+          >
             {executing ? "Running..." : "Run"}
           </button>
         </div>
       </form>
 
-      {error && (
-        <div style={errorBox}>
-          {error}
-        </div>
-      )}
+      {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
 
-      {parseResult && (
-        <div style={resultBox}>
+      {parseResult ? (
+        <div style={{ ...cardStyles.bordered, marginTop: 14 }}>
           <h3 style={{ marginTop: 0 }}>Parse Result</h3>
           <div><strong>Intent:</strong> {parseResult.intent}</div>
           <div><strong>Confidence:</strong> {parseResult.confidence}</div>
           <div><strong>Resolution type:</strong> {parseResult.resolution.type}</div>
-          {parseResult.question && <div><strong>Question:</strong> {parseResult.question}</div>}
+          {parseResult.question ? <div><strong>Question:</strong> {parseResult.question}</div> : null}
         </div>
-      )}
+      ) : null}
 
-      {executeResult && (
-        <div style={resultBox}>
+      {executeResult ? (
+        <div style={{ ...cardStyles.bordered, marginTop: 14 }}>
           <h3 style={{ marginTop: 0 }}>Execution Result</h3>
           <div><strong>Type:</strong> {executeResult.resultType}</div>
 
-          {executeResult.resultType === "clarification" && executeResult.question && (
+          {executeResult.resultType === "clarification" && executeResult.question ? (
             <p style={{ marginBottom: 0 }}>{executeResult.question}</p>
-          )}
+          ) : null}
 
-          {executeResult.resultType === "new_obligation_candidate" && (
+          {executeResult.resultType === "new_obligation_candidate" ? (
             <p style={{ marginBottom: 0 }}>
               Candidate obligation title: <strong>{executeResult.title ?? "Unknown"}</strong>
             </p>
-          )}
+          ) : null}
 
-          {executeResult.resultType === "obligation_list" && Array.isArray(executeResult.items) && (
+          {executeResult.resultType === "obligation_list" && Array.isArray(executeResult.items) ? (
             <div style={{ marginTop: 10 }}>
               <strong>Matched obligations:</strong>
               <ul style={{ marginTop: 8 }}>
@@ -140,9 +133,9 @@ export default function CommandBar({ onFeedReplace }: Props) {
                 ))}
               </ul>
             </div>
-          )}
+          ) : null}
 
-          {executeResult.resultType === "resolution_flow" && executeResult.recommendation && (
+          {executeResult.resultType === "resolution_flow" && executeResult.recommendation ? (
             <div style={{ marginTop: 10 }}>
               <div><strong>Recommendation:</strong> {executeResult.recommendation.recommendation}</div>
               <ol style={{ marginTop: 8 }}>
@@ -151,49 +144,15 @@ export default function CommandBar({ onFeedReplace }: Props) {
                 ))}
               </ol>
             </div>
-          )}
+          ) : null}
 
-          {executeResult.resultType === "today_feed" && (
-            <p style={{ marginBottom: 0 }}>Today Feed refreshed from command.</p>
-          )}
+          {executeResult.resultType === "today_feed" ? (
+            <p style={{ marginBottom: 0, color: colors.textMuted }}>
+              Today Feed refreshed from command.
+            </p>
+          ) : null}
         </div>
-      )}
-    </section>
+      ) : null}
+    </SectionCard>
   );
 }
-
-const primaryButton: React.CSSProperties = {
-  border: "none",
-  background: "#111827",
-  color: "#fff",
-  borderRadius: 10,
-  padding: "12px 14px",
-  fontWeight: 600,
-  cursor: "pointer"
-};
-
-const secondaryButton: React.CSSProperties = {
-  border: "1px solid #d1d5db",
-  background: "#fff",
-  color: "#111827",
-  borderRadius: 10,
-  padding: "12px 14px",
-  fontWeight: 600,
-  cursor: "pointer"
-};
-
-const resultBox: React.CSSProperties = {
-  marginTop: 14,
-  padding: 14,
-  borderRadius: 12,
-  background: "#f9fafb",
-  border: "1px solid #e5e7eb"
-};
-
-const errorBox: React.CSSProperties = {
-  marginTop: 14,
-  padding: 10,
-  borderRadius: 10,
-  background: "#fef2f2",
-  color: "#991b1b"
-};

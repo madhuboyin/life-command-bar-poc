@@ -2,6 +2,9 @@
 
 import { FormEvent, useState } from "react";
 import { importEmailForward, uploadFile } from "../lib/api";
+import { buttonStyles, cardStyles, inputStyles } from "../lib/ui";
+import SectionCard from "./ui/section-card";
+import StatusMessage from "./ui/status-message";
 
 type Props = {
   onCompleted: () => Promise<void>;
@@ -67,35 +70,25 @@ export default function UploadImportPanel({ onCompleted }: Props) {
   }
 
   return (
-    <section
-      style={{
-        background: "#fff",
-        borderRadius: 18,
-        padding: 20,
-        boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-        marginBottom: 24
-      }}
+    <SectionCard
+      title="Upload / Import"
+      description="Upload a file or simulate a forwarded email import"
     >
-      <h2 style={{ marginTop: 0 }}>Upload / Import</h2>
-      <p style={{ color: "#6b7280", marginTop: 0 }}>
-        Upload a file or simulate a forwarded email import.
-      </p>
-
       <div style={{ display: "grid", gap: 20 }}>
-        <form onSubmit={handleUpload} style={sectionStyle}>
+        <form onSubmit={handleUpload} style={cardStyles.bordered}>
           <h3 style={{ marginTop: 0 }}>Upload document</h3>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
             <input
               type="file"
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
             />
-            <button type="submit" disabled={!file || uploadLoading} style={primaryButton}>
+            <button type="submit" disabled={!file || uploadLoading} style={buttonStyles.primary}>
               {uploadLoading ? "Uploading..." : "Upload"}
             </button>
           </div>
         </form>
 
-        <form onSubmit={handleImport} style={sectionStyle}>
+        <form onSubmit={handleImport} style={cardStyles.bordered}>
           <h3 style={{ marginTop: 0 }}>Import forwarded email</h3>
           <div style={{ display: "grid", gap: 10 }}>
             <input
@@ -105,7 +98,7 @@ export default function UploadImportPanel({ onCompleted }: Props) {
               }
               placeholder="Subject"
               required
-              style={inputStyle}
+              style={inputStyles.input}
             />
             <input
               value={emailForm.from}
@@ -114,7 +107,7 @@ export default function UploadImportPanel({ onCompleted }: Props) {
               }
               placeholder="From"
               required
-              style={inputStyle}
+              style={inputStyles.input}
             />
             <textarea
               value={emailForm.bodyText}
@@ -124,10 +117,10 @@ export default function UploadImportPanel({ onCompleted }: Props) {
               placeholder="Body text"
               required
               rows={5}
-              style={textareaStyle}
+              style={inputStyles.textarea}
             />
             <div>
-              <button type="submit" disabled={importLoading} style={primaryButton}>
+              <button type="submit" disabled={importLoading} style={buttonStyles.primary}>
                 {importLoading ? "Importing..." : "Import email"}
               </button>
             </div>
@@ -135,56 +128,8 @@ export default function UploadImportPanel({ onCompleted }: Props) {
         </form>
       </div>
 
-      {error && <div style={errorBox}>{error}</div>}
-      {success && <div style={successBox}>{success}</div>}
-    </section>
+      {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
+      {success ? <StatusMessage variant="success">{success}</StatusMessage> : null}
+    </SectionCard>
   );
 }
-
-const sectionStyle: React.CSSProperties = {
-  border: "1px solid #e5e7eb",
-  borderRadius: 14,
-  padding: 16,
-  background: "#fafafa"
-};
-
-const inputStyle: React.CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: 12,
-  border: "1px solid #d1d5db",
-  fontSize: 14
-};
-
-const textareaStyle: React.CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: 12,
-  border: "1px solid #d1d5db",
-  fontSize: 14,
-  resize: "vertical"
-};
-
-const primaryButton: React.CSSProperties = {
-  border: "none",
-  background: "#111827",
-  color: "#fff",
-  borderRadius: 10,
-  padding: "10px 14px",
-  fontWeight: 600,
-  cursor: "pointer"
-};
-
-const errorBox: React.CSSProperties = {
-  marginTop: 14,
-  padding: 10,
-  borderRadius: 10,
-  background: "#fef2f2",
-  color: "#991b1b"
-};
-
-const successBox: React.CSSProperties = {
-  marginTop: 14,
-  padding: 10,
-  borderRadius: 10,
-  background: "#ecfdf5",
-  color: "#166534"
-};
