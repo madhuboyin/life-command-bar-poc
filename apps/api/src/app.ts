@@ -10,6 +10,7 @@ import { uploadRouter } from "./routes/upload.routes";
 import { importRouter } from "./routes/import.routes";
 import { reminderRouter } from "./routes/reminder.routes";
 import { requireAuth } from "./middleware/auth.middleware";
+import { dashboardRouter } from "./routes/dashboard.routes";
 
 export function createApp() {
   const app = express();
@@ -26,6 +27,7 @@ export function createApp() {
   app.use("/api/uploads", uploadRouter);
   app.use("/api/imports", importRouter);
   app.use("/api/reminders", reminderRouter);
+  app.use("/api/dashboard", dashboardRouter);
   app.use("/api", resolutionRouter);
 
   return app;

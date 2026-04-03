@@ -14,12 +14,14 @@ type Props = {
   initialData: TodayFeedResponse;
   externalItems?: TodayFeedResponse["items"] | null;
   initialError?: string | null;
+  onRefreshComplete?: (next: TodayFeedResponse) => void;
 };
 
 export default function TodayFeedClient({
   initialData,
   externalItems,
-  initialError = null
+  initialError = null,
+  onRefreshComplete
 }: Props) {
   const [data, setData] = useState<TodayFeedResponse>(initialData);
   const [loading, setLoading] = useState(false);
@@ -31,12 +33,13 @@ export default function TodayFeedClient({
       setError(null);
       const next = await getTodayFeed();
       setData(next);
+      onRefreshComplete?.(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to refresh feed");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [onRefreshComplete]);
 
   useEffect(() => {
     setData(initialData);
@@ -45,10 +48,11 @@ export default function TodayFeedClient({
 
   useEffect(() => {
     if (externalItems) {
-      setData({
+      const next = {
         generatedAt: new Date().toISOString(),
         items: externalItems
-      });
+      };
+      setData(next);
     }
   }, [externalItems]);
 

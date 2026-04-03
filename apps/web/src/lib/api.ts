@@ -1,6 +1,7 @@
 import type {
   CommandExecuteResponse,
   CommandParseResponse,
+  DashboardInsightsResponse,
   Obligation,
   ObligationHistory,
   Reminder,
@@ -130,6 +131,14 @@ export async function getTodayFeed(): Promise<TodayFeedResponse> {
   });
 
   return handleResponse<TodayFeedResponse>(res);
+}
+
+export async function getDashboardInsights(): Promise<DashboardInsightsResponse> {
+  const res = await apiFetch("/dashboard/insights", {
+    cache: "no-store"
+  });
+
+  return handleResponse<DashboardInsightsResponse>(res);
 }
 
 export async function getObligations(): Promise<ObligationsListResponse> {

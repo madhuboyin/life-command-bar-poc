@@ -1,7 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import type { TodayFeedItem, TodayFeedResponse } from "../lib/types";
+import type {
+  DashboardInsightsResponse,
+  TodayFeedItem,
+  TodayFeedResponse
+} from "../lib/types";
 import AddObligationForm from "./add-obligation-form";
 import CommandBar from "./command-bar";
 import TodayFeedClient from "./today-feed-client";
@@ -9,32 +13,93 @@ import UploadImportPanel from "./upload-import-panel";
 import RemindersPanel from "./reminders-panel";
 import DashboardTabs from "./dashboard-tabs";
 import DashboardSummaryStrip from "./dashboard-summary-strip";
-import { getTodayFeed } from "../lib/api";
+import { getDashboardInsights, getTodayFeed } from "../lib/api";
+import DashboardInsightsSection from "./dashboard-insights-section";
 
 type Props = {
   initialData: TodayFeedResponse;
   initialError?: string | null;
+  initialInsights: DashboardInsightsResponse | null;
+  initialInsightsError?: string | null;
 };
 
-export default function HomeShell({ initialData, initialError }: Props) {
+export default function HomeShell({
+  initialData,
+  initialError,
+  initialInsights,
+  initialInsightsError
+}: Props) {
   const [externalItems, setExternalItems] = useState<TodayFeedItem[] | null>(null);
+  const [insights, setInsights] = useState<DashboardInsightsResponse | null>(initialInsights);
+  const [insightsError, setInsightsError] = useState<string | null>(
+    initialInsightsError ?? null
+  );
+  const [insightsLoading, setInsightsLoading] = useState(false);
+
   const effectiveFeed: TodayFeedResponse = {
     generatedAt: initialData.generatedAt,
     items: externalItems ?? initialData.items
   };
 
+  async function refreshInsightsFromServer() {
+    try {
+      setInsightsLoading(true);
+      setInsightsError(null);
+      const next = await getDashboardInsights();
+      setInsights(next);
+    } catch (error) {
+      setInsightsError(
+        error instanceof Error ? error.message : "Could not refresh dashboard insights."
+      );
+    } finally {
+      setInsightsLoading(false);
+    }
+  }
+
   async function refreshFromServer() {
-    const next = await getTodayFeed();
-    setExternalItems(next.items);
+    try {
+      setInsightsLoading(true);
+      setInsightsError(null);
+      const [feedResult, insightsResult] = await Promise.allSettled([
+        getTodayFeed(),
+        getDashboardInsights()
+      ]);
+
+      if (feedResult.status === "fulfilled") {
+        setExternalItems(feedResult.value.items);
+      } else {
+        throw feedResult.reason;
+      }
+
+      if (insightsResult.status === "fulfilled") {
+        setInsights(insightsResult.value);
+        setInsightsError(null);
+      } else {
+        setInsightsError(
+          insightsResult.reason instanceof Error
+            ? insightsResult.reason.message
+            : "Could not refresh dashboard insights."
+        );
+      }
+    } finally {
+      setInsightsLoading(false);
+    }
   }
 
   const overview = (
     <div style={{ display: "grid", gap: 24 }}>
+      <DashboardInsightsSection
+        data={insights}
+        loading={insightsLoading}
+        error={insightsError}
+        onRefresh={refreshInsightsFromServer}
+      />
       <DashboardSummaryStrip data={effectiveFeed} />
       <TodayFeedClient
         initialData={initialData}
         externalItems={externalItems}
         initialError={initialError}
+        onRefreshComplete={refreshInsightsFromServer}
       />
     </div>
   );

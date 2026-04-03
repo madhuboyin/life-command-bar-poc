@@ -46,6 +46,46 @@ export interface TodayFeedResponse {
   items: TodayFeedItem[];
 }
 
+export interface DashboardInsightCard {
+  key: "attention" | "relief" | "quick_wins" | "money_exposure" | "postponed" | "open_category";
+  title: string;
+  value: string;
+  supportingText: string;
+  tone: "neutral" | "positive" | "warning";
+  priority: number;
+}
+
+export interface DashboardTopInsight {
+  title: string;
+  description: string;
+  tone: "neutral" | "positive" | "warning";
+}
+
+export interface DashboardInsightsResponse {
+  summary: {
+    handledThisWeek: number;
+    activeNow: number;
+    quickWinsAvailable: number;
+    overdueOrUrgent: number;
+    postponedRecently: number;
+    reliefScore: {
+      value: number;
+      band: "LOW" | "MODERATE" | "STRONG";
+    };
+    estimatedMentalRelief: {
+      value: number;
+      label: string;
+    };
+    estimatedMoneyExposure: {
+      amount: number | null;
+      currency: string | null;
+    };
+    mostCommonOpenType: "BILL" | "SUBSCRIPTION" | "RENEWAL" | "COMMITMENT" | null;
+  };
+  cards: DashboardInsightCard[];
+  topInsight: DashboardTopInsight;
+}
+
 export interface ResolutionRecommendation {
   flowKey: string;
   recommendation: string;
