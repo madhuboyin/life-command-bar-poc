@@ -8,6 +8,13 @@ spec:
     - host: lcb.local
       http:
         paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: lcb-api
+                port:
+                  number: 4000
           - path: /
             pathType: Prefix
             backend:

@@ -21,7 +21,7 @@ spec:
             - containerPort: 3000
           env:
             - name: NEXT_PUBLIC_API_BASE_URL
-              value: "http://lcb-api:4000/api"
+              value: "/api"
           resources:
             requests:
               cpu: "100m"
