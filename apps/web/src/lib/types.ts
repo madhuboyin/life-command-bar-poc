@@ -66,6 +66,16 @@ export interface ResolutionResponse {
   recommendation: ResolutionRecommendation;
 }
 
+export interface Reminder {
+  id: string;
+  obligationId?: string | null;
+  title: string;
+  scheduledFor: string;
+  status: "SCHEDULED" | "TRIGGERED" | "CANCELLED";
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CommandParseResponse {
   intent: string;
   confidence: number;

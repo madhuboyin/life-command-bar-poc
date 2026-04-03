@@ -43,6 +43,14 @@ export async function getResolution(obligationId: string) {
   return handleResponse(res);
 }
 
+export async function getReminders() {
+  const res = await fetch(`${API_BASE_URL}/reminders`, {
+    cache: "no-store"
+  });
+
+  return handleResponse(res);
+}
+
 export async function markObligationDone(obligationId: string, note?: string) {
   const res = await fetch(`${API_BASE_URL}/obligations/${obligationId}/mark-done`, {
     method: "POST",
@@ -119,6 +127,46 @@ export async function createObligation(input: {
   status?: "DRAFT" | "ACTIVE" | "POSTPONED" | "RESOLVED" | "IGNORED";
 }) {
   const res = await fetch(`${API_BASE_URL}/obligations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+
+  return handleResponse(res);
+}
+
+export async function createReminder(input: {
+  obligationId?: string;
+  title: string;
+  scheduledFor: string;
+}) {
+  const res = await fetch(`${API_BASE_URL}/reminders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+
+  return handleResponse(res);
+}
+
+export async function uploadFile(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${API_BASE_URL}/uploads`, {
+    method: "POST",
+    body: formData
+  });
+
+  return handleResponse(res);
+}
+
+export async function importEmailForward(input: {
+  subject: string;
+  from: string;
+  bodyText: string;
+}) {
+  const res = await fetch(`${API_BASE_URL}/imports/email-forward`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input)

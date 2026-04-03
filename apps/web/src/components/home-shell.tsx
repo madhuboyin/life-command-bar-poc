@@ -5,6 +5,8 @@ import type { TodayFeedItem, TodayFeedResponse } from "../lib/types";
 import AddObligationForm from "./add-obligation-form";
 import CommandBar from "./command-bar";
 import TodayFeedClient from "./today-feed-client";
+import UploadImportPanel from "./upload-import-panel";
+import RemindersPanel from "./reminders-panel";
 import { getTodayFeed } from "../lib/api";
 
 type Props = {
@@ -23,6 +25,8 @@ export default function HomeShell({ initialData }: Props) {
     <>
       <CommandBar onFeedReplace={(items) => setExternalItems(items)} />
       <AddObligationForm onCreated={refreshFromServer} />
+      <UploadImportPanel onCompleted={refreshFromServer} />
+      <RemindersPanel />
       <TodayFeedClient initialData={initialData} externalItems={externalItems} />
     </>
   );
