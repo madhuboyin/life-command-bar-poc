@@ -51,7 +51,9 @@ export default function ObligationHistoryPanel({ obligationId }: Props) {
     (history?.auditEvents.length ?? 0) +
     (history?.feedbackEvents.length ?? 0) +
     (history?.resolutionRuns.length ?? 0) +
-    (history?.reminders.length ?? 0);
+    (history?.reminders.length ?? 0) +
+    (history?.guidedJourneyEvents.length ?? 0) +
+    (history?.guidedJourneys.length ?? 0);
 
   if (!history || totalCount === 0) {
     return (
@@ -119,6 +121,42 @@ export default function ObligationHistoryPanel({ obligationId }: Props) {
               <div style={{ fontWeight: 600 }}>{item.title}</div>
               <div>Status: {item.status}</div>
               <div>Scheduled: {new Date(item.scheduledFor).toLocaleString()}</div>
+            </div>
+          ))
+        )}
+      </section>
+
+      <section style={cardStyles.bordered}>
+        <h3 style={{ marginTop: 0 }}>Guided Journeys</h3>
+        {history.guidedJourneys.length === 0 ? (
+          <div style={{ color: colors.textMuted }}>No guided journeys yet.</div>
+        ) : (
+          history.guidedJourneys.map((item) => (
+            <div key={item.id} style={eventRow}>
+              <div style={{ fontWeight: 600 }}>
+                {item.journeyType} · {item.status}
+              </div>
+              <div>
+                Progress: {item.completedSteps}/{item.totalSteps} steps completed
+              </div>
+              <div style={metaText}>Updated: {new Date(item.updatedAt).toLocaleString()}</div>
+            </div>
+          ))
+        )}
+      </section>
+
+      <section style={cardStyles.bordered}>
+        <h3 style={{ marginTop: 0 }}>Guided Journey Events</h3>
+        {history.guidedJourneyEvents.length === 0 ? (
+          <div style={{ color: colors.textMuted }}>No guided journey events.</div>
+        ) : (
+          history.guidedJourneyEvents.map((item) => (
+            <div key={item.id} style={eventRow}>
+              <div style={{ fontWeight: 600 }}>{item.eventType}</div>
+              <div style={{ fontSize: 12, color: colors.textMuted }}>
+                Journey: {item.journeyId}
+              </div>
+              <div style={metaText}>{new Date(item.createdAt).toLocaleString()}</div>
             </div>
           ))
         )}

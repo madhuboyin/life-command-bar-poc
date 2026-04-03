@@ -3,13 +3,15 @@
 import { useState } from "react";
 import Link from "next/link";
 import {
+  createOrResumeGuidedJourney,
   createFeedback,
   dismissObligation,
+  getActiveGuidedJourneyForObligation,
   getResolution,
   markObligationDone,
   postponeObligation
 } from "../lib/api";
-import type { Obligation, ResolutionResponse } from "../lib/types";
+import type { GuidedJourney, Obligation, ResolutionResponse } from "../lib/types";
 import ResolutionModal from "./resolution-modal";
 import {
   buttonStyles,
@@ -25,6 +27,9 @@ import { useToast } from "./ui/toast-provider";
 import ObligationDetailTabs from "./obligation-detail-tabs";
 import EditObligationForm from "./edit-obligation-form";
 import ObligationHistoryPanel from "./obligation-history-panel";
+import ResumeGuidedJourneyCard from "./resume-guided-journey-card";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
 type Props = {
   obligation: Obligation;
@@ -36,8 +41,33 @@ export default function ObligationDetailClient({ obligation }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [resolution, setResolution] = useState<ResolutionResponse | null>(null);
   const [showResolution, setShowResolution] = useState(false);
+  const [activeJourney, setActiveJourney] = useState<GuidedJourney | null>(null);
   const isMobile = useIsMobile();
   const { showToast } = useToast();
+  const router = useRouter();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadActiveJourney() {
+      try {
+        const data = await getActiveGuidedJourneyForObligation(current.id);
+        if (!cancelled) {
+          setActiveJourney(data.journey);
+        }
+      } catch {
+        if (!cancelled) {
+          setActiveJourney(null);
+        }
+      }
+    }
+
+    loadActiveJourney();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [current.id]);
 
   async function handleMarkDone() {
     try {
@@ -124,6 +154,21 @@ export default function ObligationDetailClient({ obligation }: Props) {
     }
   }
 
+  async function handleGuideMe() {
+    try {
+      setLoading("guide");
+      setError(null);
+      const data = await createOrResumeGuidedJourney(current.id);
+      router.push(`/guided/${data.journey.id}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to start Guided Mode";
+      setError(message);
+      showToast({ variant: "error", title: "Guided Mode failed", description: message });
+    } finally {
+      setLoading(null);
+    }
+  }
+
   const overview = (
     <div style={{ display: "grid", gap: 14 }}>
       <section style={cardStyles.bordered}>
@@ -152,6 +197,8 @@ export default function ObligationDetailClient({ obligation }: Props) {
         <div><strong>Last shown:</strong> {current.lastShownAt ? new Date(current.lastShownAt).toLocaleString() : "—"}</div>
         <div><strong>Last acted:</strong> {current.lastActedAt ? new Date(current.lastActedAt).toLocaleString() : "—"}</div>
       </section>
+
+      {activeJourney ? <ResumeGuidedJourneyCard journey={activeJourney} /> : null}
     </div>
   );
 
@@ -198,7 +245,11 @@ export default function ObligationDetailClient({ obligation }: Props) {
                 gap: 10
               }}
             >
-              <button onClick={handleShowResolution} disabled={loading !== null} style={buttonStyles.primary}>
+              <button onClick={handleGuideMe} disabled={loading !== null} style={buttonStyles.primary}>
+                {loading === "guide" ? "Starting..." : "Guide me"}
+              </button>
+
+              <button onClick={handleShowResolution} disabled={loading !== null} style={buttonStyles.secondary}>
                 {loading === "resolution" ? "Loading..." : "Open resolution"}
               </button>
 

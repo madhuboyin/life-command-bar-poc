@@ -160,6 +160,62 @@ export interface ObligationHistory {
     scheduledFor: string;
     createdAt: string;
   }>;
+  guidedJourneyEvents: Array<{
+    id: string;
+    journeyId: string;
+    eventType: string;
+    metadata?: Record<string, unknown> | null;
+    createdAt: string;
+  }>;
+  guidedJourneys: Array<{
+    id: string;
+    journeyType: "BILL" | "SUBSCRIPTION" | "RENEWAL" | "COMMITMENT";
+    status: "ACTIVE" | "COMPLETED" | "DISMISSED" | "ABANDONED";
+    currentStepIndex: number;
+    totalSteps: number;
+    completedSteps: number;
+    createdAt: string;
+    updatedAt: string;
+    completedAt?: string | null;
+  }>;
+}
+
+export interface GuidedJourneyOption {
+  key: string;
+  label: string;
+  description?: string;
+}
+
+export interface GuidedJourneyStep {
+  key: string;
+  title: string;
+  description: string;
+  whyItMatters: string;
+  inputType: "NONE" | "SINGLE_SELECT";
+  options: GuidedJourneyOption[];
+  recommendedOption?: string | null;
+  selectedOption?: string | null;
+  isCompleted: boolean;
+  completedAt?: string | null;
+  position: number;
+}
+
+export interface GuidedJourney {
+  id: string;
+  obligationId: string;
+  journeyType: "BILL" | "SUBSCRIPTION" | "RENEWAL" | "COMMITMENT";
+  status: "ACTIVE" | "COMPLETED" | "DISMISSED" | "ABANDONED";
+  currentStepKey?: string | null;
+  currentStepIndex: number;
+  totalSteps: number;
+  progressPercent: number;
+  summary?: string | null;
+  recommendedPath?: string | null;
+  currentStep?: GuidedJourneyStep | null;
+  steps: GuidedJourneyStep[];
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string | null;
 }
 
 export interface CommandParseResponse {

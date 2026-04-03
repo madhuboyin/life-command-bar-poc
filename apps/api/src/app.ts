@@ -11,6 +11,7 @@ import { importRouter } from "./routes/import.routes";
 import { reminderRouter } from "./routes/reminder.routes";
 import { requireAuth } from "./middleware/auth.middleware";
 import { dashboardRouter } from "./routes/dashboard.routes";
+import { guidedJourneyRouter } from "./routes/guided-journey.routes";
 
 export function createApp() {
   const app = express();
@@ -28,6 +29,7 @@ export function createApp() {
   app.use("/api/imports", importRouter);
   app.use("/api/reminders", reminderRouter);
   app.use("/api/dashboard", dashboardRouter);
+  app.use("/api/guided-journeys", guidedJourneyRouter);
   app.use("/api", resolutionRouter);
 
   return app;

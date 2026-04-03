@@ -123,6 +123,24 @@ export class ObligationService {
         status: item.status,
         scheduledFor: item.scheduledFor.toISOString(),
         createdAt: item.createdAt.toISOString()
+      })),
+      guidedJourneyEvents: history.guidedJourneyEvents.map((item) => ({
+        id: item.id,
+        journeyId: item.journeyId,
+        eventType: item.eventType,
+        metadata: item.metadata,
+        createdAt: item.createdAt.toISOString()
+      })),
+      guidedJourneys: history.guidedJourneys.map((item) => ({
+        id: item.id,
+        journeyType: item.journeyType,
+        status: item.status,
+        currentStepIndex: item.currentStepIndex,
+        totalSteps: item.steps.length,
+        completedSteps: item.steps.filter((step) => step.isCompleted).length,
+        createdAt: item.createdAt.toISOString(),
+        updatedAt: item.updatedAt.toISOString(),
+        completedAt: item.completedAt?.toISOString() ?? null
       }))
     };
   }

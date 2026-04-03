@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import {
+  createOrResumeGuidedJourney,
   createFeedback,
   dismissObligation,
   getResolution,
@@ -18,6 +19,7 @@ import {
   getHookBadgeStyle
 } from "../lib/ui";
 import { useIsMobile } from "../lib/use-is-mobile";
+import { useRouter } from "next/navigation";
 import ResolutionModal from "./resolution-modal";
 import StatusMessage from "./ui/status-message";
 import { useToast } from "./ui/toast-provider";
@@ -34,6 +36,7 @@ export default function TodayFeedCard({ item, onRefresh }: Props) {
   const [showResolution, setShowResolution] = useState(false);
   const { showToast } = useToast();
   const isMobile = useIsMobile();
+  const router = useRouter();
 
   async function runAction(
     action: () => Promise<void>,
@@ -121,6 +124,22 @@ export default function TodayFeedCard({ item, onRefresh }: Props) {
     }
   }
 
+  async function handleGuideMe() {
+    try {
+      setLoading("guide");
+      setError(null);
+
+      const data = await createOrResumeGuidedJourney(item.obligationId);
+      router.push(`/guided/${data.journey.id}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not start Guided Mode";
+      setError(message);
+      showToast({ variant: "error", title: "Guided Mode failed", description: message });
+    } finally {
+      setLoading(null);
+    }
+  }
+
   return (
     <>
       <article style={cardStyles.item}>
@@ -172,6 +191,14 @@ export default function TodayFeedCard({ item, onRefresh }: Props) {
             style={buttonStyles.primary}
           >
             {loading === "resolution" ? "Loading..." : item.primaryAction.label}
+          </button>
+
+          <button
+            onClick={handleGuideMe}
+            disabled={loading !== null}
+            style={buttonStyles.secondary}
+          >
+            {loading === "guide" ? "Starting..." : "Guide me"}
           </button>
 
           <Link href={`/obligations/${item.obligationId}`} style={buttonStyles.link}>

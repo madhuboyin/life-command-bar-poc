@@ -14,9 +14,10 @@ import type {
   ObligationView,
   SortDirection
 } from "../../lib/types";
-import { cardStyles, colors, formatDateTime, pageStyles } from "../../lib/ui";
+import { cardStyles, colors, pageStyles } from "../../lib/ui";
 import EmptyState from "../../components/ui/empty-state";
 import StatusMessage from "../../components/ui/status-message";
+import ObligationListItemCard from "../../components/obligation-list-item-card";
 
 type Props = {
   searchParams?: Promise<{
@@ -146,23 +147,7 @@ export default async function ObligationsPage({ searchParams }: Props) {
         ) : null}
 
         {!loadError
-          ? items.map((item) => (
-              <Link
-                key={item.id}
-                href={`/obligations/${item.id}`}
-                style={{
-                  ...cardStyles.item,
-                  textDecoration: "none",
-                  color: colors.text,
-                  display: "block"
-                }}
-              >
-                <h3 style={{ margin: "0 0 8px 0" }}>{item.title}</h3>
-                <div style={{ color: colors.textMuted, fontSize: 14 }}>
-                  {item.type} · {item.status} · Due: {formatDateTime(item.dueDate)}
-                </div>
-              </Link>
-            ))
+          ? items.map((item) => <ObligationListItemCard key={item.id} item={item} />)
           : null}
       </div>
     </main>

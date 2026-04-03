@@ -78,20 +78,53 @@ enum ResolutionConfidence {
   LOW
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  timezone  String   @default("America/New_York")
-  locale    String?
+enum GuidedJourneyType {
+  BILL
+  SUBSCRIPTION
+  RENEWAL
+  COMMITMENT
+}
 
-  obligations    Obligation[]
-  reminders      Reminder[]
-  feedbackEvents FeedbackEvent[]
-  auditEvents    AuditEvent[]
-  uploads        Upload[]
-  importSources  ImportSource[]
-  resolutionRuns ResolutionRun[]
+enum GuidedJourneyStatus {
+  ACTIVE
+  COMPLETED
+  DISMISSED
+  ABANDONED
+}
+
+enum GuidedJourneyInputType {
+  NONE
+  SINGLE_SELECT
+}
+
+enum GuidedJourneyEventType {
+  JOURNEY_CREATED
+  JOURNEY_RESUMED
+  STEP_SELECTED_OPTION
+  STEP_COMPLETED
+  STEP_ADVANCED
+  STEP_REVERSED
+  JOURNEY_COMPLETED
+  JOURNEY_ABANDONED
+  JOURNEY_DISMISSED
+}
+
+model User {
+  id       String  @id @default(cuid())
+  email    String  @unique
+  name     String?
+  timezone String  @default("America/New_York")
+  locale   String?
+
+  obligations         Obligation[]
+  reminders           Reminder[]
+  feedbackEvents      FeedbackEvent[]
+  auditEvents         AuditEvent[]
+  uploads             Upload[]
+  importSources       ImportSource[]
+  resolutionRuns      ResolutionRun[]
+  guidedJourneys      GuidedJourney[]
+  guidedJourneyEvents GuidedJourneyEvent[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -119,9 +152,9 @@ model Obligation {
   source ObligationSource
   status ObligationStatus @default(DRAFT)
 
-  confidenceScore Decimal @default(0.0) @db.Decimal(5, 4) @map("confidence_score")
-  urgencyScore    Decimal @default(0.0) @db.Decimal(7, 4) @map("urgency_score")
-  importanceScore Decimal @default(0.0) @db.Decimal(7, 4) @map("importance_score")
+  confidenceScore Decimal @default(0.0) @map("confidence_score") @db.Decimal(5, 4)
+  urgencyScore    Decimal @default(0.0) @map("urgency_score") @db.Decimal(7, 4)
+  importanceScore Decimal @default(0.0) @map("importance_score") @db.Decimal(7, 4)
 
   effortLevel EffortLevel @default(MEDIUM) @map("effort_level")
   impactLevel ImpactLevel @default(MEDIUM) @map("impact_level")
@@ -129,10 +162,12 @@ model Obligation {
   lastShownAt DateTime? @map("last_shown_at")
   lastActedAt DateTime? @map("last_acted_at")
 
-  reminders      Reminder[]
-  feedbackEvents FeedbackEvent[]
-  auditEvents    AuditEvent[]
-  resolutionRuns ResolutionRun[]
+  reminders           Reminder[]
+  feedbackEvents      FeedbackEvent[]
+  auditEvents         AuditEvent[]
+  resolutionRuns      ResolutionRun[]
+  guidedJourneys      GuidedJourney[]
+  guidedJourneyEvents GuidedJourneyEvent[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -143,6 +178,87 @@ model Obligation {
   @@index([userId, lastShownAt], map: "idx_obligations_user_id_last_shown_at")
   @@index([userId, vendor], map: "idx_obligations_user_id_vendor")
   @@map("obligations")
+}
+
+model GuidedJourney {
+  id String @id @default(cuid())
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  obligationId String     @map("obligation_id")
+  obligation   Obligation @relation(fields: [obligationId], references: [id], onDelete: Cascade)
+
+  journeyType GuidedJourneyType   @map("journey_type")
+  status      GuidedJourneyStatus @default(ACTIVE)
+
+  currentStepKey   String? @map("current_step_key")
+  currentStepIndex Int     @default(0) @map("current_step_index")
+  recommendedPath  String? @map("recommended_path")
+  summary          String?
+
+  completedAt DateTime? @map("completed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  steps  GuidedJourneyStep[]
+  events GuidedJourneyEvent[]
+
+  @@index([userId, status], map: "idx_guided_journeys_user_id_status")
+  @@index([obligationId, status], map: "idx_guided_journeys_obligation_id_status")
+  @@index([journeyType], map: "idx_guided_journeys_journey_type")
+  @@map("guided_journeys")
+}
+
+model GuidedJourneyStep {
+  id String @id @default(cuid())
+
+  journeyId String        @map("journey_id")
+  journey   GuidedJourney @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+
+  stepKey           String                 @map("step_key")
+  title             String
+  description       String
+  whyItMatters      String                 @map("why_it_matters")
+  inputType         GuidedJourneyInputType @default(NONE) @map("input_type")
+  optionsJson       Json?                  @map("options_json")
+  recommendedOption String?                @map("recommended_option")
+  selectedOption    String?                @map("selected_option")
+  isCompleted       Boolean                @default(false) @map("is_completed")
+  completedAt       DateTime?              @map("completed_at")
+  position          Int
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([journeyId, stepKey], map: "uniq_guided_journey_steps_journey_id_step_key")
+  @@unique([journeyId, position], map: "uniq_guided_journey_steps_journey_id_position")
+  @@index([journeyId], map: "idx_guided_journey_steps_journey_id")
+  @@map("guided_journey_steps")
+}
+
+model GuidedJourneyEvent {
+  id String @id @default(cuid())
+
+  journeyId String        @map("journey_id")
+  journey   GuidedJourney @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  obligationId String?     @map("obligation_id")
+  obligation   Obligation? @relation(fields: [obligationId], references: [id], onDelete: SetNull)
+
+  eventType GuidedJourneyEventType @map("event_type")
+  metadata  Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([journeyId, createdAt], map: "idx_guided_journey_events_journey_id_created_at")
+  @@index([userId, createdAt], map: "idx_guided_journey_events_user_id_created_at")
+  @@index([obligationId], map: "idx_guided_journey_events_obligation_id")
+  @@index([eventType], map: "idx_guided_journey_events_event_type")
+  @@map("guided_journey_events")
 }
 
 model Reminder {

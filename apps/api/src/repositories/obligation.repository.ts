@@ -237,7 +237,7 @@ export class ObligationRepository {
   }
 
   async getHistory(id: string, userId: string) {
-    const [auditEvents, feedbackEvents, resolutionRuns, reminders] = await Promise.all([
+    const [auditEvents, feedbackEvents, resolutionRuns, reminders, guidedJourneyEvents, guidedJourneys] = await Promise.all([
       prisma.auditEvent.findMany({
         where: { obligationId: id, userId },
         orderBy: { createdAt: "desc" }
@@ -253,6 +253,25 @@ export class ObligationRepository {
       prisma.reminder.findMany({
         where: { obligationId: id, userId },
         orderBy: { createdAt: "desc" }
+      }),
+      prisma.guidedJourneyEvent.findMany({
+        where: { obligationId: id, userId },
+        orderBy: { createdAt: "desc" }
+      }),
+      prisma.guidedJourney.findMany({
+        where: { obligationId: id, userId },
+        include: {
+          steps: {
+            orderBy: { position: "asc" },
+            select: {
+              id: true,
+              stepKey: true,
+              isCompleted: true,
+              position: true
+            }
+          }
+        },
+        orderBy: { createdAt: "desc" }
       })
     ]);
 
@@ -260,7 +279,9 @@ export class ObligationRepository {
       auditEvents,
       feedbackEvents,
       resolutionRuns,
-      reminders
+      reminders,
+      guidedJourneyEvents,
+      guidedJourneys
     };
   }
 }

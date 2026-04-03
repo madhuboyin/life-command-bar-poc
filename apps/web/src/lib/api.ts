@@ -2,6 +2,7 @@ import type {
   CommandExecuteResponse,
   CommandParseResponse,
   DashboardInsightsResponse,
+  GuidedJourney,
   Obligation,
   ObligationHistory,
   ObligationSort,
@@ -58,6 +59,19 @@ type RemindersListResponse = {
 
 type ReminderResponse = {
   reminder: Reminder;
+};
+
+type GuidedJourneyResponse = {
+  journey: GuidedJourney;
+};
+
+type GuidedJourneyCreateResponse = {
+  journey: GuidedJourney;
+  resumed: boolean;
+};
+
+type GuidedJourneyMaybeResponse = {
+  journey: GuidedJourney | null;
 };
 
 function isAbsoluteHttpUrl(value: string) {
@@ -540,4 +554,100 @@ export async function executeCommand(input: {
   });
 
   return handleResponse<CommandExecuteResponse>(res);
+}
+
+export async function createOrResumeGuidedJourney(
+  obligationId: string
+): Promise<GuidedJourneyCreateResponse> {
+  const res = await apiFetch(`/obligations/${obligationId}/guided-journey`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
+
+  return handleResponse<GuidedJourneyCreateResponse>(res);
+}
+
+export async function getActiveGuidedJourneyForObligation(
+  obligationId: string
+): Promise<GuidedJourneyMaybeResponse> {
+  const res = await apiFetch(`/obligations/${obligationId}/guided-journey`, {
+    cache: "no-store"
+  });
+
+  return handleResponse<GuidedJourneyMaybeResponse>(res);
+}
+
+export async function getGuidedJourneyById(journeyId: string): Promise<GuidedJourneyResponse> {
+  const res = await apiFetch(`/guided-journeys/${journeyId}`, {
+    cache: "no-store"
+  });
+
+  return handleResponse<GuidedJourneyResponse>(res);
+}
+
+export async function selectGuidedJourneyOption(
+  journeyId: string,
+  optionKey: string
+): Promise<GuidedJourneyResponse> {
+  const res = await apiFetch(`/guided-journeys/${journeyId}/select`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ optionKey })
+  });
+
+  return handleResponse<GuidedJourneyResponse>(res);
+}
+
+export async function advanceGuidedJourney(
+  journeyId: string,
+  completeCurrentStep = true
+): Promise<GuidedJourneyResponse> {
+  const res = await apiFetch(`/guided-journeys/${journeyId}/advance`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ completeCurrentStep })
+  });
+
+  return handleResponse<GuidedJourneyResponse>(res);
+}
+
+export async function backGuidedJourney(journeyId: string): Promise<GuidedJourneyResponse> {
+  const res = await apiFetch(`/guided-journeys/${journeyId}/back`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
+
+  return handleResponse<GuidedJourneyResponse>(res);
+}
+
+export async function completeGuidedJourney(journeyId: string): Promise<GuidedJourneyResponse> {
+  const res = await apiFetch(`/guided-journeys/${journeyId}/complete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
+
+  return handleResponse<GuidedJourneyResponse>(res);
+}
+
+export async function abandonGuidedJourney(journeyId: string): Promise<GuidedJourneyResponse> {
+  const res = await apiFetch(`/guided-journeys/${journeyId}/abandon`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
+
+  return handleResponse<GuidedJourneyResponse>(res);
+}
+
+export async function dismissGuidedJourney(journeyId: string): Promise<GuidedJourneyResponse> {
+  const res = await apiFetch(`/guided-journeys/${journeyId}/dismiss`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
+
+  return handleResponse<GuidedJourneyResponse>(res);
 }
