@@ -3,6 +3,13 @@ WORKDIR /app
 
 RUN corepack enable && corepack prepare pnpm@10.0.0 --activate
 
+# NEXT_PUBLIC_* values are embedded into the client bundle at build time.
+# Keep a production-safe default and allow overrides via --build-arg.
+ARG NEXT_PUBLIC_API_BASE_URL="https://api-lcb.contracttocozy.com/api"
+ARG NEXT_PUBLIC_APP_URL="https://lcb.contracttocozy.com"
+ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
+ENV NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
+
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY apps/web/package.json apps/web/package.json
 COPY packages/shared/package.json packages/shared/package.json

@@ -72,6 +72,37 @@ function stripTrailingSlash(value: string) {
   return value.replace(/\/+$/, "");
 }
 
+function inferApiOriginFromHostname(hostname: string, protocol: string) {
+  if (hostname.startsWith("lcb.")) {
+    return `${protocol}//api-${hostname}`;
+  }
+
+  if (hostname.startsWith("www.")) {
+    return `${protocol}//api.${hostname.slice(4)}`;
+  }
+
+  return "";
+}
+
+function inferBrowserApiBaseUrl() {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  const { protocol, hostname, origin } = window.location;
+
+  if (isLocalhostName(hostname)) {
+    return "http://localhost:4000/api";
+  }
+
+  const inferredOrigin = inferApiOriginFromHostname(hostname, protocol);
+  if (inferredOrigin) {
+    return `${inferredOrigin}/api`;
+  }
+
+  return `${origin}/api`;
+}
+
 function resolveServerOrigin() {
   if (SERVER_APP_URL) {
     if (isAbsoluteHttpUrl(SERVER_APP_URL)) {
@@ -89,18 +120,27 @@ function resolveServerOrigin() {
 
 function resolveApiBaseUrl() {
   const isServer = typeof window === "undefined";
+  const hasExplicitPublicBaseUrl = Boolean(PUBLIC_API_BASE_URL);
 
   if (isServer && SERVER_API_BASE_URL) {
-    return stripTrailingSlash(SERVER_API_BASE_URL);
+    if (isAbsoluteHttpUrl(SERVER_API_BASE_URL)) {
+      return stripTrailingSlash(SERVER_API_BASE_URL);
+    }
+
+    if (SERVER_API_BASE_URL.startsWith("/")) {
+      const serverOrigin = resolveServerOrigin();
+      if (serverOrigin) {
+        return stripTrailingSlash(new URL(SERVER_API_BASE_URL, serverOrigin).toString());
+      }
+    }
   }
 
-  const fallbackBaseUrl =
-    process.env.NODE_ENV === "development" ? "http://localhost:4000/api" : "/api";
+  const fallbackBaseUrl = process.env.NODE_ENV === "development" ? "http://localhost:4000/api" : "";
   const rawBaseUrl = PUBLIC_API_BASE_URL || fallbackBaseUrl;
 
-  if (isAbsoluteHttpUrl(rawBaseUrl)) {
-    // Safety guard: if a stale production client bundle still points to localhost,
-    // use same-origin /api instead of trying to call the browser's local machine.
+  if (rawBaseUrl && isAbsoluteHttpUrl(rawBaseUrl)) {
+    // Safety guard: if a stale production client bundle points to localhost,
+    // route browser traffic to an inferred public API host.
     if (!isServer) {
       try {
         const configuredUrl = new URL(rawBaseUrl);
@@ -108,7 +148,7 @@ function resolveApiBaseUrl() {
           isLocalhostName(configuredUrl.hostname) &&
           !isLocalhostName(window.location.hostname)
         ) {
-          return "/api";
+          return stripTrailingSlash(inferBrowserApiBaseUrl());
         }
       } catch {
         // Fall through to regular handling.
@@ -118,20 +158,42 @@ function resolveApiBaseUrl() {
     return stripTrailingSlash(rawBaseUrl);
   }
 
-  if (!rawBaseUrl.startsWith("/")) {
+  if (rawBaseUrl && !rawBaseUrl.startsWith("/")) {
     return stripTrailingSlash(rawBaseUrl);
   }
 
-  if (!isServer) {
+  if (!isServer && rawBaseUrl.startsWith("/")) {
+    if (!hasExplicitPublicBaseUrl && process.env.NODE_ENV === "production") {
+      return stripTrailingSlash(inferBrowserApiBaseUrl());
+    }
+
     return stripTrailingSlash(rawBaseUrl);
+  }
+
+  if (isServer && rawBaseUrl.startsWith("/")) {
+    const serverOrigin = resolveServerOrigin();
+    if (serverOrigin) {
+      return stripTrailingSlash(new URL(rawBaseUrl, serverOrigin).toString());
+    }
+  }
+
+  if (!isServer) {
+    return stripTrailingSlash(inferBrowserApiBaseUrl());
   }
 
   const serverOrigin = resolveServerOrigin();
   if (serverOrigin) {
-    return stripTrailingSlash(new URL(rawBaseUrl, serverOrigin).toString());
+    const parsed = new URL(serverOrigin);
+    const inferredApiOrigin = inferApiOriginFromHostname(parsed.hostname, parsed.protocol);
+    if (inferredApiOrigin) {
+      return stripTrailingSlash(`${inferredApiOrigin}/api`);
+    }
+
+    return stripTrailingSlash(`${serverOrigin}/api`);
   }
 
-  return stripTrailingSlash(`http://localhost:4000${rawBaseUrl}`);
+  const serverFallbackPath = rawBaseUrl && rawBaseUrl.startsWith("/") ? rawBaseUrl : "/api";
+  return stripTrailingSlash(`http://localhost:4000${serverFallbackPath}`);
 }
 
 function getClientStoredIdentity() {

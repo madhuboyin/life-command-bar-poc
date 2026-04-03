@@ -81,6 +81,8 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
     return next();
   } catch (error) {
+    logAuthFailure(error, userId, emailHeader);
+
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"
@@ -93,7 +95,75 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       );
     }
 
-    console.error(error);
-    return fail(res, "INTERNAL_ERROR", "Could not authenticate request", 500);
+    if (isSchemaNotReadyError(error)) {
+      return fail(
+        res,
+        "SERVICE_UNAVAILABLE",
+        "Authentication unavailable: database schema is not ready",
+        503,
+        {
+          hint: "Apply Prisma schema migration/db push and retry."
+        }
+      );
+    }
+
+    if (isDatabaseUnavailableError(error)) {
+      return fail(
+        res,
+        "SERVICE_UNAVAILABLE",
+        "Authentication unavailable: database is not reachable",
+        503
+      );
+    }
+
+    return fail(res, "INTERNAL_ERROR", "Could not authenticate request", 500, {
+      hint: "Check API logs for auth middleware dependency failures."
+    });
   }
+}
+
+function isSchemaNotReadyError(error: unknown) {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+    return false;
+  }
+
+  return error.code === "P2021" || error.code === "P2022";
+}
+
+function isDatabaseUnavailableError(error: unknown) {
+  if (error instanceof Prisma.PrismaClientInitializationError) {
+    return true;
+  }
+
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+    return false;
+  }
+
+  return error.code === "P1001" || error.code === "P1008" || error.code === "P1017";
+}
+
+function logAuthFailure(error: unknown, userId: string, emailHeader: string) {
+  const details: Record<string, unknown> = {
+    userId,
+    hasEmailHeader: Boolean(emailHeader)
+  };
+
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    details.errorType = "PrismaClientKnownRequestError";
+    details.code = error.code;
+    details.meta = error.meta ?? null;
+    details.message = error.message;
+  } else if (error instanceof Prisma.PrismaClientInitializationError) {
+    details.errorType = "PrismaClientInitializationError";
+    details.errorCode = error.errorCode ?? null;
+    details.message = error.message;
+  } else if (error instanceof Error) {
+    details.errorType = error.name;
+    details.message = error.message;
+  } else {
+    details.errorType = "UnknownError";
+    details.raw = error;
+  }
+
+  console.error("[auth] Authentication dependency failure", details);
 }
