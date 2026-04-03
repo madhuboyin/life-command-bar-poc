@@ -20,6 +20,7 @@ type Props = {
 
 export default function CommandBar({ onFeedReplace }: Props) {
   const [input, setInput] = useState("");
+  const [obligationContextId, setObligationContextId] = useState("");
   const [parsing, setParsing] = useState(false);
   const [executing, setExecuting] = useState(false);
   const [parseResult, setParseResult] = useState<CommandParseResponse | null>(null);
@@ -34,7 +35,12 @@ export default function CommandBar({ onFeedReplace }: Props) {
     try {
       setParsing(true);
       setError(null);
-      const result = await parseCommand({ input });
+      const result = await parseCommand({
+        input,
+        context: obligationContextId.trim()
+          ? { obligationId: obligationContextId.trim() }
+          : undefined
+      });
       setParseResult(result);
       showToast({
         variant: "info",
@@ -58,7 +64,12 @@ export default function CommandBar({ onFeedReplace }: Props) {
       setExecuting(true);
       setError(null);
 
-      const result = await executeCommand({ input });
+      const result = await executeCommand({
+        input,
+        context: obligationContextId.trim()
+          ? { obligationId: obligationContextId.trim() }
+          : undefined
+      });
       setExecuteResult(result);
 
       if (result.resultType === "today_feed" && Array.isArray(result.items)) {
@@ -88,7 +99,7 @@ export default function CommandBar({ onFeedReplace }: Props) {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: isMobile ? "1fr" : "1fr auto auto",
+            gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr auto auto",
             gap: 10
           }}
         >
@@ -96,6 +107,13 @@ export default function CommandBar({ onFeedReplace }: Props) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Type a command..."
+            style={inputStyles.input}
+          />
+
+          <input
+            value={obligationContextId}
+            onChange={(e) => setObligationContextId(e.target.value)}
+            placeholder="Obligation ID (optional)"
             style={inputStyles.input}
           />
 

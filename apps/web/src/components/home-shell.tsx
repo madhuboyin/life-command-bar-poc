@@ -13,9 +13,10 @@ import { getTodayFeed } from "../lib/api";
 
 type Props = {
   initialData: TodayFeedResponse;
+  initialError?: string | null;
 };
 
-export default function HomeShell({ initialData }: Props) {
+export default function HomeShell({ initialData, initialError }: Props) {
   const [externalItems, setExternalItems] = useState<TodayFeedItem[] | null>(null);
   const effectiveFeed: TodayFeedResponse = {
     generatedAt: initialData.generatedAt,
@@ -30,7 +31,11 @@ export default function HomeShell({ initialData }: Props) {
   const overview = (
     <div style={{ display: "grid", gap: 24 }}>
       <DashboardSummaryStrip data={effectiveFeed} />
-      <TodayFeedClient initialData={initialData} externalItems={externalItems} />
+      <TodayFeedClient
+        initialData={initialData}
+        externalItems={externalItems}
+        initialError={initialError}
+      />
     </div>
   );
 

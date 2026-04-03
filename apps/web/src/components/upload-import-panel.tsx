@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import { importEmailForward, uploadFile } from "../lib/api";
 import { buttonStyles, cardStyles, inputStyles } from "../lib/ui";
 import SectionCard from "./ui/section-card";
@@ -13,6 +13,7 @@ type Props = {
 
 export default function UploadImportPanel({ onCompleted }: Props) {
   const [file, setFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploadLoading, setUploadLoading] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +43,9 @@ export default function UploadImportPanel({ onCompleted }: Props) {
         description: file.name
       });
       setFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
 
       await onCompleted();
     } catch (err) {
@@ -95,6 +99,7 @@ export default function UploadImportPanel({ onCompleted }: Props) {
           <h3 style={{ marginTop: 0 }}>Upload document</h3>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
             <input
+              ref={fileInputRef}
               type="file"
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
             />

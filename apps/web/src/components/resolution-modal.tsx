@@ -93,7 +93,7 @@ export default function ResolutionModal({ open, onClose, resolution }: Props) {
           </section>
 
           <section style={cardStyles.bordered}>
-            <div style={text.label}>Primary action</div>
+            <div style={text.label}>Suggested actions</div>
             <div
               style={{
                 display: "grid",
@@ -101,14 +101,14 @@ export default function ResolutionModal({ open, onClose, resolution }: Props) {
                 gap: 10
               }}
             >
-              <button style={buttonStyles.primary}>
+              <div style={actionChipPrimary}>
                 {resolution.recommendation.primaryAction.label}
-              </button>
+              </div>
 
               {resolution.recommendation.secondaryActions.map((action) => (
-                <button key={action.key} style={buttonStyles.secondary}>
+                <div key={action.key} style={actionChipSecondary}>
                   {action.label}
-                </button>
+                </div>
               ))}
             </div>
           </section>
@@ -143,4 +143,26 @@ const chipStyle: React.CSSProperties = {
   borderRadius: radius.md,
   padding: "10px 12px",
   minWidth: 140
+};
+
+const actionChipBase: React.CSSProperties = {
+  borderRadius: 10,
+  padding: "10px 14px",
+  fontWeight: 600,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center"
+};
+
+const actionChipPrimary: React.CSSProperties = {
+  ...actionChipBase,
+  background: buttonStyles.primary.background,
+  color: buttonStyles.primary.color
+};
+
+const actionChipSecondary: React.CSSProperties = {
+  ...actionChipBase,
+  border: buttonStyles.secondary.border,
+  background: buttonStyles.secondary.background,
+  color: buttonStyles.secondary.color
 };

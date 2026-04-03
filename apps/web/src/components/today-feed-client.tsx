@@ -13,12 +13,17 @@ import EmptyState from "./ui/empty-state";
 type Props = {
   initialData: TodayFeedResponse;
   externalItems?: TodayFeedResponse["items"] | null;
+  initialError?: string | null;
 };
 
-export default function TodayFeedClient({ initialData, externalItems }: Props) {
+export default function TodayFeedClient({
+  initialData,
+  externalItems,
+  initialError = null
+}: Props) {
   const [data, setData] = useState<TodayFeedResponse>(initialData);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError);
 
   const refresh = useCallback(async () => {
     try {
@@ -35,7 +40,8 @@ export default function TodayFeedClient({ initialData, externalItems }: Props) {
 
   useEffect(() => {
     setData(initialData);
-  }, [initialData]);
+    setError(initialError);
+  }, [initialData, initialError]);
 
   useEffect(() => {
     if (externalItems) {
