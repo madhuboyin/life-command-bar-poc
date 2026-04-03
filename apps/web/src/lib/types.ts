@@ -76,6 +76,35 @@ export interface Reminder {
   updatedAt: string;
 }
 
+export interface ObligationHistory {
+  auditEvents: Array<{
+    id: string;
+    eventType: string;
+    metadata?: Record<string, unknown> | null;
+    createdAt: string;
+  }>;
+  feedbackEvents: Array<{
+    id: string;
+    type: string;
+    note?: string | null;
+    createdAt: string;
+  }>;
+  resolutionRuns: Array<{
+    id: string;
+    flowKey: string;
+    recommendedOption: string;
+    confidence: string;
+    createdAt: string;
+  }>;
+  reminders: Array<{
+    id: string;
+    title: string;
+    status: string;
+    scheduledFor: string;
+    createdAt: string;
+  }>;
+}
+
 export interface CommandParseResponse {
   intent: string;
   confidence: number;

@@ -21,6 +21,24 @@ const createObligationSchema = z.object({
   status: z.enum(["DRAFT", "ACTIVE", "POSTPONED", "RESOLVED", "IGNORED"]).optional()
 });
 
+const updateObligationSchema = z.object({
+  type: z.enum(["BILL", "SUBSCRIPTION", "RENEWAL", "COMMITMENT"]).optional(),
+  title: z.string().min(1).optional(),
+  description: z.string().nullable().optional(),
+  vendor: z.string().nullable().optional(),
+  amount: z.number().nullable().optional(),
+  currency: z.string().length(3).nullable().optional(),
+  dueDate: z.string().datetime().nullable().optional(),
+  recurrence: z.string().nullable().optional(),
+  source: z.enum(["MANUAL", "EMAIL", "DOCUMENT", "INFERRED"]).optional(),
+  confidenceScore: z.number().min(0).max(1).optional(),
+  urgencyScore: z.number().min(0).max(100).optional(),
+  importanceScore: z.number().min(0).max(100).optional(),
+  effortLevel: z.enum(["LOW", "MEDIUM", "HIGH"]).optional(),
+  impactLevel: z.enum(["LOW", "MEDIUM", "HIGH"]).optional(),
+  status: z.enum(["DRAFT", "ACTIVE", "POSTPONED", "RESOLVED", "IGNORED"]).optional()
+});
+
 export class ObligationService {
   private readonly repository = new ObligationRepository();
 
@@ -53,5 +71,48 @@ export class ObligationService {
     const input = createObligationSchema.parse(payload);
     const obligation = await this.repository.create(input);
     return mapObligation(obligation);
+  }
+
+  async update(userId: string, id: string, payload: unknown) {
+    const input = updateObligationSchema.parse(payload);
+    const obligation = await this.repository.update(id, userId, input);
+    if (!obligation) return null;
+    return mapObligation(obligation);
+  }
+
+  async getHistory(userId: string, id: string) {
+    const obligation = await this.repository.findById(id, userId);
+    if (!obligation) return null;
+
+    const history = await this.repository.getHistory(id, userId);
+
+    return {
+      auditEvents: history.auditEvents.map((item) => ({
+        id: item.id,
+        eventType: item.eventType,
+        metadata: item.metadata,
+        createdAt: item.createdAt.toISOString()
+      })),
+      feedbackEvents: history.feedbackEvents.map((item) => ({
+        id: item.id,
+        type: item.type,
+        note: item.note,
+        createdAt: item.createdAt.toISOString()
+      })),
+      resolutionRuns: history.resolutionRuns.map((item) => ({
+        id: item.id,
+        flowKey: item.flowKey,
+        recommendedOption: item.recommendedOption,
+        confidence: item.confidence,
+        createdAt: item.createdAt.toISOString()
+      })),
+      reminders: history.reminders.map((item) => ({
+        id: item.id,
+        title: item.title,
+        status: item.status,
+        scheduledFor: item.scheduledFor.toISOString(),
+        createdAt: item.createdAt.toISOString()
+      }))
+    };
   }
 }

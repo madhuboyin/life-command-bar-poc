@@ -2,6 +2,8 @@ import { ObligationStatus, ObligationType, Prisma } from "@prisma/client";
 import { prisma } from "../clients/prisma.client";
 import { CreateObligationInput, ObligationListQuery } from "../types/obligation.types";
 
+type UpdateObligationInput = Partial<CreateObligationInput>;
+
 export class ObligationRepository {
   async findMany(query: ObligationListQuery & { userId: string }) {
     const limit = query.limit ?? 20;
@@ -55,7 +57,7 @@ export class ObligationRepository {
   }
 
   async create(input: CreateObligationInput) {
-    return prisma.obligation.create({
+    const obligation = await prisma.obligation.create({
       data: {
         userId: input.userId,
         type: input.type,
@@ -75,6 +77,57 @@ export class ObligationRepository {
         status: input.status ?? "ACTIVE"
       }
     });
+
+    await prisma.auditEvent.create({
+      data: {
+        userId: input.userId,
+        obligationId: obligation.id,
+        eventType: "obligation_created",
+        metadata: {
+          title: input.title,
+          type: input.type
+        }
+      }
+    });
+
+    return obligation;
+  }
+
+  async update(id: string, userId: string, input: UpdateObligationInput) {
+    const existing = await this.findById(id, userId);
+    if (!existing) return null;
+
+    const obligation = await prisma.obligation.update({
+      where: { id },
+      data: {
+        type: input.type,
+        title: input.title,
+        description: input.description,
+        vendor: input.vendor,
+        amount: input.amount,
+        currency: input.currency,
+        dueDate: input.dueDate ? new Date(input.dueDate) : input.dueDate === null ? null : undefined,
+        recurrence: input.recurrence,
+        source: input.source,
+        confidenceScore: input.confidenceScore,
+        urgencyScore: input.urgencyScore,
+        importanceScore: input.importanceScore,
+        effortLevel: input.effortLevel,
+        impactLevel: input.impactLevel,
+        status: input.status
+      }
+    });
+
+    await prisma.auditEvent.create({
+      data: {
+        userId,
+        obligationId: id,
+        eventType: "obligation_updated",
+        metadata: input
+      }
+    });
+
+    return obligation;
   }
 
   async updateLastShownAt(ids: string[]) {
@@ -104,16 +157,14 @@ export class ObligationRepository {
 
     if (obligation.count === 0) return null;
 
-    if (note) {
-      await prisma.auditEvent.create({
-        data: {
-          userId,
-          obligationId: id,
-          eventType: "obligation_marked_done",
-          metadata: { note }
-        }
-      });
-    }
+    await prisma.auditEvent.create({
+      data: {
+        userId,
+        obligationId: id,
+        eventType: "obligation_marked_done",
+        metadata: { note: note ?? null }
+      }
+    });
 
     return this.findById(id, userId);
   }
@@ -177,5 +228,33 @@ export class ObligationRepository {
     });
 
     return this.findById(id, userId);
+  }
+
+  async getHistory(id: string, userId: string) {
+    const [auditEvents, feedbackEvents, resolutionRuns, reminders] = await Promise.all([
+      prisma.auditEvent.findMany({
+        where: { obligationId: id, userId },
+        orderBy: { createdAt: "desc" }
+      }),
+      prisma.feedbackEvent.findMany({
+        where: { obligationId: id, userId },
+        orderBy: { createdAt: "desc" }
+      }),
+      prisma.resolutionRun.findMany({
+        where: { obligationId: id, userId },
+        orderBy: { createdAt: "desc" }
+      }),
+      prisma.reminder.findMany({
+        where: { obligationId: id, userId },
+        orderBy: { createdAt: "desc" }
+      })
+    ]);
+
+    return {
+      auditEvents,
+      feedbackEvents,
+      resolutionRuns,
+      reminders
+    };
   }
 }

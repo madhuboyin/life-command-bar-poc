@@ -22,6 +22,9 @@ import {
 import { useIsMobile } from "../lib/use-is-mobile";
 import StatusMessage from "./ui/status-message";
 import { useToast } from "./ui/toast-provider";
+import ObligationDetailTabs from "./obligation-detail-tabs";
+import EditObligationForm from "./edit-obligation-form";
+import ObligationHistoryPanel from "./obligation-history-panel";
 
 type Props = {
   obligation: Obligation;
@@ -121,6 +124,46 @@ export default function ObligationDetailClient({ obligation }: Props) {
     }
   }
 
+  const overview = (
+    <div style={{ display: "grid", gap: 14 }}>
+      <section style={cardStyles.bordered}>
+        <div style={text.label}>Overview</div>
+        <div><strong>Vendor:</strong> {current.vendor ?? "—"}</div>
+        <div><strong>Description:</strong> {current.description ?? "—"}</div>
+        <div><strong>Due Date:</strong> {formatDateTime(current.dueDate)}</div>
+        <div><strong>Amount:</strong> {current.amount ?? "—"} {current.currency ?? ""}</div>
+        <div><strong>Source:</strong> {current.source}</div>
+        <div><strong>Recurrence:</strong> {current.recurrence ?? "—"}</div>
+      </section>
+
+      <section style={cardStyles.bordered}>
+        <div style={text.label}>Ranking Signals</div>
+        <div><strong>Confidence:</strong> {current.confidenceScore}</div>
+        <div><strong>Urgency:</strong> {current.urgencyScore}</div>
+        <div><strong>Importance:</strong> {current.importanceScore}</div>
+        <div><strong>Effort:</strong> {current.effortLevel}</div>
+        <div><strong>Impact:</strong> {current.impactLevel}</div>
+      </section>
+
+      <section style={cardStyles.bordered}>
+        <div style={text.label}>Timestamps</div>
+        <div><strong>Created:</strong> {new Date(current.createdAt).toLocaleString()}</div>
+        <div><strong>Updated:</strong> {new Date(current.updatedAt).toLocaleString()}</div>
+        <div><strong>Last shown:</strong> {current.lastShownAt ? new Date(current.lastShownAt).toLocaleString() : "—"}</div>
+        <div><strong>Last acted:</strong> {current.lastActedAt ? new Date(current.lastActedAt).toLocaleString() : "—"}</div>
+      </section>
+    </div>
+  );
+
+  const edit = (
+    <section style={cardStyles.bordered}>
+      <h3 style={{ marginTop: 0 }}>Edit Obligation</h3>
+      <EditObligationForm obligation={current} onSaved={setCurrent} />
+    </section>
+  );
+
+  const history = <ObligationHistoryPanel obligationId={current.id} />;
+
   return (
     <>
       <main style={isMobile ? pageStyles.shellMobile : pageStyles.shell}>
@@ -175,33 +218,11 @@ export default function ObligationDetailClient({ obligation }: Props) {
 
           {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
 
-          <div style={{ display: "grid", gap: 14 }}>
-            <section style={cardStyles.bordered}>
-              <div style={text.label}>Overview</div>
-              <div><strong>Vendor:</strong> {current.vendor ?? "—"}</div>
-              <div><strong>Description:</strong> {current.description ?? "—"}</div>
-              <div><strong>Due Date:</strong> {formatDateTime(current.dueDate)}</div>
-              <div><strong>Amount:</strong> {current.amount ?? "—"} {current.currency ?? ""}</div>
-              <div><strong>Source:</strong> {current.source}</div>
-            </section>
-
-            <section style={cardStyles.bordered}>
-              <div style={text.label}>Ranking Signals</div>
-              <div><strong>Confidence:</strong> {current.confidenceScore}</div>
-              <div><strong>Urgency:</strong> {current.urgencyScore}</div>
-              <div><strong>Importance:</strong> {current.importanceScore}</div>
-              <div><strong>Effort:</strong> {current.effortLevel}</div>
-              <div><strong>Impact:</strong> {current.impactLevel}</div>
-            </section>
-
-            <section style={cardStyles.bordered}>
-              <div style={text.label}>Timestamps</div>
-              <div><strong>Created:</strong> {new Date(current.createdAt).toLocaleString()}</div>
-              <div><strong>Updated:</strong> {new Date(current.updatedAt).toLocaleString()}</div>
-              <div><strong>Last shown:</strong> {current.lastShownAt ? new Date(current.lastShownAt).toLocaleString() : "—"}</div>
-              <div><strong>Last acted:</strong> {current.lastActedAt ? new Date(current.lastActedAt).toLocaleString() : "—"}</div>
-            </section>
-          </div>
+          <ObligationDetailTabs
+            overview={overview}
+            edit={edit}
+            history={history}
+          />
         </section>
       </main>
 

@@ -2,7 +2,9 @@ import { Router } from "express";
 import {
   createObligation,
   getObligationById,
-  listObligations
+  getObligationHistory,
+  listObligations,
+  updateObligation
 } from "../controllers/obligation.controller";
 import {
   dismissObligation,
@@ -14,7 +16,9 @@ export const obligationRouter = Router();
 
 obligationRouter.get("/", listObligations);
 obligationRouter.get("/:id", getObligationById);
+obligationRouter.get("/:id/history", getObligationHistory);
 obligationRouter.post("/", createObligation);
+obligationRouter.patch("/:id", updateObligation);
 
 obligationRouter.post("/:id/mark-done", markObligationDone);
 obligationRouter.post("/:id/dismiss", dismissObligation);
