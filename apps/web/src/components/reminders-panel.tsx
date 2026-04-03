@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { createReminder, getReminders } from "../lib/api";
 import type { Reminder } from "../lib/types";
-import { buttonStyles, cardStyles, colors, inputStyles } from "../lib/ui";
+import { buttonStyles, cardStyles, colors, formatDateTime, inputStyles } from "../lib/ui";
 import SectionCard from "./ui/section-card";
 import StatusMessage from "./ui/status-message";
 import LoadingCard from "./ui/loading-card";
@@ -118,7 +118,7 @@ export default function RemindersPanel() {
             <article key={item.id} style={cardStyles.bordered}>
               <div style={{ fontWeight: 600 }}>{item.title}</div>
               <div style={{ fontSize: 13, color: colors.textMuted, marginTop: 4 }}>
-                Scheduled for: {new Date(item.scheduledFor).toLocaleString()}
+                Scheduled for: {formatDateTime(item.scheduledFor)}
               </div>
               <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 4 }}>
                 Status: {item.status}

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { getObligationHistory } from "../lib/api";
 import type { ObligationHistory } from "../lib/types";
-import { cardStyles, colors } from "../lib/ui";
+import { cardStyles, colors, formatDateTime } from "../lib/ui";
 import LoadingCard from "./ui/loading-card";
 import EmptyState from "./ui/empty-state";
 import StatusMessage from "./ui/status-message";
@@ -74,7 +74,7 @@ export default function ObligationHistoryPanel({ obligationId }: Props) {
           history.auditEvents.map((item) => (
             <div key={item.id} style={eventRow}>
               <div style={{ fontWeight: 600 }}>{item.eventType}</div>
-              <div style={metaText}>{new Date(item.createdAt).toLocaleString()}</div>
+              <div style={metaText}>{formatDateTime(item.createdAt)}</div>
             </div>
           ))
         )}
@@ -89,7 +89,7 @@ export default function ObligationHistoryPanel({ obligationId }: Props) {
             <div key={item.id} style={eventRow}>
               <div style={{ fontWeight: 600 }}>{item.type}</div>
               {item.note ? <div>{item.note}</div> : null}
-              <div style={metaText}>{new Date(item.createdAt).toLocaleString()}</div>
+              <div style={metaText}>{formatDateTime(item.createdAt)}</div>
             </div>
           ))
         )}
@@ -105,7 +105,7 @@ export default function ObligationHistoryPanel({ obligationId }: Props) {
               <div style={{ fontWeight: 600 }}>{item.flowKey}</div>
               <div>Recommended: {item.recommendedOption}</div>
               <div>Confidence: {item.confidence}</div>
-              <div style={metaText}>{new Date(item.createdAt).toLocaleString()}</div>
+              <div style={metaText}>{formatDateTime(item.createdAt)}</div>
             </div>
           ))
         )}
@@ -120,7 +120,7 @@ export default function ObligationHistoryPanel({ obligationId }: Props) {
             <div key={item.id} style={eventRow}>
               <div style={{ fontWeight: 600 }}>{item.title}</div>
               <div>Status: {item.status}</div>
-              <div>Scheduled: {new Date(item.scheduledFor).toLocaleString()}</div>
+              <div>Scheduled: {formatDateTime(item.scheduledFor)}</div>
             </div>
           ))
         )}
@@ -139,7 +139,7 @@ export default function ObligationHistoryPanel({ obligationId }: Props) {
               <div>
                 Progress: {item.completedSteps}/{item.totalSteps} steps completed
               </div>
-              <div style={metaText}>Updated: {new Date(item.updatedAt).toLocaleString()}</div>
+              <div style={metaText}>Updated: {formatDateTime(item.updatedAt)}</div>
             </div>
           ))
         )}
@@ -156,7 +156,7 @@ export default function ObligationHistoryPanel({ obligationId }: Props) {
               <div style={{ fontSize: 12, color: colors.textMuted }}>
                 Journey: {item.journeyId}
               </div>
-              <div style={metaText}>{new Date(item.createdAt).toLocaleString()}</div>
+              <div style={metaText}>{formatDateTime(item.createdAt)}</div>
             </div>
           ))
         )}

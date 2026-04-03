@@ -273,5 +273,19 @@ export function getHookBadgeStyle(label: "urgent" | "money" | "quick_win" | "non
 
 export function formatDateTime(value?: string | null) {
   if (!value) return "No due date";
-  return new Date(value).toLocaleString();
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "Invalid date";
+
+  // Use fixed locale + timezone so server/client hydration text remains stable.
+  const formatted = new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "UTC"
+  }).format(parsed);
+
+  return `${formatted} UTC`;
 }

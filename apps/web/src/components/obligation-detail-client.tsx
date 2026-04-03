@@ -192,10 +192,10 @@ export default function ObligationDetailClient({ obligation }: Props) {
 
       <section style={cardStyles.bordered}>
         <div style={text.label}>Timestamps</div>
-        <div><strong>Created:</strong> {new Date(current.createdAt).toLocaleString()}</div>
-        <div><strong>Updated:</strong> {new Date(current.updatedAt).toLocaleString()}</div>
-        <div><strong>Last shown:</strong> {current.lastShownAt ? new Date(current.lastShownAt).toLocaleString() : "—"}</div>
-        <div><strong>Last acted:</strong> {current.lastActedAt ? new Date(current.lastActedAt).toLocaleString() : "—"}</div>
+        <div><strong>Created:</strong> {formatDateTime(current.createdAt)}</div>
+        <div><strong>Updated:</strong> {formatDateTime(current.updatedAt)}</div>
+        <div><strong>Last shown:</strong> {current.lastShownAt ? formatDateTime(current.lastShownAt) : "—"}</div>
+        <div><strong>Last acted:</strong> {current.lastActedAt ? formatDateTime(current.lastActedAt) : "—"}</div>
       </section>
 
       {activeJourney ? <ResumeGuidedJourneyCard journey={activeJourney} /> : null}
