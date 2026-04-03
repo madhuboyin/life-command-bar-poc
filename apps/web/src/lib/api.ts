@@ -9,8 +9,11 @@ import type {
   TodayFeedResponse
 } from "./types";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000/api";
+const PUBLIC_API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "").trim();
+const SERVER_API_BASE_URL = (process.env.API_BASE_URL || "").trim();
+const SERVER_APP_URL =
+  (process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || process.env.SITE_URL || "").trim();
+const VERCEL_URL = (process.env.VERCEL_URL || "").trim();
 
 const DEFAULT_USER_ID =
   process.env.NEXT_PUBLIC_LCB_USER_ID ||
@@ -52,6 +55,60 @@ type RemindersListResponse = {
 type ReminderResponse = {
   reminder: Reminder;
 };
+
+function isAbsoluteHttpUrl(value: string) {
+  return /^https?:\/\//i.test(value);
+}
+
+function stripTrailingSlash(value: string) {
+  return value.replace(/\/+$/, "");
+}
+
+function resolveServerOrigin() {
+  if (SERVER_APP_URL) {
+    if (isAbsoluteHttpUrl(SERVER_APP_URL)) {
+      return stripTrailingSlash(SERVER_APP_URL);
+    }
+    return stripTrailingSlash(`https://${SERVER_APP_URL}`);
+  }
+
+  if (VERCEL_URL) {
+    return stripTrailingSlash(`https://${VERCEL_URL}`);
+  }
+
+  return "";
+}
+
+function resolveApiBaseUrl() {
+  const isServer = typeof window === "undefined";
+
+  if (isServer && SERVER_API_BASE_URL) {
+    return stripTrailingSlash(SERVER_API_BASE_URL);
+  }
+
+  const fallbackBaseUrl =
+    process.env.NODE_ENV === "development" ? "http://localhost:4000/api" : "/api";
+  const rawBaseUrl = PUBLIC_API_BASE_URL || fallbackBaseUrl;
+
+  if (isAbsoluteHttpUrl(rawBaseUrl)) {
+    return stripTrailingSlash(rawBaseUrl);
+  }
+
+  if (!rawBaseUrl.startsWith("/")) {
+    return stripTrailingSlash(rawBaseUrl);
+  }
+
+  if (!isServer) {
+    return stripTrailingSlash(rawBaseUrl);
+  }
+
+  const serverOrigin = resolveServerOrigin();
+  if (serverOrigin) {
+    return stripTrailingSlash(new URL(rawBaseUrl, serverOrigin).toString());
+  }
+
+  return stripTrailingSlash(`http://localhost:4000${rawBaseUrl}`);
+}
 
 function getClientStoredIdentity() {
   if (typeof window === "undefined") {
@@ -95,7 +152,8 @@ function withAuthHeaders(init: RequestInit = {}) {
 }
 
 async function apiFetch(path: string, init: RequestInit = {}) {
-  return fetch(`${API_BASE_URL}${path}`, withAuthHeaders(init));
+  const baseUrl = resolveApiBaseUrl();
+  return fetch(`${baseUrl}${path}`, withAuthHeaders(init));
 }
 
 async function handleResponse<T>(res: Response): Promise<T> {
