@@ -5,6 +5,7 @@ import { obligationRouter } from "./routes/obligation.routes";
 import { todayFeedRouter } from "./routes/today-feed.routes";
 import { feedbackRouter } from "./routes/feedback.routes";
 import { resolutionRouter } from "./routes/resolution.routes";
+import { commandRouter } from "./routes/command.routes";
 
 export function createApp() {
   const app = express();
@@ -13,6 +14,7 @@ export function createApp() {
   app.use(express.json());
 
   app.use("/api/health", healthRouter);
+  app.use("/api/commands", commandRouter);
   app.use("/api/obligations", obligationRouter);
   app.use("/api/today-feed", todayFeedRouter);
   app.use("/api/feedback", feedbackRouter);

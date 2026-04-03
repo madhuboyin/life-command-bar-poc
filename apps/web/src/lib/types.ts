@@ -65,3 +65,35 @@ export interface ResolutionResponse {
   obligationId: string;
   recommendation: ResolutionRecommendation;
 }
+
+export interface CommandParseResponse {
+  intent: string;
+  confidence: number;
+  entities: Record<string, unknown>;
+  resolution: {
+    type: string;
+    obligationId?: string;
+  };
+  needsClarification: boolean;
+  question?: string;
+}
+
+export interface CommandExecuteResponse {
+  resultType:
+    | "today_feed"
+    | "obligation_list"
+    | "resolution_flow"
+    | "new_obligation_candidate"
+    | "clarification";
+  items?: TodayFeedItem[] | Obligation[];
+  generatedAt?: string;
+  obligationId?: string;
+  recommendation?: ResolutionRecommendation;
+  title?: string | null;
+  question?: string;
+  pagination?: {
+    total: number;
+    limit: number;
+    offset: number;
+  };
+}

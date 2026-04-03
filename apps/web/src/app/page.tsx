@@ -1,5 +1,5 @@
 import { getTodayFeed } from "../lib/api";
-import TodayFeedClient from "../components/today-feed-client";
+import HomeShell from "../components/home-shell";
 
 export default async function HomePage() {
   const data = await getTodayFeed();
@@ -13,7 +13,7 @@ export default async function HomePage() {
         </p>
       </header>
 
-      <TodayFeedClient initialData={data} />
+      <HomeShell initialData={data} />
     </main>
   );
 }

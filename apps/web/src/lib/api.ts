@@ -38,9 +38,7 @@ export async function getResolution(obligationId: string) {
 export async function markObligationDone(obligationId: string, note?: string) {
   const res = await fetch(`${API_BASE_URL}/obligations/${obligationId}/mark-done`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ note })
   });
 
@@ -50,9 +48,7 @@ export async function markObligationDone(obligationId: string, note?: string) {
 export async function dismissObligation(obligationId: string, reason?: string) {
   const res = await fetch(`${API_BASE_URL}/obligations/${obligationId}/dismiss`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ reason })
   });
 
@@ -66,9 +62,7 @@ export async function postponeObligation(
 ) {
   const res = await fetch(`${API_BASE_URL}/obligations/${obligationId}/postpone`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ until, reason })
   });
 
@@ -92,9 +86,59 @@ export async function createFeedback(input: {
 }) {
   const res = await fetch(`${API_BASE_URL}/feedback`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+
+  return handleResponse(res);
+}
+
+export async function createObligation(input: {
+  type: "BILL" | "SUBSCRIPTION" | "RENEWAL" | "COMMITMENT";
+  title: string;
+  description?: string;
+  vendor?: string;
+  amount?: number;
+  currency?: string;
+  dueDate?: string;
+  recurrence?: string;
+  source?: "MANUAL" | "EMAIL" | "DOCUMENT" | "INFERRED";
+  confidenceScore?: number;
+  urgencyScore?: number;
+  importanceScore?: number;
+  effortLevel?: "LOW" | "MEDIUM" | "HIGH";
+  impactLevel?: "LOW" | "MEDIUM" | "HIGH";
+  status?: "DRAFT" | "ACTIVE" | "POSTPONED" | "RESOLVED" | "IGNORED";
+}) {
+  const res = await fetch(`${API_BASE_URL}/obligations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+
+  return handleResponse(res);
+}
+
+export async function parseCommand(input: {
+  input: string;
+  context?: { obligationId?: string };
+}) {
+  const res = await fetch(`${API_BASE_URL}/commands/parse`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+
+  return handleResponse(res);
+}
+
+export async function executeCommand(input: {
+  input: string;
+  context?: { obligationId?: string };
+}) {
+  const res = await fetch(`${API_BASE_URL}/commands/execute`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input)
   });
 

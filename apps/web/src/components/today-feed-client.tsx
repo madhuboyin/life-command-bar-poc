@@ -7,9 +7,10 @@ import TodayFeedCard from "./today-feed-card";
 
 type Props = {
   initialData: TodayFeedResponse;
+  externalItems?: TodayFeedResponse["items"] | null;
 };
 
-export default function TodayFeedClient({ initialData }: Props) {
+export default function TodayFeedClient({ initialData, externalItems }: Props) {
   const [data, setData] = useState<TodayFeedResponse>(initialData);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,6 +31,15 @@ export default function TodayFeedClient({ initialData }: Props) {
   useEffect(() => {
     setData(initialData);
   }, [initialData]);
+
+  useEffect(() => {
+    if (externalItems) {
+      setData({
+        generatedAt: new Date().toISOString(),
+        items: externalItems
+      });
+    }
+  }, [externalItems]);
 
   return (
     <section
