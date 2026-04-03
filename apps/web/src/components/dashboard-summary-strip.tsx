@@ -1,4 +1,7 @@
+"use client";
+
 import { cardStyles, colors } from "../lib/ui";
+import { useIsMobile } from "../lib/use-is-mobile";
 import type { TodayFeedResponse } from "../lib/types";
 
 type Props = {
@@ -6,6 +9,8 @@ type Props = {
 };
 
 export default function DashboardSummaryStrip({ data }: Props) {
+  const isMobile = useIsMobile();
+
   const urgentCount = data.items.filter((item) => item.hookType === "urgent").length;
   const moneyCount = data.items.filter((item) => item.hookType === "money").length;
   const quickWinCount = data.items.filter((item) => item.hookType === "quick_win").length;
@@ -21,7 +26,7 @@ export default function DashboardSummaryStrip({ data }: Props) {
     <section
       style={{
         display: "grid",
-        gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+        gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, minmax(0, 1fr))",
         gap: 12,
         marginBottom: 24
       }}
@@ -31,7 +36,7 @@ export default function DashboardSummaryStrip({ data }: Props) {
           <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 6 }}>
             {stat.label}
           </div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>{stat.value}</div>
+          <div style={{ fontSize: isMobile ? 24 : 28, fontWeight: 700 }}>{stat.value}</div>
         </article>
       ))}
     </section>

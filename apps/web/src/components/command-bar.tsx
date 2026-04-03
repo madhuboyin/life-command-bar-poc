@@ -9,8 +9,10 @@ import type {
   TodayFeedItem
 } from "../lib/types";
 import { buttonStyles, cardStyles, colors, inputStyles } from "../lib/ui";
+import { useIsMobile } from "../lib/use-is-mobile";
 import SectionCard from "./ui/section-card";
 import StatusMessage from "./ui/status-message";
+import { useToast } from "./ui/toast-provider";
 
 type Props = {
   onFeedReplace: (items: TodayFeedItem[]) => void;
@@ -23,6 +25,8 @@ export default function CommandBar({ onFeedReplace }: Props) {
   const [parseResult, setParseResult] = useState<CommandParseResponse | null>(null);
   const [executeResult, setExecuteResult] = useState<CommandExecuteResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { showToast } = useToast();
+  const isMobile = useIsMobile();
 
   async function handleParse() {
     if (!input.trim()) return;
@@ -32,8 +36,15 @@ export default function CommandBar({ onFeedReplace }: Props) {
       setError(null);
       const result = await parseCommand({ input });
       setParseResult(result);
+      showToast({
+        variant: "info",
+        title: "Command parsed",
+        description: `Intent: ${result.intent}`
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to parse command");
+      const message = err instanceof Error ? err.message : "Failed to parse command";
+      setError(message);
+      showToast({ variant: "error", title: "Parse failed", description: message });
     } finally {
       setParsing(false);
     }
@@ -53,8 +64,16 @@ export default function CommandBar({ onFeedReplace }: Props) {
       if (result.resultType === "today_feed" && Array.isArray(result.items)) {
         onFeedReplace(result.items as TodayFeedItem[]);
       }
+
+      showToast({
+        variant: "success",
+        title: "Command executed",
+        description: `Result type: ${result.resultType}`
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to execute command");
+      const message = err instanceof Error ? err.message : "Failed to execute command";
+      setError(message);
+      showToast({ variant: "error", title: "Command failed", description: message });
     } finally {
       setExecuting(false);
     }
@@ -66,16 +85,18 @@ export default function CommandBar({ onFeedReplace }: Props) {
       description="Try: “What do I need to handle today?” or “Track Netflix renewal”"
     >
       <form onSubmit={handleExecute}>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: isMobile ? "1fr" : "1fr auto auto",
+            gap: 10
+          }}
+        >
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Type a command..."
-            style={{
-              ...inputStyles.input,
-              flex: 1,
-              minWidth: 260
-            }}
+            style={inputStyles.input}
           />
 
           <button

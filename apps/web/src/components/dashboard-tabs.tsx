@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { buttonStyles, colors } from "../lib/ui";
+import { buttonStyles } from "../lib/ui";
+import { useIsMobile } from "../lib/use-is-mobile";
 
 type TabKey = "overview" | "capture" | "reminders";
 
@@ -13,6 +14,7 @@ type Props = {
 
 export default function DashboardTabs({ overview, capture, reminders }: Props) {
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
+  const isMobile = useIsMobile();
 
   const tabs: Array<{ key: TabKey; label: string }> = [
     { key: "overview", label: "Overview" },
@@ -24,9 +26,9 @@ export default function DashboardTabs({ overview, capture, reminders }: Props) {
     <div>
       <div
         style={{
-          display: "flex",
+          display: "grid",
+          gridTemplateColumns: isMobile ? "1fr" : "repeat(3, minmax(0, 180px))",
           gap: 10,
-          flexWrap: "wrap",
           marginBottom: 20
         }}
       >
@@ -39,7 +41,7 @@ export default function DashboardTabs({ overview, capture, reminders }: Props) {
               onClick={() => setActiveTab(tab.key)}
               style={{
                 ...(active ? buttonStyles.primary : buttonStyles.secondary),
-                minWidth: 120
+                width: "100%"
               }}
             >
               {tab.label}
@@ -58,16 +60,6 @@ export default function DashboardTabs({ overview, capture, reminders }: Props) {
 
       <div style={{ display: activeTab === "reminders" ? "block" : "none" }}>
         {reminders}
-      </div>
-
-      <div
-        style={{
-          marginTop: 18,
-          fontSize: 12,
-          color: colors.textMuted
-        }}
-      >
-        Active tab: {tabs.find((t) => t.key === activeTab)?.label}
       </div>
     </div>
   );

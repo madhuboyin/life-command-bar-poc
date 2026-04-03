@@ -5,6 +5,7 @@ import { importEmailForward, uploadFile } from "../lib/api";
 import { buttonStyles, cardStyles, inputStyles } from "../lib/ui";
 import SectionCard from "./ui/section-card";
 import StatusMessage from "./ui/status-message";
+import { useToast } from "./ui/toast-provider";
 
 type Props = {
   onCompleted: () => Promise<void>;
@@ -16,6 +17,7 @@ export default function UploadImportPanel({ onCompleted }: Props) {
   const [importLoading, setImportLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   const [emailForm, setEmailForm] = useState({
     subject: "",
@@ -34,11 +36,18 @@ export default function UploadImportPanel({ onCompleted }: Props) {
 
       await uploadFile(file);
       setSuccess("File uploaded successfully");
+      showToast({
+        variant: "success",
+        title: "Upload complete",
+        description: file.name
+      });
       setFile(null);
 
       await onCompleted();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed");
+      const message = err instanceof Error ? err.message : "Upload failed";
+      setError(message);
+      showToast({ variant: "error", title: "Upload failed", description: message });
     } finally {
       setUploadLoading(false);
     }
@@ -54,6 +63,11 @@ export default function UploadImportPanel({ onCompleted }: Props) {
 
       await importEmailForward(emailForm);
       setSuccess("Email import created a draft obligation");
+      showToast({
+        variant: "success",
+        title: "Email imported",
+        description: emailForm.subject
+      });
 
       setEmailForm({
         subject: "",
@@ -63,7 +77,9 @@ export default function UploadImportPanel({ onCompleted }: Props) {
 
       await onCompleted();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Import failed");
+      const message = err instanceof Error ? err.message : "Import failed";
+      setError(message);
+      showToast({ variant: "error", title: "Import failed", description: message });
     } finally {
       setImportLoading(false);
     }

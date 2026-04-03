@@ -8,12 +8,14 @@ import SectionCard from "./ui/section-card";
 import StatusMessage from "./ui/status-message";
 import LoadingCard from "./ui/loading-card";
 import EmptyState from "./ui/empty-state";
+import { useToast } from "./ui/toast-provider";
 
 export default function RemindersPanel() {
   const [items, setItems] = useState<Reminder[]>([]);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   const [form, setForm] = useState({
     title: "",
@@ -27,7 +29,8 @@ export default function RemindersPanel() {
       const data = await getReminders();
       setItems(data.items ?? []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load reminders");
+      const message = err instanceof Error ? err.message : "Could not load reminders";
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -49,6 +52,12 @@ export default function RemindersPanel() {
         scheduledFor: new Date(form.scheduledFor).toISOString()
       });
 
+      showToast({
+        variant: "success",
+        title: "Reminder created",
+        description: form.title
+      });
+
       setForm({
         title: "",
         scheduledFor: ""
@@ -56,7 +65,9 @@ export default function RemindersPanel() {
 
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create reminder");
+      const message = err instanceof Error ? err.message : "Could not create reminder";
+      setError(message);
+      showToast({ variant: "error", title: "Reminder failed", description: message });
     } finally {
       setCreating(false);
     }

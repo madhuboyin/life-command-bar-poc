@@ -3,8 +3,10 @@
 import { FormEvent, useState } from "react";
 import { createObligation } from "../lib/api";
 import { buttonStyles, inputStyles } from "../lib/ui";
+import { useIsMobile } from "../lib/use-is-mobile";
 import SectionCard from "./ui/section-card";
 import StatusMessage from "./ui/status-message";
+import { useToast } from "./ui/toast-provider";
 
 type Props = {
   onCreated: () => Promise<void>;
@@ -24,6 +26,8 @@ export default function AddObligationForm({ onCreated }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const isMobile = useIsMobile();
+  const { showToast } = useToast();
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -46,6 +50,12 @@ export default function AddObligationForm({ onCreated }: Props) {
       });
 
       setSuccess("Obligation created");
+      showToast({
+        variant: "success",
+        title: "Obligation created",
+        description: form.title
+      });
+
       setForm({
         type: "BILL",
         title: "",
@@ -58,7 +68,9 @@ export default function AddObligationForm({ onCreated }: Props) {
 
       await onCreated();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create obligation");
+      const message = err instanceof Error ? err.message : "Failed to create obligation";
+      setError(message);
+      showToast({ variant: "error", title: "Create failed", description: message });
     } finally {
       setLoading(false);
     }
@@ -71,7 +83,7 @@ export default function AddObligationForm({ onCreated }: Props) {
     >
       <form onSubmit={handleSubmit}>
         <div style={{ display: "grid", gap: 12 }}>
-          <div style={grid2}>
+          <div style={isMobile ? grid1 : grid2}>
             <select
               value={form.type}
               onChange={(e) => setForm((prev) => ({ ...prev, type: e.target.value }))}
@@ -92,7 +104,7 @@ export default function AddObligationForm({ onCreated }: Props) {
             />
           </div>
 
-          <div style={grid2}>
+          <div style={isMobile ? grid1 : grid2}>
             <input
               value={form.vendor}
               onChange={(e) => setForm((prev) => ({ ...prev, vendor: e.target.value }))}
@@ -110,7 +122,7 @@ export default function AddObligationForm({ onCreated }: Props) {
             />
           </div>
 
-          <div style={grid3}>
+          <div style={isMobile ? grid1 : grid3}>
             <input
               type="datetime-local"
               value={form.dueDate}
@@ -156,6 +168,12 @@ export default function AddObligationForm({ onCreated }: Props) {
     </SectionCard>
   );
 }
+
+const grid1: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr",
+  gap: 12
+};
 
 const grid2: React.CSSProperties = {
   display: "grid",

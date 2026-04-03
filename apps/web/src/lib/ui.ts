@@ -24,7 +24,8 @@ export const colors = {
   quickWinBg: "#fef3c7",
   quickWinText: "#92400e",
   neutralBadgeBg: "#e5e7eb",
-  neutralBadgeText: "#374151"
+  neutralBadgeText: "#374151",
+  toastShadow: "0 10px 30px rgba(0,0,0,0.16)"
 };
 
 export const radius = {
@@ -44,15 +45,29 @@ export const shadow = {
 export const spacing = {
   pageWidth: 980,
   pagePadding: 24,
+  pagePaddingMobile: 16,
   sectionGap: 24,
   cardPadding: 20
+};
+
+export const breakpoints = {
+  sm: 640,
+  md: 768,
+  lg: 1024
 };
 
 export const text = {
   pageTitle: {
     margin: "0 0 8px 0",
     fontSize: 32,
-    fontWeight: 700
+    fontWeight: 700,
+    lineHeight: 1.15
+  } satisfies React.CSSProperties,
+  pageTitleMobile: {
+    margin: "0 0 8px 0",
+    fontSize: 26,
+    fontWeight: 700,
+    lineHeight: 1.2
   } satisfies React.CSSProperties,
   sectionTitle: {
     margin: 0,
@@ -77,6 +92,11 @@ export const pageStyles = {
     maxWidth: spacing.pageWidth,
     margin: "40px auto",
     padding: spacing.pagePadding
+  } satisfies React.CSSProperties,
+  shellMobile: {
+    maxWidth: spacing.pageWidth,
+    margin: "24px auto",
+    padding: spacing.pagePaddingMobile
   } satisfies React.CSSProperties,
   header: {
     marginBottom: 24
@@ -180,6 +200,50 @@ export const feedbackStyles = {
     borderRadius: radius.sm,
     background: colors.successBg,
     color: colors.successText
+  } satisfies React.CSSProperties
+};
+
+export const toastStyles = {
+  viewport: {
+    position: "fixed",
+    top: 16,
+    right: 16,
+    zIndex: 100,
+    display: "grid",
+    gap: 10,
+    maxWidth: 360
+  } satisfies React.CSSProperties,
+  viewportMobile: {
+    position: "fixed",
+    left: 16,
+    right: 16,
+    bottom: 16,
+    top: "auto",
+    zIndex: 100,
+    display: "grid",
+    gap: 10
+  } satisfies React.CSSProperties,
+  base: {
+    borderRadius: radius.lg,
+    padding: "12px 14px",
+    boxShadow: colors.toastShadow,
+    border: `1px solid ${colors.border}`,
+    background: colors.surface
+  } satisfies React.CSSProperties,
+  success: {
+    background: colors.successBg,
+    color: colors.successText,
+    border: "1px solid #bbf7d0"
+  } satisfies React.CSSProperties,
+  error: {
+    background: colors.errorBg,
+    color: colors.errorText,
+    border: "1px solid #fecaca"
+  } satisfies React.CSSProperties,
+  info: {
+    background: colors.surface,
+    color: colors.text,
+    border: `1px solid ${colors.border}`
   } satisfies React.CSSProperties
 };
 

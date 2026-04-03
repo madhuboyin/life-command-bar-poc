@@ -2,6 +2,7 @@
 
 import type { ResolutionResponse } from "../lib/types";
 import { buttonStyles, cardStyles, colors, radius, shadow, text } from "../lib/ui";
+import { useIsMobile } from "../lib/use-is-mobile";
 
 type Props = {
   open: boolean;
@@ -10,15 +11,31 @@ type Props = {
 };
 
 export default function ResolutionModal({ open, onClose, resolution }: Props) {
+  const isMobile = useIsMobile();
+
   if (!open || !resolution) return null;
 
   return (
     <div style={overlayStyle} onClick={onClose}>
       <div
-        style={modalStyle}
+        style={{
+          ...modalStyle,
+          maxWidth: isMobile ? "100%" : 760,
+          maxHeight: isMobile ? "92vh" : "85vh",
+          padding: isMobile ? 16 : 20
+        }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={headerStyle}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: isMobile ? "stretch" : "flex-start",
+            flexDirection: isMobile ? "column" : "row",
+            gap: 12,
+            marginBottom: 20
+          }}
+        >
           <div>
             <h2 style={{ margin: 0 }}>Resolution Guidance</h2>
             <div style={{ fontSize: 13, color: colors.textMuted, marginTop: 4 }}>
@@ -44,7 +61,13 @@ export default function ResolutionModal({ open, onClose, resolution }: Props) {
 
           <section style={cardStyles.bordered}>
             <div style={text.label}>Decision options</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(160px, 1fr))",
+                gap: 10
+              }}
+            >
               {resolution.recommendation.decisionOptions.map((option) => (
                 <div key={option.key} style={chipStyle}>
                   <strong>{option.label}</strong>
@@ -71,7 +94,13 @@ export default function ResolutionModal({ open, onClose, resolution }: Props) {
 
           <section style={cardStyles.bordered}>
             <div style={text.label}>Primary action</div>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(160px, max-content))",
+                gap: 10
+              }}
+            >
               <button style={buttonStyles.primary}>
                 {resolution.recommendation.primaryAction.label}
               </button>
@@ -96,27 +125,16 @@ const overlayStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  padding: 24,
+  padding: 16,
   zIndex: 50
 };
 
 const modalStyle: React.CSSProperties = {
   width: "100%",
-  maxWidth: 760,
-  maxHeight: "85vh",
-  overflowY: "auto",
   background: colors.surface,
   borderRadius: radius.xl,
-  padding: 20,
-  boxShadow: shadow.modal
-};
-
-const headerStyle: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "flex-start",
-  gap: 16,
-  marginBottom: 20
+  boxShadow: shadow.modal,
+  overflowY: "auto"
 };
 
 const chipStyle: React.CSSProperties = {

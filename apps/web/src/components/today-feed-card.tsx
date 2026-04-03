@@ -17,8 +17,10 @@ import {
   formatDateTime,
   getHookBadgeStyle
 } from "../lib/ui";
+import { useIsMobile } from "../lib/use-is-mobile";
 import ResolutionModal from "./resolution-modal";
 import StatusMessage from "./ui/status-message";
+import { useToast } from "./ui/toast-provider";
 
 type Props = {
   item: TodayFeedItem;
@@ -30,15 +32,28 @@ export default function TodayFeedCard({ item, onRefresh }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [resolution, setResolution] = useState<ResolutionResponse | null>(null);
   const [showResolution, setShowResolution] = useState(false);
+  const { showToast } = useToast();
+  const isMobile = useIsMobile();
 
-  async function runAction(action: () => Promise<void>, loadingKey: string) {
+  async function runAction(
+    action: () => Promise<void>,
+    loadingKey: string,
+    successTitle: string
+  ) {
     try {
       setLoading(loadingKey);
       setError(null);
       await action();
       await onRefresh();
+      showToast({
+        variant: "success",
+        title: successTitle,
+        description: item.obligation.title
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      const message = err instanceof Error ? err.message : "Something went wrong";
+      setError(message);
+      showToast({ variant: "error", title: "Action failed", description: message });
     } finally {
       setLoading(null);
     }
@@ -53,7 +68,7 @@ export default function TodayFeedCard({ item, onRefresh }: Props) {
         type: "COMPLETED",
         note: "Marked done from Today Feed"
       });
-    }, "done");
+    }, "done", "Marked done");
   }
 
   async function handleDismiss() {
@@ -65,7 +80,7 @@ export default function TodayFeedCard({ item, onRefresh }: Props) {
         type: "DONT_SHOW_AGAIN",
         note: "Dismissed from Today Feed"
       });
-    }, "dismiss");
+    }, "dismiss", "Dismissed");
   }
 
   async function handlePostpone() {
@@ -79,7 +94,7 @@ export default function TodayFeedCard({ item, onRefresh }: Props) {
         type: "POSTPONED",
         note: "Postponed 1 day from Today Feed"
       });
-    }, "postpone");
+    }, "postpone", "Postponed");
   }
 
   async function handleShowResolution() {
@@ -98,7 +113,9 @@ export default function TodayFeedCard({ item, onRefresh }: Props) {
         note: "Opened resolution guidance"
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load resolution");
+      const message = err instanceof Error ? err.message : "Could not load resolution";
+      setError(message);
+      showToast({ variant: "error", title: "Resolution failed", description: message });
     } finally {
       setLoading(null);
     }
@@ -111,8 +128,9 @@ export default function TodayFeedCard({ item, onRefresh }: Props) {
           style={{
             display: "flex",
             justifyContent: "space-between",
-            alignItems: "flex-start",
-            gap: 16,
+            alignItems: isMobile ? "stretch" : "flex-start",
+            flexDirection: isMobile ? "column" : "row",
+            gap: 12,
             marginBottom: 12
           }}
         >
@@ -123,7 +141,9 @@ export default function TodayFeedCard({ item, onRefresh }: Props) {
             </div>
           </div>
 
-          <span style={getHookBadgeStyle(item.hookType)}>{item.hookType}</span>
+          <span style={{ ...getHookBadgeStyle(item.hookType), alignSelf: isMobile ? "flex-start" : "auto" }}>
+            {item.hookType}
+          </span>
         </div>
 
         <div style={{ display: "grid", gap: 8, marginBottom: 14 }}>
@@ -138,7 +158,14 @@ export default function TodayFeedCard({ item, onRefresh }: Props) {
           </div>
         </div>
 
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(140px, max-content))",
+            gap: 10,
+            marginBottom: 10
+          }}
+        >
           <button
             onClick={handleShowResolution}
             disabled={loading !== null}
