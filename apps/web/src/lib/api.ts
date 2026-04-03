@@ -60,6 +60,10 @@ function isAbsoluteHttpUrl(value: string) {
   return /^https?:\/\//i.test(value);
 }
 
+function isLocalhostName(hostname: string) {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+}
+
 function stripTrailingSlash(value: string) {
   return value.replace(/\/+$/, "");
 }
@@ -91,6 +95,22 @@ function resolveApiBaseUrl() {
   const rawBaseUrl = PUBLIC_API_BASE_URL || fallbackBaseUrl;
 
   if (isAbsoluteHttpUrl(rawBaseUrl)) {
+    // Safety guard: if a stale production client bundle still points to localhost,
+    // use same-origin /api instead of trying to call the browser's local machine.
+    if (!isServer) {
+      try {
+        const configuredUrl = new URL(rawBaseUrl);
+        if (
+          isLocalhostName(configuredUrl.hostname) &&
+          !isLocalhostName(window.location.hostname)
+        ) {
+          return "/api";
+        }
+      } catch {
+        // Fall through to regular handling.
+      }
+    }
+
     return stripTrailingSlash(rawBaseUrl);
   }
 
