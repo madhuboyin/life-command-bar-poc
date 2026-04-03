@@ -22,10 +22,7 @@ export class ObligationRepository {
     const [items, total] = await Promise.all([
       prisma.obligation.findMany({
         where,
-        orderBy: [
-          { dueDate: "asc" },
-          { createdAt: "desc" }
-        ],
+        orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
         skip: offset,
         take: limit
       }),
@@ -33,6 +30,19 @@ export class ObligationRepository {
     ]);
 
     return { items, total, limit, offset };
+  }
+
+  async findActiveForFeed(userId: string) {
+    return prisma.obligation.findMany({
+      where: {
+        userId,
+        status: {
+          in: [ObligationStatus.ACTIVE, ObligationStatus.POSTPONED]
+        }
+      },
+      orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
+      take: 100
+    });
   }
 
   async findById(id: string, userId: string) {
@@ -78,5 +88,94 @@ export class ObligationRepository {
         lastShownAt: new Date()
       }
     });
+  }
+
+  async markDone(id: string, userId: string, note?: string) {
+    const obligation = await prisma.obligation.updateMany({
+      where: {
+        id,
+        userId
+      },
+      data: {
+        status: ObligationStatus.RESOLVED,
+        lastActedAt: new Date()
+      }
+    });
+
+    if (obligation.count === 0) return null;
+
+    if (note) {
+      await prisma.auditEvent.create({
+        data: {
+          userId,
+          obligationId: id,
+          eventType: "obligation_marked_done",
+          metadata: { note }
+        }
+      });
+    }
+
+    return this.findById(id, userId);
+  }
+
+  async dismiss(id: string, userId: string, reason?: string) {
+    const obligation = await prisma.obligation.updateMany({
+      where: {
+        id,
+        userId
+      },
+      data: {
+        status: ObligationStatus.IGNORED,
+        lastActedAt: new Date()
+      }
+    });
+
+    if (obligation.count === 0) return null;
+
+    await prisma.auditEvent.create({
+      data: {
+        userId,
+        obligationId: id,
+        eventType: "obligation_dismissed",
+        metadata: { reason: reason ?? null }
+      }
+    });
+
+    return this.findById(id, userId);
+  }
+
+  async postpone(id: string, userId: string, until?: string, reason?: string) {
+    const data: Prisma.ObligationUpdateManyMutationInput = {
+      status: ObligationStatus.POSTPONED,
+      lastActedAt: new Date()
+    };
+
+    if (until) {
+      data.dueDate = new Date(until);
+    }
+
+    const result = await prisma.obligation.updateMany({
+      where: {
+        id,
+        userId
+      },
+      data
+    });
+
+    if (result.count === 0) return null;
+
+    await prisma.auditEvent.create({
+      data: {
+        userId,
+        obligationId: id,
+        eventType: "obligation_postponed",
+        metadata: {
+          until: until ?? null,
+          reason: reason ?? null
+        }
+      }
+    });
+
+    return this.findById(id, userId);
   }
 }

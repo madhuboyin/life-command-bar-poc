@@ -20,4 +20,31 @@ export class FeedbackRepository {
 
     return byObligationId;
   }
+
+  async create(input: {
+    userId: string;
+    obligationId?: string;
+    feedItemId?: string;
+    type:
+      | "ACCEPTED"
+      | "IGNORED"
+      | "MODIFIED"
+      | "COMPLETED"
+      | "POSTPONED"
+      | "REJECTED"
+      | "NOT_RELEVANT"
+      | "WRONG_INFO"
+      | "DONT_SHOW_AGAIN";
+    note?: string;
+  }) {
+    return prisma.feedbackEvent.create({
+      data: {
+        userId: input.userId,
+        obligationId: input.obligationId,
+        feedItemId: input.feedItemId,
+        type: input.type,
+        note: input.note
+      }
+    });
+  }
 }

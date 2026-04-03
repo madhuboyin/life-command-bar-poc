@@ -9,7 +9,7 @@ import { FeedbackRepository } from "../repositories/feedback.repository";
 import { mapObligation } from "../utils/obligation.mapper";
 
 type FeedCandidate = {
-  obligation: Awaited<ReturnType<ObligationRepository["findMany"]>>["items"][number];
+  obligation: Awaited<ReturnType<ObligationRepository["findActiveForFeed"]>>[number];
   candidateScore: number;
   hookType: "urgent" | "money" | "quick_win" | "none";
 };
@@ -19,13 +19,7 @@ export class TodayFeedService {
   private readonly feedbackRepository = new FeedbackRepository();
 
   async getTodayFeed(userId: string) {
-    const { items } = await this.obligationRepository.findMany({
-      userId,
-      status: ObligationStatus.ACTIVE,
-      limit: 100,
-      offset: 0
-    });
-
+    const items = await this.obligationRepository.findActiveForFeed(userId);
     const feedbackMap = await this.feedbackRepository.getRecentFeedbackMap(userId);
 
     const eligible = items.filter((item) => {
@@ -59,13 +53,17 @@ export class TodayFeedService {
       const moneyHook =
         obligation.amount && Number(obligation.amount) > 0 ? 12 : 0;
 
+      const postponedPenalty =
+        obligation.status === ObligationStatus.POSTPONED ? 5 : 0;
+
       const score =
         urgency * 0.3 +
         importance * 0.25 +
         confidence * 0.15 +
         quickWin * 0.15 +
         moneyHook * 0.15 -
-        effortPenalty * 0.03;
+        effortPenalty * 0.03 -
+        postponedPenalty;
 
       let hookType: FeedCandidate["hookType"] = "none";
       if (urgency >= 85) hookType = "urgent";
@@ -86,7 +84,10 @@ export class TodayFeedService {
     const hasHook = selected.some((item) => item.hookType !== "none");
     if (!hasHook) {
       const hookCandidate = candidates.find((item) => item.hookType !== "none");
-      if (hookCandidate && !selected.find((s) => s.obligation.id === hookCandidate.obligation.id)) {
+      if (
+        hookCandidate &&
+        !selected.find((s) => s.obligation.id === hookCandidate.obligation.id)
+      ) {
         selected = [hookCandidate, ...selected.slice(0, 4)];
       }
     }
@@ -138,9 +139,21 @@ export class TodayFeedService {
       case ObligationType.RENEWAL:
         return buildRenewalFlow(mapped as never);
       case ObligationType.BILL:
+        return buildBillFlow(mapped as never);
       case ObligationType.COMMITMENT:
       default:
-        return buildBillFlow(mapped as never);
+        return {
+          flowKey: "commitment.default",
+          recommendation: `Handle ${mapped.title} now if it only takes a few minutes, or postpone it intentionally.`,
+          whyItMatters: "This is still unresolved and continuing to take up mental space.",
+          steps: [
+            "Review what is actually required.",
+            "Do it now if it is quick.",
+            "Otherwise postpone it intentionally to a specific time."
+          ],
+          primaryAction: "Do this now",
+          secondaryActions: ["Postpone 1 day", "Dismiss"]
+        };
     }
   }
 }

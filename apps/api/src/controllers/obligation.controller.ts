@@ -19,7 +19,7 @@ export async function listObligations(req: Request, res: Response) {
 
 export async function getObligationById(req: Request, res: Response) {
   try {
-    const data = await service.getById(DEFAULT_USER_ID, req.params.id);
+    const data = await service.getById(DEFAULT_USER_ID, req.params.id as string);
 
     if (!data) {
       return fail(res, "NOT_FOUND", "Obligation not found", 404);
