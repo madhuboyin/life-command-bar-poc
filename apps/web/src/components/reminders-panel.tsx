@@ -6,6 +6,8 @@ import type { Reminder } from "../lib/types";
 import { buttonStyles, cardStyles, colors, inputStyles } from "../lib/ui";
 import SectionCard from "./ui/section-card";
 import StatusMessage from "./ui/status-message";
+import LoadingCard from "./ui/loading-card";
+import EmptyState from "./ui/empty-state";
 
 export default function RemindersPanel() {
   const [items, setItems] = useState<Reminder[]>([]);
@@ -91,9 +93,15 @@ export default function RemindersPanel() {
 
       <div style={{ display: "grid", gap: 10 }}>
         {loading ? (
-          <div style={{ color: colors.textMuted }}>Loading reminders...</div>
+          <>
+            <LoadingCard title="Loading reminders..." lines={2} />
+            <LoadingCard title="Loading reminders..." lines={2} />
+          </>
         ) : items.length === 0 ? (
-          <div style={{ color: colors.textMuted }}>No reminders yet.</div>
+          <EmptyState
+            title="No reminders yet"
+            description="Create a reminder to keep obligations from slipping."
+          />
         ) : (
           items.map((item) => (
             <article key={item.id} style={cardStyles.bordered}>

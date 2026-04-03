@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { getTodayFeed } from "../lib/api";
 import type { TodayFeedResponse } from "../lib/types";
-import { buttonStyles, colors } from "../lib/ui";
+import { buttonStyles } from "../lib/ui";
 import TodayFeedCard from "./today-feed-card";
 import SectionCard from "./ui/section-card";
 import StatusMessage from "./ui/status-message";
+import LoadingCard from "./ui/loading-card";
+import EmptyState from "./ui/empty-state";
 
 type Props = {
   initialData: TodayFeedResponse;
@@ -63,17 +65,17 @@ export default function TodayFeedClient({ initialData, externalItems }: Props) {
 
       {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
 
-      {data.items.length === 0 ? (
-        <div
-          style={{
-            border: "1px dashed #d1d5db",
-            borderRadius: 14,
-            padding: 24,
-            color: colors.textMuted
-          }}
-        >
-          No items in Today Feed yet.
+      {loading ? (
+        <div style={{ display: "grid", gap: 16 }}>
+          <LoadingCard title="Refreshing Today Feed..." lines={3} />
+          <LoadingCard title="Refreshing Today Feed..." lines={3} />
+          <LoadingCard title="Refreshing Today Feed..." lines={3} />
         </div>
+      ) : data.items.length === 0 ? (
+        <EmptyState
+          title="No items in Today Feed"
+          description="Add or import obligations to start building your daily feed."
+        />
       ) : (
         <div style={{ display: "grid", gap: 16 }}>
           {data.items.map((item) => (
