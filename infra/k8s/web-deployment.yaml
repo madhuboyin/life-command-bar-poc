@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lcb-web
+  namespace: life-command
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lcb-web
+  template:
+    metadata:
+      labels:
+        app: lcb-web
+    spec:
+      containers:
+        - name: web
+          image: lcb-web:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+          env:
+            - name: NEXT_PUBLIC_API_BASE_URL
+              value: "http://lcb-api:4000/api"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lcb-web
+  namespace: life-command
+spec:
+  selector:
+    app: lcb-web
+  ports:
+    - port: 3000
+      targetPort: 3000

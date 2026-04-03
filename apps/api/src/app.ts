@@ -10,9 +10,9 @@ export function createApp() {
   app.use(cors());
   app.use(express.json());
 
-  app.use("/health", healthRouter);
-  app.use("/obligations", obligationRouter);
-  app.use("/today-feed", todayFeedRouter);
+  app.use("/api/health", healthRouter);
+  app.use("/api/obligations", obligationRouter);
+  app.use("/api/today-feed", todayFeedRouter);
 
   return app;
 }

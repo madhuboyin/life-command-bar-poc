@@ -1,8 +1,12 @@
 import { Router } from "express";
-import { sampleObligations } from "../services/sample-data.service";
+import {
+  createObligation,
+  getObligationById,
+  listObligations
+} from "../controllers/obligation.controller";
 
 export const obligationRouter = Router();
 
-obligationRouter.get("/", (_req, res) => {
-  res.json({ items: sampleObligations });
-});
+obligationRouter.get("/", listObligations);
+obligationRouter.get("/:id", getObligationById);
+obligationRouter.post("/", createObligation);
