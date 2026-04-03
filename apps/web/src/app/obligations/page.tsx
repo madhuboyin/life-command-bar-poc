@@ -8,13 +8,13 @@ import EmptyState from "../../components/ui/empty-state";
 import StatusMessage from "../../components/ui/status-message";
 
 type Props = {
-  searchParams: Promise<{
+  searchParams?: Promise<{
     view?: string;
-  }>;
+  } | undefined>;
 };
 
 export default async function ObligationsPage({ searchParams }: Props) {
-  const params = await searchParams;
+  const params = (await searchParams) ?? {};
   const rawView = params.view;
   const view: ObligationView | null = parseObligationView(rawView);
   const invalidView = typeof rawView === "string" && rawView.length > 0 && !view;

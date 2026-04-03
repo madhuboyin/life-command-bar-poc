@@ -3,11 +3,16 @@ import { getObligationById } from "../../../lib/api";
 import ObligationDetailClient from "../../../components/obligation-detail-client";
 
 type Props = {
-  params: Promise<{ id: string }>;
+  params?: Promise<{ id?: string } | undefined>;
 };
 
 export default async function ObligationDetailPage({ params }: Props) {
-  const { id } = await params;
+  const resolvedParams = (await params) ?? {};
+  const id = resolvedParams.id;
+
+  if (!id) {
+    notFound();
+  }
 
   try {
     const data = await getObligationById(id);
