@@ -26,20 +26,24 @@ export default async function ObligationsPage() {
 
       <div style={{ display: "grid", gap: 14 }}>
         {items.map((item) => (
-          <article
+          <Link
             key={item.id}
+            href={`/obligations/${item.id}`}
             style={{
               background: "#fff",
               border: "1px solid #e5e7eb",
               borderRadius: 14,
-              padding: 16
+              padding: 16,
+              textDecoration: "none",
+              color: "#111827",
+              display: "block"
             }}
           >
             <h3 style={{ margin: "0 0 8px 0" }}>{item.title}</h3>
             <div style={{ color: "#6b7280", fontSize: 14 }}>
               {item.type} · {item.status} · Due: {formatDueDate(item.dueDate)}
             </div>
-          </article>
+          </Link>
         ))}
       </div>
     </main>

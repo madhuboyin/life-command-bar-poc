@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import {
   createFeedback,
@@ -9,6 +10,7 @@ import {
   postponeObligation
 } from "../lib/api";
 import type { ResolutionResponse, TodayFeedItem } from "../lib/types";
+import ResolutionModal from "./resolution-modal";
 
 type Props = {
   item: TodayFeedItem;
@@ -52,7 +54,7 @@ export default function TodayFeedCard({ item, onRefresh }: Props) {
   const [resolution, setResolution] = useState<ResolutionResponse | null>(null);
   const [showResolution, setShowResolution] = useState(false);
 
-  async function runAction(action: () => Promise<unknown>, loadingKey: string) {
+  async function runAction(action: () => Promise<void>, loadingKey: string) {
     try {
       setLoading(loadingKey);
       setError(null);
@@ -126,139 +128,113 @@ export default function TodayFeedCard({ item, onRefresh }: Props) {
   }
 
   return (
-    <article
-      style={{
-        border: "1px solid #e5e7eb",
-        borderRadius: 16,
-        padding: 18,
-        background: "#fff",
-        boxShadow: "0 1px 2px rgba(0,0,0,0.05)"
-      }}
-    >
-      <div
+    <>
+      <article
         style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-          gap: 16,
-          marginBottom: 12
+          border: "1px solid #e5e7eb",
+          borderRadius: 16,
+          padding: 18,
+          background: "#fff",
+          boxShadow: "0 1px 2px rgba(0,0,0,0.05)"
         }}
       >
-        <div>
-          <h3 style={{ margin: "0 0 6px 0", fontSize: 18 }}>{item.obligation.title}</h3>
-          <div style={{ fontSize: 13, color: "#6b7280" }}>
-            {item.obligation.type} · Due: {formatDueDate(item.obligation.dueDate)}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            gap: 16,
+            marginBottom: 12
+          }}
+        >
+          <div>
+            <h3 style={{ margin: "0 0 6px 0", fontSize: 18 }}>{item.obligation.title}</h3>
+            <div style={{ fontSize: 13, color: "#6b7280" }}>
+              {item.obligation.type} · Due: {formatDueDate(item.obligation.dueDate)}
+            </div>
+          </div>
+
+          <span style={badgeStyle(item.hookType)}>{item.hookType}</span>
+        </div>
+
+        <div style={{ display: "grid", gap: 8, marginBottom: 14 }}>
+          <div>
+            <strong>Why:</strong> {item.whyItMatters}
+          </div>
+          <div>
+            <strong>What:</strong> {item.whatToDo}
+          </div>
+          <div>
+            <strong>How hard:</strong> {item.howHardIsIt}
           </div>
         </div>
 
-        <span style={badgeStyle(item.hookType)}>{item.hookType}</span>
-      </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
+          <button
+            onClick={handleShowResolution}
+            disabled={loading !== null}
+            style={primaryButton}
+          >
+            {loading === "resolution" ? "Loading..." : item.primaryAction.label}
+          </button>
 
-      <div style={{ display: "grid", gap: 8, marginBottom: 14 }}>
-        <div>
-          <strong>Why:</strong> {item.whyItMatters}
-        </div>
-        <div>
-          <strong>What:</strong> {item.whatToDo}
-        </div>
-        <div>
-          <strong>How hard:</strong> {item.howHardIsIt}
-        </div>
-      </div>
-
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
-        <button
-          onClick={handleShowResolution}
-          disabled={loading !== null}
-          style={primaryButton}
-        >
-          {loading === "resolution" ? "Loading..." : item.primaryAction.label}
-        </button>
-
-        <button
-          onClick={handleMarkDone}
-          disabled={loading !== null}
-          style={secondaryButton}
-        >
-          {loading === "done" ? "Saving..." : "Mark done"}
-        </button>
-
-        <button
-          onClick={handlePostpone}
-          disabled={loading !== null}
-          style={secondaryButton}
-        >
-          {loading === "postpone" ? "Saving..." : "Postpone 1 day"}
-        </button>
-
-        <button
-          onClick={handleDismiss}
-          disabled={loading !== null}
-          style={dangerButton}
-        >
-          {loading === "dismiss" ? "Saving..." : "Dismiss"}
-        </button>
-      </div>
-
-      {item.secondaryActions.length > 0 && (
-        <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 10 }}>
-          Secondary actions: {item.secondaryActions.map((a) => a.label).join(", ")}
-        </div>
-      )}
-
-      {error && (
-        <div
-          style={{
-            marginTop: 12,
-            padding: 10,
-            borderRadius: 10,
-            background: "#fef2f2",
-            color: "#991b1b",
-            fontSize: 14
-          }}
-        >
-          {error}
-        </div>
-      )}
-
-      {showResolution && resolution && (
-        <div
-          style={{
-            marginTop: 14,
-            padding: 14,
-            borderRadius: 12,
-            background: "#f9fafb",
-            border: "1px solid #e5e7eb"
-          }}
-        >
-          <h4 style={{ marginTop: 0, marginBottom: 8 }}>Resolution Guidance</h4>
-          <p style={{ margin: "0 0 8px 0" }}>
-            <strong>Why it matters:</strong> {resolution.recommendation.whyItMatters}
-          </p>
-          <p style={{ margin: "0 0 8px 0" }}>
-            <strong>Recommendation:</strong> {resolution.recommendation.recommendation}
-          </p>
-
-          <div style={{ marginBottom: 8 }}>
-            <strong>Steps:</strong>
-            <ol style={{ margin: "8px 0 0 20px" }}>
-              {resolution.recommendation.steps.map((step, index) => (
-                <li key={index} style={{ marginBottom: 4 }}>
-                  {step}
-                </li>
-              ))}
-            </ol>
-          </div>
+          <Link href={`/obligations/${item.obligationId}`} style={linkButton}>
+            View details
+          </Link>
 
           <button
-            onClick={() => setShowResolution(false)}
+            onClick={handleMarkDone}
+            disabled={loading !== null}
             style={secondaryButton}
           >
-            Hide guidance
+            {loading === "done" ? "Saving..." : "Mark done"}
+          </button>
+
+          <button
+            onClick={handlePostpone}
+            disabled={loading !== null}
+            style={secondaryButton}
+          >
+            {loading === "postpone" ? "Saving..." : "Postpone 1 day"}
+          </button>
+
+          <button
+            onClick={handleDismiss}
+            disabled={loading !== null}
+            style={dangerButton}
+          >
+            {loading === "dismiss" ? "Saving..." : "Dismiss"}
           </button>
         </div>
-      )}
-    </article>
+
+        {item.secondaryActions.length > 0 && (
+          <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 10 }}>
+            Secondary actions: {item.secondaryActions.map((a) => a.label).join(", ")}
+          </div>
+        )}
+
+        {error && (
+          <div
+            style={{
+              marginTop: 12,
+              padding: 10,
+              borderRadius: 10,
+              background: "#fef2f2",
+              color: "#991b1b",
+              fontSize: 14
+            }}
+          >
+            {error}
+          </div>
+        )}
+      </article>
+
+      <ResolutionModal
+        open={showResolution}
+        onClose={() => setShowResolution(false)}
+        resolution={resolution}
+      />
+    </>
   );
 }
 
@@ -290,4 +266,16 @@ const dangerButton: React.CSSProperties = {
   padding: "10px 14px",
   fontWeight: 600,
   cursor: "pointer"
+};
+
+const linkButton: React.CSSProperties = {
+  border: "1px solid #d1d5db",
+  background: "#fff",
+  color: "#111827",
+  borderRadius: 10,
+  padding: "10px 14px",
+  fontWeight: 600,
+  textDecoration: "none",
+  display: "inline-flex",
+  alignItems: "center"
 };

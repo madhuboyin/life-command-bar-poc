@@ -27,6 +27,14 @@ export async function getObligations() {
   return handleResponse(res);
 }
 
+export async function getObligationById(obligationId: string) {
+  const res = await fetch(`${API_BASE_URL}/obligations/${obligationId}`, {
+    cache: "no-store"
+  });
+
+  return handleResponse(res);
+}
+
 export async function getResolution(obligationId: string) {
   const res = await fetch(`${API_BASE_URL}/obligations/${obligationId}/resolution`, {
     cache: "no-store"
