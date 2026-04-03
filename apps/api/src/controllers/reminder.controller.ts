@@ -1,37 +1,35 @@
 import { Request, Response } from "express";
-import { ZodError } from "zod";
 import { ReminderService } from "../services/reminder.service";
-import { fail, ok } from "../utils/api-response";
+import { ok } from "../utils/api-response";
+import { handleControllerError } from "../utils/handle-controller-error";
+import { getRequiredUserId } from "../utils/request-user";
 
 const service = new ReminderService();
-const DEFAULT_USER_ID = "usr_demo_001";
 
 export async function createReminder(req: Request, res: Response) {
   try {
+    const userId = getRequiredUserId(req, res);
+    if (!userId) return;
+
     const reminder = await service.create({
       ...req.body,
-      userId: DEFAULT_USER_ID
+      userId
     });
 
     return ok(res, { reminder }, 201);
   } catch (error) {
-    if (error instanceof ZodError) {
-      return fail(res, "VALIDATION_ERROR", "Input is invalid", 400, {
-        issues: error.issues
-      });
-    }
-
-    console.error(error);
-    return fail(res, "INTERNAL_ERROR", "Could not create reminder", 500);
+    return handleControllerError(res, error, "Could not create reminder");
   }
 }
 
-export async function listReminders(_req: Request, res: Response) {
+export async function listReminders(req: Request, res: Response) {
   try {
-    const data = await service.list(DEFAULT_USER_ID);
+    const userId = getRequiredUserId(req, res);
+    if (!userId) return;
+
+    const data = await service.list(userId);
     return ok(res, data);
   } catch (error) {
-    console.error(error);
-    return fail(res, "INTERNAL_ERROR", "Could not fetch reminders", 500);
+    return handleControllerError(res, error, "Could not fetch reminders");
   }
 }

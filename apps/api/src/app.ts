@@ -9,6 +9,7 @@ import { commandRouter } from "./routes/command.routes";
 import { uploadRouter } from "./routes/upload.routes";
 import { importRouter } from "./routes/import.routes";
 import { reminderRouter } from "./routes/reminder.routes";
+import { requireAuth } from "./middleware/auth.middleware";
 
 export function createApp() {
   const app = express();
@@ -17,6 +18,7 @@ export function createApp() {
   app.use(express.json());
 
   app.use("/api/health", healthRouter);
+  app.use("/api", requireAuth);
   app.use("/api/commands", commandRouter);
   app.use("/api/obligations", obligationRouter);
   app.use("/api/today-feed", todayFeedRouter);

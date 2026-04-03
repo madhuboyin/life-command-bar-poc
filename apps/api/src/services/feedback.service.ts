@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { FeedbackRepository } from "../repositories/feedback.repository";
+import { prisma } from "../clients/prisma.client";
+import { AppError } from "../utils/app-error";
 
 const feedbackSchema = z.object({
   userId: z.string().min(1),
@@ -24,6 +26,21 @@ export class FeedbackService {
 
   async create(payload: unknown) {
     const input = feedbackSchema.parse(payload);
+
+    if (input.obligationId) {
+      const obligation = await prisma.obligation.findFirst({
+        where: {
+          id: input.obligationId,
+          userId: input.userId
+        },
+        select: { id: true }
+      });
+
+      if (!obligation) {
+        throw new AppError("NOT_FOUND", "Obligation not found", 404);
+      }
+    }
+
     return this.repository.create(input);
   }
 }

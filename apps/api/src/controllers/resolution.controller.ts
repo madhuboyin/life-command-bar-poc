@@ -1,13 +1,17 @@
 import { Request, Response } from "express";
 import { ResolutionService } from "../services/resolution.service";
 import { fail, ok } from "../utils/api-response";
+import { handleControllerError } from "../utils/handle-controller-error";
+import { getRequiredUserId } from "../utils/request-user";
 
 const service = new ResolutionService();
-const DEFAULT_USER_ID = "usr_demo_001";
 
 export async function getResolution(req: Request, res: Response) {
   try {
-    const data = await service.getResolution(DEFAULT_USER_ID, req.params.id as string);
+    const userId = getRequiredUserId(req, res);
+    if (!userId) return;
+
+    const data = await service.getResolution(userId, req.params.id as string);
 
     if (!data) {
       return fail(res, "NOT_FOUND", "Obligation not found", 404);
@@ -15,7 +19,6 @@ export async function getResolution(req: Request, res: Response) {
 
     return ok(res, data);
   } catch (error) {
-    console.error(error);
-    return fail(res, "INTERNAL_ERROR", "Could not generate resolution", 500);
+    return handleControllerError(res, error, "Could not generate resolution");
   }
 }

@@ -38,45 +38,49 @@ export class ImportService {
     const type = inferType(input.subject, input.bodyText);
     const title = inferTitle(input.subject);
 
-    const importSource = await prisma.importSource.create({
-      data: {
-        userId: input.userId,
-        type: "EMAIL",
-        rawData: {
-          subject: input.subject,
-          from: input.from,
-          bodyText: input.bodyText
+    const { obligation } = await prisma.$transaction(async (tx) => {
+      const importSource = await tx.importSource.create({
+        data: {
+          userId: input.userId,
+          type: "EMAIL",
+          rawData: {
+            subject: input.subject,
+            from: input.from,
+            bodyText: input.bodyText
+          }
         }
-      }
-    });
+      });
 
-    const obligation = await prisma.obligation.create({
-      data: {
-        userId: input.userId,
-        type,
-        title,
-        description: `Imported from forwarded email: ${input.from}`,
-        source: "EMAIL",
-        status: "DRAFT",
-        confidenceScore: 0.7,
-        urgencyScore: 40,
-        importanceScore: 45,
-        effortLevel: "MEDIUM",
-        impactLevel: "MEDIUM"
-      }
-    });
-
-    await prisma.auditEvent.create({
-      data: {
-        userId: input.userId,
-        obligationId: obligation.id,
-        eventType: "email_forward_imported",
-        metadata: {
-          importSourceId: importSource.id,
-          from: input.from,
-          subject: input.subject
+      const obligation = await tx.obligation.create({
+        data: {
+          userId: input.userId,
+          type,
+          title,
+          description: `Imported from forwarded email: ${input.from}`,
+          source: "EMAIL",
+          status: "DRAFT",
+          confidenceScore: 0.7,
+          urgencyScore: 40,
+          importanceScore: 45,
+          effortLevel: "MEDIUM",
+          impactLevel: "MEDIUM"
         }
-      }
+      });
+
+      await tx.auditEvent.create({
+        data: {
+          userId: input.userId,
+          obligationId: obligation.id,
+          eventType: "email_forward_imported",
+          metadata: {
+            importSourceId: importSource.id,
+            from: input.from,
+            subject: input.subject
+          }
+        }
+      });
+
+      return { obligation };
     });
 
     return {

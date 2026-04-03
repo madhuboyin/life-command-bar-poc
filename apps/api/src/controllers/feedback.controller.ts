@@ -1,27 +1,23 @@
 import { Request, Response } from "express";
-import { ZodError } from "zod";
 import { FeedbackService } from "../services/feedback.service";
-import { fail, ok } from "../utils/api-response";
+import { ok } from "../utils/api-response";
+import { handleControllerError } from "../utils/handle-controller-error";
+import { getRequiredUserId } from "../utils/request-user";
 
 const service = new FeedbackService();
-const DEFAULT_USER_ID = "usr_demo_001";
 
 export async function createFeedback(req: Request, res: Response) {
   try {
+    const userId = getRequiredUserId(req, res);
+    if (!userId) return;
+
     const feedbackEvent = await service.create({
       ...req.body,
-      userId: DEFAULT_USER_ID
+      userId
     });
 
     return ok(res, { feedbackEvent }, 201);
   } catch (error) {
-    if (error instanceof ZodError) {
-      return fail(res, "VALIDATION_ERROR", "Input is invalid", 400, {
-        issues: error.issues
-      });
-    }
-
-    console.error(error);
-    return fail(res, "INTERNAL_ERROR", "Could not save feedback", 500);
+    return handleControllerError(res, error, "Could not save feedback");
   }
 }
