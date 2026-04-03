@@ -10,7 +10,7 @@ export async function markObligationDone(req: Request, res: Response) {
   try {
     const obligation = await service.markDone(
       DEFAULT_USER_ID,
-      req.params.id,
+      req.params.id as string,
       req.body ?? {}
     );
 
@@ -28,7 +28,7 @@ export async function dismissObligation(req: Request, res: Response) {
   try {
     const obligation = await service.dismiss(
       DEFAULT_USER_ID,
-      req.params.id,
+      req.params.id as string,
       req.body ?? {}
     );
 
@@ -46,7 +46,7 @@ export async function postponeObligation(req: Request, res: Response) {
   try {
     const obligation = await service.postpone(
       DEFAULT_USER_ID,
-      req.params.id,
+      req.params.id as string,
       req.body ?? {}
     );
 
