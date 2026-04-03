@@ -21,7 +21,9 @@ spec:
             - containerPort: 3000
           env:
             - name: NEXT_PUBLIC_API_BASE_URL
-              value: "/api"
+              value: "https://api-lcb.contracttocozy.com/api"
+            - name: API_BASE_URL
+              value: "https://api-lcb.contracttocozy.com/api"
           resources:
             requests:
               cpu: "100m"
