@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: worker
-          image: lcb-worker:latest
+          image: ghcr.io/madhuboyin/life-command-bar-poc/worker:latest
           imagePullPolicy: IfNotPresent
           resources:
             requests:

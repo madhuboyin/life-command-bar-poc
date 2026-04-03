@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: api
-          image: lcb-api:latest
+          image: ghcr.io/madhuboyin/life-command-bar-poc/api:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 4000

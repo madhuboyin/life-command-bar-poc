@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: web
-          image: lcb-web:latest
+          image: ghcr.io/madhuboyin/life-command-bar-poc/web:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000
