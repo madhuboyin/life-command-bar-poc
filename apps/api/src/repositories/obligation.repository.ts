@@ -1,8 +1,10 @@
 import { ObligationStatus, ObligationType, Prisma } from "@prisma/client";
 import { prisma } from "../clients/prisma.client";
-import { CreateObligationInput, ObligationListQuery } from "../types/obligation.types";
-
-type UpdateObligationInput = Partial<CreateObligationInput>;
+import {
+  CreateObligationInput,
+  ObligationListQuery,
+  UpdateObligationInput
+} from "../types/obligation.types";
 
 export class ObligationRepository {
   async findMany(query: ObligationListQuery & { userId: string }) {
@@ -123,7 +125,7 @@ export class ObligationRepository {
         userId,
         obligationId: id,
         eventType: "obligation_updated",
-        metadata: input
+        metadata: toAuditMetadata(input)
       }
     });
 
@@ -257,4 +259,10 @@ export class ObligationRepository {
       reminders
     };
   }
+}
+
+function toAuditMetadata(input: UpdateObligationInput): Prisma.InputJsonObject {
+  return Object.fromEntries(
+    Object.entries(input).filter(([, value]) => value !== undefined)
+  ) as Prisma.InputJsonObject;
 }

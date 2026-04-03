@@ -5,8 +5,8 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "pnpm prisma:generate && tsc -p tsconfig.json",
+    "typecheck": "pnpm prisma:generate && tsc -p tsconfig.json --noEmit",
     "lint": "echo 'no lint configured for @lcb/api'",
     "prisma": "prisma",
     "prisma:generate": "prisma generate",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { getObligationHistory } from "../lib/api";
 import type { ObligationHistory } from "../lib/types";
 import { cardStyles, colors } from "../lib/ui";
@@ -17,7 +17,7 @@ export default function ObligationHistoryPanel({ obligationId }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  async function load() {
+  const load = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -28,11 +28,11 @@ export default function ObligationHistoryPanel({ obligationId }: Props) {
     } finally {
       setLoading(false);
     }
-  }
+  }, [obligationId]);
 
   useEffect(() => {
     load();
-  }, [obligationId]);
+  }, [load]);
 
   if (loading) {
     return (

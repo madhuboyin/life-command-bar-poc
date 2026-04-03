@@ -1,109 +1,228 @@
+import type {
+  CommandExecuteResponse,
+  CommandParseResponse,
+  Obligation,
+  ObligationHistory,
+  Reminder,
+  ResolutionResponse,
+  TodayFeedResponse
+} from "./types";
+
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000/api"\;
+  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000/api";
 
-async function handleResponse(res: Response) {
-  const json = await res.json();
+const DEFAULT_USER_ID =
+  process.env.NEXT_PUBLIC_LCB_USER_ID ||
+  process.env.NEXT_PUBLIC_USER_ID ||
+  "usr_demo_001";
 
-  if (!res.ok || json.success === false) {
-    throw new Error(json?.error?.message || "Request failed");
+const DEFAULT_USER_EMAIL =
+  process.env.NEXT_PUBLIC_LCB_USER_EMAIL || process.env.NEXT_PUBLIC_USER_EMAIL || "";
+
+type AuthIdentity = {
+  userId: string;
+  email?: string;
+};
+
+type ApiEnvelope<T> = {
+  success?: boolean;
+  data?: T;
+  error?: { message?: string };
+  message?: string;
+};
+
+type ObligationsListResponse = {
+  items: Obligation[];
+  pagination: {
+    limit: number;
+    offset: number;
+    total: number;
+  };
+};
+
+type ObligationResponse = {
+  obligation: Obligation;
+};
+
+type RemindersListResponse = {
+  items: Reminder[];
+};
+
+type ReminderResponse = {
+  reminder: Reminder;
+};
+
+function getClientStoredIdentity() {
+  if (typeof window === "undefined") {
+    return {};
   }
 
-  return json.data;
+  const userId =
+    window.localStorage.getItem("lcb.userId") ??
+    window.localStorage.getItem("lcb_user_id") ??
+    "";
+
+  const email =
+    window.localStorage.getItem("lcb.userEmail") ??
+    window.localStorage.getItem("lcb_user_email") ??
+    "";
+
+  return { userId, email };
 }
 
-export async function getTodayFeed() {
-  const res = await fetch(`${API_BASE_URL}/today-feed`, {
+function resolveAuthIdentity(): AuthIdentity {
+  const clientIdentity = getClientStoredIdentity();
+  const userId = clientIdentity.userId || DEFAULT_USER_ID;
+  const email = clientIdentity.email || DEFAULT_USER_EMAIL || undefined;
+
+  return { userId, email };
+}
+
+function withAuthHeaders(init: RequestInit = {}) {
+  const headers = new Headers(init.headers);
+  const auth = resolveAuthIdentity();
+
+  headers.set("x-user-id", auth.userId);
+  if (auth.email) {
+    headers.set("x-user-email", auth.email);
+  }
+
+  return {
+    ...init,
+    headers
+  };
+}
+
+async function apiFetch(path: string, init: RequestInit = {}) {
+  return fetch(`${API_BASE_URL}${path}`, withAuthHeaders(init));
+}
+
+async function handleResponse<T>(res: Response): Promise<T> {
+  const contentType = res.headers.get("content-type") || "";
+  let payload: ApiEnvelope<T> | null = null;
+
+  if (contentType.includes("application/json")) {
+    try {
+      payload = await res.json();
+    } catch {
+      payload = null;
+    }
+  }
+
+  if (!res.ok || payload?.success === false) {
+    const errorMessage =
+      payload?.error?.message ||
+      payload?.message ||
+      `Request failed with status ${res.status}`;
+    throw new Error(errorMessage);
+  }
+
+  if (payload && "data" in payload) {
+    return payload.data as T;
+  }
+
+  return payload as T;
+}
+
+export async function getTodayFeed(): Promise<TodayFeedResponse> {
+  const res = await apiFetch("/today-feed", {
     cache: "no-store"
   });
 
-  return handleResponse(res);
+  return handleResponse<TodayFeedResponse>(res);
 }
 
-export async function getObligations() {
-  const res = await fetch(`${API_BASE_URL}/obligations`, {
+export async function getObligations(): Promise<ObligationsListResponse> {
+  const res = await apiFetch("/obligations", {
     cache: "no-store"
   });
 
-  return handleResponse(res);
+  return handleResponse<ObligationsListResponse>(res);
 }
 
-export async function getObligationById(obligationId: string) {
-  const res = await fetch(`${API_BASE_URL}/obligations/${obligationId}`, {
+export async function getObligationById(obligationId: string): Promise<ObligationResponse> {
+  const res = await apiFetch(`/obligations/${obligationId}`, {
     cache: "no-store"
   });
 
-  return handleResponse(res);
+  return handleResponse<ObligationResponse>(res);
 }
 
-export async function getObligationHistory(obligationId: string) {
-  const res = await fetch(`${API_BASE_URL}/obligations/${obligationId}/history`, {
+export async function getObligationHistory(obligationId: string): Promise<ObligationHistory> {
+  const res = await apiFetch(`/obligations/${obligationId}/history`, {
     cache: "no-store"
   });
 
-  return handleResponse(res);
+  return handleResponse<ObligationHistory>(res);
 }
 
 export async function updateObligation(
   obligationId: string,
   input: Record<string, unknown>
-) {
-  const res = await fetch(`${API_BASE_URL}/obligations/${obligationId}`, {
+): Promise<ObligationResponse> {
+  const res = await apiFetch(`/obligations/${obligationId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input)
   });
 
-  return handleResponse(res);
+  return handleResponse<ObligationResponse>(res);
 }
 
-export async function getResolution(obligationId: string) {
-  const res = await fetch(`${API_BASE_URL}/obligations/${obligationId}/resolution`, {
+export async function getResolution(obligationId: string): Promise<ResolutionResponse> {
+  const res = await apiFetch(`/obligations/${obligationId}/resolution`, {
     cache: "no-store"
   });
 
-  return handleResponse(res);
+  return handleResponse<ResolutionResponse>(res);
 }
 
-export async function getReminders() {
-  const res = await fetch(`${API_BASE_URL}/reminders`, {
+export async function getReminders(): Promise<RemindersListResponse> {
+  const res = await apiFetch("/reminders", {
     cache: "no-store"
   });
 
-  return handleResponse(res);
+  return handleResponse<RemindersListResponse>(res);
 }
 
-export async function markObligationDone(obligationId: string, note?: string) {
-  const res = await fetch(`${API_BASE_URL}/obligations/${obligationId}/mark-done`, {
+export async function markObligationDone(
+  obligationId: string,
+  note?: string
+): Promise<ObligationResponse> {
+  const res = await apiFetch(`/obligations/${obligationId}/mark-done`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ note })
   });
 
-  return handleResponse(res);
+  return handleResponse<ObligationResponse>(res);
 }
 
-export async function dismissObligation(obligationId: string, reason?: string) {
-  const res = await fetch(`${API_BASE_URL}/obligations/${obligationId}/dismiss`, {
+export async function dismissObligation(
+  obligationId: string,
+  reason?: string
+): Promise<ObligationResponse> {
+  const res = await apiFetch(`/obligations/${obligationId}/dismiss`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ reason })
   });
 
-  return handleResponse(res);
+  return handleResponse<ObligationResponse>(res);
 }
 
 export async function postponeObligation(
   obligationId: string,
   until?: string,
   reason?: string
-) {
-  const res = await fetch(`${API_BASE_URL}/obligations/${obligationId}/postpone`, {
+): Promise<ObligationResponse> {
+  const res = await apiFetch(`/obligations/${obligationId}/postpone`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ until, reason })
   });
 
-  return handleResponse(res);
+  return handleResponse<ObligationResponse>(res);
 }
 
 export async function createFeedback(input: {
@@ -120,14 +239,14 @@ export async function createFeedback(input: {
     | "WRONG_INFO"
     | "DONT_SHOW_AGAIN";
   note?: string;
-}) {
-  const res = await fetch(`${API_BASE_URL}/feedback`, {
+}): Promise<unknown> {
+  const res = await apiFetch("/feedback", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input)
   });
 
-  return handleResponse(res);
+  return handleResponse<unknown>(res);
 }
 
 export async function createObligation(input: {
@@ -146,78 +265,78 @@ export async function createObligation(input: {
   effortLevel?: "LOW" | "MEDIUM" | "HIGH";
   impactLevel?: "LOW" | "MEDIUM" | "HIGH";
   status?: "DRAFT" | "ACTIVE" | "POSTPONED" | "RESOLVED" | "IGNORED";
-}) {
-  const res = await fetch(`${API_BASE_URL}/obligations`, {
+}): Promise<ObligationResponse> {
+  const res = await apiFetch("/obligations", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input)
   });
 
-  return handleResponse(res);
+  return handleResponse<ObligationResponse>(res);
 }
 
 export async function createReminder(input: {
   obligationId?: string;
   title: string;
   scheduledFor: string;
-}) {
-  const res = await fetch(`${API_BASE_URL}/reminders`, {
+}): Promise<ReminderResponse> {
+  const res = await apiFetch("/reminders", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input)
   });
 
-  return handleResponse(res);
+  return handleResponse<ReminderResponse>(res);
 }
 
-export async function uploadFile(file: File) {
+export async function uploadFile(file: File): Promise<unknown> {
   const formData = new FormData();
   formData.append("file", file);
 
-  const res = await fetch(`${API_BASE_URL}/uploads`, {
+  const res = await apiFetch("/uploads", {
     method: "POST",
     body: formData
   });
 
-  return handleResponse(res);
+  return handleResponse<unknown>(res);
 }
 
 export async function importEmailForward(input: {
   subject: string;
   from: string;
   bodyText: string;
-}) {
-  const res = await fetch(`${API_BASE_URL}/imports/email-forward`, {
+}): Promise<unknown> {
+  const res = await apiFetch("/imports/email-forward", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input)
   });
 
-  return handleResponse(res);
+  return handleResponse<unknown>(res);
 }
 
 export async function parseCommand(input: {
   input: string;
   context?: { obligationId?: string };
-}) {
-  const res = await fetch(`${API_BASE_URL}/commands/parse`, {
+}): Promise<CommandParseResponse> {
+  const res = await apiFetch("/commands/parse", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input)
   });
 
-  return handleResponse(res);
+  return handleResponse<CommandParseResponse>(res);
 }
 
 export async function executeCommand(input: {
   input: string;
   context?: { obligationId?: string };
-}) {
-  const res = await fetch(`${API_BASE_URL}/commands/execute`, {
+}): Promise<CommandExecuteResponse> {
+  const res = await apiFetch("/commands/execute", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input)
   });
 
-  return handleResponse(res);
+  return handleResponse<CommandExecuteResponse>(res);
 }
