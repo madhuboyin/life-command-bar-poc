@@ -135,6 +135,34 @@ function resolveApiBaseUrl() {
     }
   }
 
+  if (!isServer) {
+    const browserOriginApiBase = stripTrailingSlash(`${window.location.origin}/api`);
+    const browserHostIsLocal = isLocalhostName(window.location.hostname);
+
+    // In non-local browser environments, never allow localhost API targets.
+    // This prevents stale production bundles/env from routing refresh calls to localhost.
+    if (!browserHostIsLocal) {
+      if (!PUBLIC_API_BASE_URL) {
+        return browserOriginApiBase;
+      }
+
+      if (PUBLIC_API_BASE_URL.startsWith("/")) {
+        return stripTrailingSlash(PUBLIC_API_BASE_URL);
+      }
+
+      if (isAbsoluteHttpUrl(PUBLIC_API_BASE_URL)) {
+        try {
+          const configuredUrl = new URL(PUBLIC_API_BASE_URL);
+          if (isLocalhostName(configuredUrl.hostname)) {
+            return browserOriginApiBase;
+          }
+        } catch {
+          return browserOriginApiBase;
+        }
+      }
+    }
+  }
+
   const fallbackBaseUrl = process.env.NODE_ENV === "development" ? "http://localhost:4000/api" : "";
   const rawBaseUrl = PUBLIC_API_BASE_URL || fallbackBaseUrl;
 
