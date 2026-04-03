@@ -4,7 +4,7 @@
 NAMESPACE="production"
 DB_NAME="lcb_poc" # <--- IMPORTANT: Ensure this is the POC DB
 CONFIGMAP_NAME="lcb-prisma-schema"
-SCHEMA_PATH="apps/api/prisma/schema.prisma"
+SCHEMA_PATH="/home/madhuboyina/git/life-command-bar-poc/apps/api/prisma/schema.prisma"
 IMAGE="ghcr.io/madhuboyin/contract-to-cozy/backend:latest"
 
 echo "🚀 Starting Schema Push for $DB_NAME..."
