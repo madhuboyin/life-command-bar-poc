@@ -1,6 +1,6 @@
-import Link from "next/link";
 import type { DashboardTopInsight } from "../lib/types";
 import { cardStyles } from "../lib/ui";
+import ClickableCardLink from "./ui/clickable-card-link";
 
 type Props = {
   insight: DashboardTopInsight;
@@ -26,9 +26,9 @@ export default function TopInsightCard({ insight, href }: Props) {
   if (!href) return content;
 
   return (
-    <Link href={href} style={{ textDecoration: "none", color: "inherit", cursor: "pointer" }}>
+    <ClickableCardLink href={href} ariaLabel="View obligations for top insight">
       {content}
-    </Link>
+    </ClickableCardLink>
   );
 }
 

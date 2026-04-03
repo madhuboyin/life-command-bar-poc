@@ -1,36 +1,65 @@
 import Link from "next/link";
 import PageHeader from "../../components/ui/page-header";
 import { getObligations } from "../../lib/api";
-import { obligationViewMeta, parseObligationView } from "../../lib/obligation-filters";
-import type { Obligation, ObligationView } from "../../lib/types";
+import {
+  getViewSortSummary,
+  obligationViewMeta,
+  parseObligationSort,
+  parseObligationView,
+  parseSortDirection
+} from "../../lib/obligation-filters";
+import type {
+  Obligation,
+  ObligationSort,
+  ObligationView,
+  SortDirection
+} from "../../lib/types";
 import { cardStyles, colors, formatDateTime, pageStyles } from "../../lib/ui";
 import EmptyState from "../../components/ui/empty-state";
 import StatusMessage from "../../components/ui/status-message";
 
 type Props = {
   searchParams?: Promise<{
-    view?: string;
+    view?: string | string[];
+    sort?: string | string[];
+    direction?: string | string[];
   } | undefined>;
 };
 
 export default async function ObligationsPage({ searchParams }: Props) {
   const params = (await searchParams) ?? {};
-  const rawView = params.view;
+  const rawView = readFirstParam(params.view);
+  const rawSort = readFirstParam(params.sort);
+  const rawDirection = readFirstParam(params.direction);
+
   const view: ObligationView | null = parseObligationView(rawView);
+  const sort: ObligationSort | null = parseObligationSort(rawSort);
+  const direction: SortDirection | null = parseSortDirection(rawDirection);
+
   const invalidView = typeof rawView === "string" && rawView.length > 0 && !view;
+  const invalidSort = typeof rawSort === "string" && rawSort.length > 0 && !sort;
+  const invalidDirection =
+    typeof rawDirection === "string" && rawDirection.length > 0 && !direction;
 
   let items: Obligation[] = [];
+  let total = 0;
   let loadError: string | null = null;
 
   try {
     const data = await getObligations({
-      view: view ?? undefined
+      view: view ?? undefined,
+      sort: sort ?? undefined,
+      direction: direction ?? undefined
     });
     items = data.items ?? [];
+    total = data.pagination.total ?? 0;
   } catch (error) {
     loadError =
       error instanceof Error ? error.message : "Could not load obligations right now.";
   }
+
+  const selectedMeta = view ? obligationViewMeta[view] : null;
+  const sortSummary = getViewSortSummary(view, sort, direction);
 
   return (
     <main style={pageStyles.shell}>
@@ -42,13 +71,29 @@ export default async function ObligationsPage({ searchParams }: Props) {
 
       <PageHeader
         title="All Obligations"
-        description="Current obligations loaded from Postgres via Prisma."
+        description={
+          selectedMeta
+            ? `Showing ${selectedMeta.label.toLowerCase()} obligations.`
+            : "Current obligations loaded from Postgres via Prisma."
+        }
       />
 
       <div style={{ display: "grid", gap: 14 }}>
         {invalidView ? (
           <StatusMessage variant="error">
             Unknown filter view. Showing all obligations instead.
+          </StatusMessage>
+        ) : null}
+
+        {invalidSort ? (
+          <StatusMessage variant="error">
+            Unknown sort value. Using the default ordering instead.
+          </StatusMessage>
+        ) : null}
+
+        {invalidDirection ? (
+          <StatusMessage variant="error">
+            Unknown sort direction. Using the default direction instead.
           </StatusMessage>
         ) : null}
 
@@ -64,6 +109,9 @@ export default async function ObligationsPage({ searchParams }: Props) {
                 </div>
                 <div style={{ fontSize: 14, color: colors.textMuted }}>
                   {obligationViewMeta[view].description}
+                </div>
+                <div style={{ marginTop: 8, fontSize: 13, color: colors.textMuted }}>
+                  {sortSummary} {total} {total === 1 ? "item" : "items"} found.
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "flex-start" }}>
@@ -82,7 +130,7 @@ export default async function ObligationsPage({ searchParams }: Props) {
             title={view ? `No items in ${obligationViewMeta[view].label}` : "No obligations yet"}
             description={
               view
-                ? "No obligations match this filter right now."
+                ? obligationViewMeta[view].emptyDescription
                 : "Create or import an obligation to get started."
             }
             action={
@@ -119,4 +167,9 @@ export default async function ObligationsPage({ searchParams }: Props) {
       </div>
     </main>
   );
+}
+
+function readFirstParam(value: string | string[] | undefined) {
+  if (Array.isArray(value)) return value[0];
+  return value;
 }

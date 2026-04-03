@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { cardStyles, colors } from "../lib/ui";
+import ClickableCardLink from "./ui/clickable-card-link";
 
 type Props = {
   label: string;
@@ -27,8 +27,8 @@ export default function MetricStatCard({ label, value, supportingText, href }: P
   if (!href) return content;
 
   return (
-    <Link href={href} style={{ textDecoration: "none", color: "inherit", cursor: "pointer" }}>
+    <ClickableCardLink href={href} ariaLabel={`${label}: view filtered obligations`}>
       {content}
-    </Link>
+    </ClickableCardLink>
   );
 }

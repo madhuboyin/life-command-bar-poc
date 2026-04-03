@@ -1,6 +1,6 @@
-import Link from "next/link";
 import type { DashboardInsightCard as DashboardInsightCardType } from "../lib/types";
 import { cardStyles, colors } from "../lib/ui";
+import ClickableCardLink from "./ui/clickable-card-link";
 
 type Props = {
   card: DashboardInsightCardType;
@@ -24,9 +24,9 @@ export default function InsightCard({ card, href }: Props) {
   if (!href) return content;
 
   return (
-    <Link href={href} style={{ textDecoration: "none", color: "inherit", cursor: "pointer" }}>
+    <ClickableCardLink href={href} ariaLabel={`${card.title}: view filtered obligations`}>
       {content}
-    </Link>
+    </ClickableCardLink>
   );
 }
 
