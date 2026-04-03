@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ObligationRepository } from "../repositories/obligation.repository";
+import { ObligationSort, ObligationView, SortDirection } from "../types/obligation.types";
 import { mapObligation } from "../utils/obligation.mapper";
 
 const createObligationSchema = z.object({
@@ -43,12 +44,21 @@ export class ObligationService {
   private readonly repository = new ObligationRepository();
 
   async list(userId: string, query: Record<string, unknown>) {
+    const limit = parseIntegerQuery(query.limit, 20, 1, 100);
+    const offset = parseIntegerQuery(query.offset, 0, 0, 10000);
+    const view = parseEnumQuery<ObligationView>(query.view, supportedViews);
+    const sort = parseEnumQuery<ObligationSort>(query.sort, supportedSorts);
+    const direction = parseEnumQuery<SortDirection>(query.direction, supportedDirections);
+
     const result = await this.repository.findMany({
       userId,
       status: typeof query.status === "string" ? query.status : undefined,
       type: typeof query.type === "string" ? query.type : undefined,
-      limit: typeof query.limit === "string" ? Number(query.limit) : 20,
-      offset: typeof query.offset === "string" ? Number(query.offset) : 0
+      view,
+      sort,
+      direction,
+      limit,
+      offset
     });
 
     return {
@@ -57,7 +67,8 @@ export class ObligationService {
         limit: result.limit,
         offset: result.offset,
         total: result.total
-      }
+      },
+      appliedView: result.appliedView
     };
   }
 
@@ -115,4 +126,48 @@ export class ObligationService {
       }))
     };
   }
+}
+
+const supportedViews: ObligationView[] = [
+  "urgent",
+  "quick_wins",
+  "money",
+  "renewals",
+  "subscriptions",
+  "bills",
+  "postponed_recently",
+  "resolved_recently",
+  "active_now",
+  "commitments"
+];
+
+const supportedSorts: ObligationSort[] = [
+  "due_date",
+  "importance",
+  "urgency",
+  "created_at",
+  "amount"
+];
+
+const supportedDirections: SortDirection[] = ["asc", "desc"];
+
+function parseIntegerQuery(
+  value: unknown,
+  fallback: number,
+  minValue: number,
+  maxValue: number
+) {
+  if (typeof value !== "string") return fallback;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+
+  const rounded = Math.floor(parsed);
+  if (rounded < minValue) return minValue;
+  if (rounded > maxValue) return maxValue;
+  return rounded;
+}
+
+function parseEnumQuery<T extends string>(value: unknown, options: T[]): T | undefined {
+  if (typeof value !== "string") return undefined;
+  return options.includes(value as T) ? (value as T) : undefined;
 }

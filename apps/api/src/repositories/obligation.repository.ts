@@ -3,6 +3,9 @@ import { prisma } from "../clients/prisma.client";
 import {
   CreateObligationInput,
   ObligationListQuery,
+  ObligationSort,
+  ObligationView,
+  SortDirection,
   UpdateObligationInput
 } from "../types/obligation.types";
 
@@ -11,29 +14,30 @@ export class ObligationRepository {
     const limit = query.limit ?? 20;
     const offset = query.offset ?? 0;
 
-    const where: Prisma.ObligationWhereInput = {
-      userId: query.userId
-    };
-
-    if (query.status) {
-      where.status = query.status as ObligationStatus;
-    }
-
-    if (query.type) {
-      where.type = query.type as ObligationType;
-    }
+    const where = buildListWhere(query);
+    const orderBy = buildOrderBy({
+      view: query.view,
+      sort: query.sort,
+      direction: query.direction
+    });
 
     const [items, total] = await Promise.all([
       prisma.obligation.findMany({
         where,
-        orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
+        orderBy,
         skip: offset,
         take: limit
       }),
       prisma.obligation.count({ where })
     ]);
 
-    return { items, total, limit, offset };
+    return {
+      items,
+      total,
+      limit,
+      offset,
+      appliedView: query.view ?? null
+    };
   }
 
   async findActiveForFeed(userId: string) {
@@ -265,4 +269,267 @@ function toAuditMetadata(input: UpdateObligationInput): Prisma.InputJsonObject {
   return Object.fromEntries(
     Object.entries(input).filter(([, value]) => value !== undefined)
   ) as Prisma.InputJsonObject;
+}
+
+const OPEN_STATUSES: ObligationStatus[] = [
+  ObligationStatus.ACTIVE,
+  ObligationStatus.POSTPONED
+];
+
+const QUICK_WIN_CONFIDENCE_THRESHOLD = 0.85;
+const QUICK_WIN_IMPORTANCE_THRESHOLD = 50;
+const URGENCY_THRESHOLD = 85;
+const URGENT_DUE_WINDOW_HOURS = 48;
+const RECENT_ACTIVITY_DAYS = 7;
+
+function buildListWhere(
+  query: ObligationListQuery & { userId: string }
+): Prisma.ObligationWhereInput {
+  const conditions: Prisma.ObligationWhereInput[] = [{ userId: query.userId }];
+
+  if (query.status) {
+    conditions.push({
+      status: query.status as ObligationStatus
+    });
+  }
+
+  if (query.type) {
+    conditions.push({
+      type: query.type as ObligationType
+    });
+  }
+
+  const viewCondition = buildViewCondition(query.view);
+  if (viewCondition) {
+    conditions.push(viewCondition);
+  }
+
+  return conditions.length === 1 ? conditions[0] : { AND: conditions };
+}
+
+function buildViewCondition(view?: ObligationView): Prisma.ObligationWhereInput | null {
+  if (!view) return null;
+
+  const now = new Date();
+  const recentWindowStart = getWindowStart(now, RECENT_ACTIVITY_DAYS);
+  const urgentDueThreshold = addHours(now, URGENT_DUE_WINDOW_HOURS);
+
+  switch (view) {
+    case "urgent":
+      return {
+        status: {
+          in: OPEN_STATUSES
+        },
+        OR: [
+          {
+            dueDate: {
+              lte: urgentDueThreshold
+            }
+          },
+          {
+            urgencyScore: {
+              gte: URGENCY_THRESHOLD
+            }
+          }
+        ]
+      };
+    case "quick_wins":
+      return {
+        status: {
+          in: OPEN_STATUSES
+        },
+        effortLevel: "LOW",
+        confidenceScore: {
+          gte: QUICK_WIN_CONFIDENCE_THRESHOLD
+        },
+        importanceScore: {
+          gte: QUICK_WIN_IMPORTANCE_THRESHOLD
+        },
+        impactLevel: {
+          in: ["MEDIUM", "HIGH"]
+        }
+      };
+    case "money":
+      return {
+        status: {
+          in: OPEN_STATUSES
+        },
+        amount: {
+          gt: 0
+        }
+      };
+    case "renewals":
+      return {
+        status: {
+          in: OPEN_STATUSES
+        },
+        type: "RENEWAL"
+      };
+    case "subscriptions":
+      return {
+        status: {
+          in: OPEN_STATUSES
+        },
+        type: "SUBSCRIPTION"
+      };
+    case "bills":
+      return {
+        status: {
+          in: OPEN_STATUSES
+        },
+        type: "BILL"
+      };
+    case "postponed_recently":
+      return {
+        OR: [
+          {
+            status: "POSTPONED"
+          },
+          {
+            feedbackEvents: {
+              some: {
+                type: "POSTPONED",
+                createdAt: {
+                  gte: recentWindowStart
+                }
+              }
+            }
+          },
+          {
+            auditEvents: {
+              some: {
+                eventType: "obligation_postponed",
+                createdAt: {
+                  gte: recentWindowStart
+                }
+              }
+            }
+          }
+        ]
+      };
+    case "resolved_recently":
+      return {
+        status: "RESOLVED",
+        OR: [
+          {
+            lastActedAt: {
+              gte: recentWindowStart
+            }
+          },
+          {
+            feedbackEvents: {
+              some: {
+                type: "COMPLETED",
+                createdAt: {
+                  gte: recentWindowStart
+                }
+              }
+            }
+          },
+          {
+            auditEvents: {
+              some: {
+                eventType: "obligation_marked_done",
+                createdAt: {
+                  gte: recentWindowStart
+                }
+              }
+            }
+          }
+        ]
+      };
+    case "active_now":
+      return {
+        status: {
+          in: OPEN_STATUSES
+        }
+      };
+    case "commitments":
+      return {
+        status: {
+          in: OPEN_STATUSES
+        },
+        type: "COMMITMENT"
+      };
+    default:
+      return null;
+  }
+}
+
+function buildOrderBy(input: {
+  view?: ObligationView;
+  sort?: ObligationSort;
+  direction?: SortDirection;
+}): Prisma.ObligationOrderByWithRelationInput[] {
+  if (input.sort) {
+    const direction = input.direction ?? defaultDirectionForSort(input.sort);
+    return [
+      sortToOrderBy(input.sort, direction),
+      {
+        createdAt: "desc"
+      }
+    ];
+  }
+
+  return defaultOrderByForView(input.view);
+}
+
+function defaultOrderByForView(
+  view?: ObligationView
+): Prisma.ObligationOrderByWithRelationInput[] {
+  switch (view) {
+    case "urgent":
+      return [{ dueDate: "asc" }, { urgencyScore: "desc" }, { createdAt: "desc" }];
+    case "quick_wins":
+      return [
+        { impactLevel: "desc" },
+        { importanceScore: "desc" },
+        { confidenceScore: "desc" },
+        { dueDate: "asc" }
+      ];
+    case "money":
+      return [{ dueDate: "asc" }, { amount: "desc" }, { createdAt: "desc" }];
+    case "resolved_recently":
+      return [{ lastActedAt: "desc" }, { updatedAt: "desc" }, { createdAt: "desc" }];
+    case "postponed_recently":
+      return [{ lastActedAt: "desc" }, { dueDate: "asc" }, { createdAt: "desc" }];
+    case "renewals":
+    case "subscriptions":
+    case "bills":
+    case "commitments":
+    case "active_now":
+    default:
+      return [{ dueDate: "asc" }, { createdAt: "desc" }];
+  }
+}
+
+function sortToOrderBy(sort: ObligationSort, direction: SortDirection) {
+  switch (sort) {
+    case "due_date":
+      return { dueDate: direction } satisfies Prisma.ObligationOrderByWithRelationInput;
+    case "importance":
+      return { importanceScore: direction } satisfies Prisma.ObligationOrderByWithRelationInput;
+    case "urgency":
+      return { urgencyScore: direction } satisfies Prisma.ObligationOrderByWithRelationInput;
+    case "amount":
+      return { amount: direction } satisfies Prisma.ObligationOrderByWithRelationInput;
+    case "created_at":
+    default:
+      return { createdAt: direction } satisfies Prisma.ObligationOrderByWithRelationInput;
+  }
+}
+
+function defaultDirectionForSort(sort: ObligationSort): SortDirection {
+  if (sort === "due_date") return "asc";
+  return "desc";
+}
+
+function getWindowStart(now: Date, trailingDays: number) {
+  const start = new Date(now);
+  start.setDate(start.getDate() - trailingDays);
+  return start;
+}
+
+function addHours(date: Date, hours: number) {
+  return new Date(date.getTime() + hours * 60 * 60 * 1000);
 }

@@ -6,6 +6,7 @@ import {
   ReminderStatus
 } from "@prisma/client";
 import { prisma } from "../clients/prisma.client";
+import { ObligationView } from "../types/obligation.types";
 
 const LOOKBACK_DAYS = 7;
 const QUICK_WIN_CONFIDENCE_THRESHOLD = 0.85;
@@ -51,12 +52,14 @@ type DashboardCard = {
   supportingText: string;
   tone: InsightTone;
   priority: number;
+  targetView: ObligationView | null;
 };
 
 type TopInsight = {
   title: string;
   description: string;
   tone: InsightTone;
+  targetView: ObligationView | null;
 };
 
 type DashboardInsightsResponse = {
@@ -584,7 +587,8 @@ function chooseTopInsight(input: TopInsightInput): TopInsight {
         input.overdueOrUrgent === 1
           ? "Handling this now will reduce immediate pressure."
           : "Clearing these first should ease near-term stress.",
-      tone: "warning"
+      tone: "warning",
+      targetView: "urgent"
     };
   }
 
@@ -595,7 +599,8 @@ function chooseTopInsight(input: TopInsightInput): TopInsight {
         input.repeatedPostponementCount > 0
           ? "At least one item has been postponed more than once."
           : "Picking one item to finish can break the postpone loop.",
-      tone: "warning"
+      tone: "warning",
+      targetView: "postponed_recently"
     };
   }
 
@@ -603,7 +608,8 @@ function chooseTopInsight(input: TopInsightInput): TopInsight {
     return {
       title: `${input.quickWinsAvailable} quick wins are available right now`,
       description: "Low-effort, meaningful tasks are ready to be cleared.",
-      tone: "positive"
+      tone: "positive",
+      targetView: "quick_wins"
     };
   }
 
@@ -611,7 +617,8 @@ function chooseTopInsight(input: TopInsightInput): TopInsight {
     return {
       title: `You cleared ${input.handledThisWeek} ${pluralize("item", input.handledThisWeek)} this week`,
       description: "Your recent progress is building healthy momentum.",
-      tone: "positive"
+      tone: "positive",
+      targetView: "resolved_recently"
     };
   }
 
@@ -619,7 +626,8 @@ function chooseTopInsight(input: TopInsightInput): TopInsight {
     return {
       title: `${formatMoneyValue(input.moneyExposure)} may need attention soon`,
       description: "This reflects open obligations with amounts currently in your queue.",
-      tone: "neutral"
+      tone: "neutral",
+      targetView: "money"
     };
   }
 
@@ -627,14 +635,16 @@ function chooseTopInsight(input: TopInsightInput): TopInsight {
     return {
       title: "Your queue is clear right now",
       description: "No active or postponed obligations are currently pending.",
-      tone: "positive"
+      tone: "positive",
+      targetView: null
     };
   }
 
   return {
     title: `You have ${input.activeNow} open ${pluralize("item", input.activeNow)}`,
     description: "Start with one quick win to reduce mental load.",
-    tone: "neutral"
+    tone: "neutral",
+    targetView: "active_now"
   };
 }
 
@@ -658,7 +668,8 @@ function buildCards(input: {
           ? `${remindersDueSoon} ${pluralize("reminder", remindersDueSoon)} due soon.`
           : "Nothing urgent in the next two days.",
       tone: summary.overdueOrUrgent > 0 ? "warning" : "positive",
-      priority: summary.overdueOrUrgent > 0 ? 1 : 5
+      priority: summary.overdueOrUrgent > 0 ? 1 : 5,
+      targetView: "urgent"
     },
     {
       key: "relief",
@@ -671,7 +682,8 @@ function buildCards(input: {
           : summary.reliefScore.band === "LOW"
             ? "warning"
             : "neutral",
-      priority: summary.reliefScore.band === "LOW" ? 2 : 4
+      priority: summary.reliefScore.band === "LOW" ? 2 : 4,
+      targetView: "resolved_recently"
     },
     {
       key: "quick_wins",
@@ -682,7 +694,8 @@ function buildCards(input: {
           ? "Low-effort tasks with meaningful impact are ready."
           : "No strong quick wins detected right now.",
       tone: summary.quickWinsAvailable > 0 ? "positive" : "neutral",
-      priority: summary.quickWinsAvailable > 0 ? 3 : 6
+      priority: summary.quickWinsAvailable > 0 ? 3 : 6,
+      targetView: "quick_wins"
     },
     {
       key: "money_exposure",
@@ -698,7 +711,8 @@ function buildCards(input: {
             ? "Includes multiple currencies."
             : "Open obligations with known amounts.",
       tone: summary.estimatedMoneyExposure.amount === null ? "neutral" : "warning",
-      priority: summary.estimatedMoneyExposure.amount === null ? 7 : 4
+      priority: summary.estimatedMoneyExposure.amount === null ? 7 : 4,
+      targetView: "money"
     },
     {
       key: "postponed",
@@ -709,7 +723,8 @@ function buildCards(input: {
           ? `${postponedStats.repeatedCount} ${pluralize("item", postponedStats.repeatedCount)} postponed more than once.`
           : "No repeated postponement pattern detected.",
       tone: summary.postponedRecently > 0 ? "warning" : "neutral",
-      priority: postponedStats.repeatedCount > 0 ? 2 : summary.postponedRecently > 0 ? 3 : 7
+      priority: postponedStats.repeatedCount > 0 ? 2 : summary.postponedRecently > 0 ? 3 : 7,
+      targetView: "postponed_recently"
     },
     {
       key: "open_category",
@@ -720,7 +735,8 @@ function buildCards(input: {
           ? `${toCategoryLabel(summary.mostCommonOpenType)} are most common right now.`
           : "You have no active or postponed obligations.",
       tone: summary.mostCommonOpenType ? "neutral" : "positive",
-      priority: 8
+      priority: 8,
+      targetView: toOpenTypeTargetView(summary.mostCommonOpenType)
     }
   ];
 
@@ -739,6 +755,21 @@ function toCategoryLabel(value: ObligationType) {
       return "Commitments";
     default:
       return "Items";
+  }
+}
+
+function toOpenTypeTargetView(type: ObligationType | null): ObligationView | null {
+  switch (type) {
+    case ObligationType.BILL:
+      return "bills";
+    case ObligationType.SUBSCRIPTION:
+      return "subscriptions";
+    case ObligationType.RENEWAL:
+      return "renewals";
+    case ObligationType.COMMITMENT:
+      return "commitments";
+    default:
+      return null;
   }
 }
 

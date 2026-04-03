@@ -46,6 +46,21 @@ export interface TodayFeedResponse {
   items: TodayFeedItem[];
 }
 
+export type ObligationView =
+  | "urgent"
+  | "quick_wins"
+  | "money"
+  | "renewals"
+  | "subscriptions"
+  | "bills"
+  | "postponed_recently"
+  | "resolved_recently"
+  | "active_now"
+  | "commitments";
+
+export type ObligationSort = "due_date" | "importance" | "urgency" | "created_at" | "amount";
+export type SortDirection = "asc" | "desc";
+
 export interface DashboardInsightCard {
   key: "attention" | "relief" | "quick_wins" | "money_exposure" | "postponed" | "open_category";
   title: string;
@@ -53,12 +68,14 @@ export interface DashboardInsightCard {
   supportingText: string;
   tone: "neutral" | "positive" | "warning";
   priority: number;
+  targetView: ObligationView | null;
 }
 
 export interface DashboardTopInsight {
   title: string;
   description: string;
   tone: "neutral" | "positive" | "warning";
+  targetView: ObligationView | null;
 }
 
 export interface DashboardInsightsResponse {

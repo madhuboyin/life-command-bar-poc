@@ -1,6 +1,7 @@
 "use client";
 
 import type { DashboardInsightsResponse } from "../lib/types";
+import { getObligationViewHref } from "../lib/obligation-filters";
 import { buttonStyles } from "../lib/ui";
 import { useIsMobile } from "../lib/use-is-mobile";
 import InsightCard from "./insight-card";
@@ -25,6 +26,9 @@ export default function DashboardInsightsSection({
   onRefresh
 }: Props) {
   const isMobile = useIsMobile();
+  const resolvedRecentlyHref = getObligationViewHref("resolved_recently");
+  const activeNowHref = getObligationViewHref("active_now");
+  const quickWinsHref = getObligationViewHref("quick_wins");
 
   const hasActivity =
     (data?.summary.activeNow ?? 0) > 0 ||
@@ -66,7 +70,10 @@ export default function DashboardInsightsSection({
 
       {data ? (
         <div style={{ display: "grid", gap: 14 }}>
-          <TopInsightCard insight={data.topInsight} />
+          <TopInsightCard
+            insight={data.topInsight}
+            href={data.topInsight.targetView ? getObligationViewHref(data.topInsight.targetView) : null}
+          />
 
           {!hasActivity ? (
             <EmptyState
@@ -87,19 +94,23 @@ export default function DashboardInsightsSection({
                 <MetricStatCard
                   label="Handled This Week"
                   value={data.summary.handledThisWeek}
+                  href={resolvedRecentlyHref}
                 />
                 <MetricStatCard
                   label="Active Now"
                   value={data.summary.activeNow}
+                  href={activeNowHref}
                 />
                 <MetricStatCard
                   label="Quick Wins"
                   value={data.summary.quickWinsAvailable}
+                  href={quickWinsHref}
                 />
                 <MetricStatCard
                   label="Relief Score"
                   value={`${data.summary.reliefScore.value}`}
                   supportingText={data.summary.reliefScore.band}
+                  href={resolvedRecentlyHref}
                 />
               </div>
 
@@ -113,7 +124,11 @@ export default function DashboardInsightsSection({
                 }}
               >
                 {data.cards.slice(0, 6).map((card) => (
-                  <InsightCard key={card.key} card={card} />
+                  <InsightCard
+                    key={card.key}
+                    card={card}
+                    href={card.targetView ? getObligationViewHref(card.targetView) : null}
+                  />
                 ))}
               </div>
             </>

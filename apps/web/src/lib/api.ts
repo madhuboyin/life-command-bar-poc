@@ -4,8 +4,11 @@ import type {
   DashboardInsightsResponse,
   Obligation,
   ObligationHistory,
+  ObligationSort,
+  ObligationView,
   Reminder,
   ResolutionResponse,
+  SortDirection,
   TodayFeedResponse
 } from "./types";
 
@@ -42,6 +45,7 @@ type ObligationsListResponse = {
     offset: number;
     total: number;
   };
+  appliedView?: ObligationView | null;
 };
 
 type ObligationResponse = {
@@ -219,8 +223,28 @@ export async function getDashboardInsights(): Promise<DashboardInsightsResponse>
   return handleResponse<DashboardInsightsResponse>(res);
 }
 
-export async function getObligations(): Promise<ObligationsListResponse> {
-  const res = await apiFetch("/obligations", {
+export async function getObligations(params?: {
+  status?: Obligation["status"];
+  type?: Obligation["type"];
+  view?: ObligationView;
+  sort?: ObligationSort;
+  direction?: SortDirection;
+  limit?: number;
+  offset?: number;
+}): Promise<ObligationsListResponse> {
+  const query = new URLSearchParams();
+
+  if (params?.status) query.set("status", params.status);
+  if (params?.type) query.set("type", params.type);
+  if (params?.view) query.set("view", params.view);
+  if (params?.sort) query.set("sort", params.sort);
+  if (params?.direction) query.set("direction", params.direction);
+  if (typeof params?.limit === "number") query.set("limit", String(params.limit));
+  if (typeof params?.offset === "number") query.set("offset", String(params.offset));
+
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+
+  const res = await apiFetch(`/obligations${suffix}`, {
     cache: "no-store"
   });
 

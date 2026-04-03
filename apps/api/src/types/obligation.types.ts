@@ -1,6 +1,24 @@
+export type ObligationView =
+  | "urgent"
+  | "quick_wins"
+  | "money"
+  | "renewals"
+  | "subscriptions"
+  | "bills"
+  | "postponed_recently"
+  | "resolved_recently"
+  | "active_now"
+  | "commitments";
+
+export type ObligationSort = "due_date" | "importance" | "urgency" | "created_at" | "amount";
+export type SortDirection = "asc" | "desc";
+
 export interface ObligationListQuery {
   status?: string;
   type?: string;
+  view?: ObligationView;
+  sort?: ObligationSort;
+  direction?: SortDirection;
   limit?: number;
   offset?: number;
 }
