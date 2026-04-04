@@ -56,6 +56,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/control-tower" style={{ textDecoration: "none", color: colors.textMuted }}>
                 Control Tower
               </Link>
+              <Link href="/admin/observability" style={{ textDecoration: "none", color: colors.textMuted }}>
+                Admin Observability
+              </Link>
               <Link href="/upcoming" style={{ textDecoration: "none", color: colors.textMuted }}>
                 Upcoming
               </Link>

@@ -5,6 +5,7 @@ import {
   Prisma
 } from "@prisma/client";
 import { prisma } from "../clients/prisma.client";
+import { createAuditEvent } from "../observability/audit-event";
 
 const autoFlowInclude = {
   obligation: {
@@ -313,14 +314,15 @@ export class AutoFlowRepository {
     tx?: Prisma.TransactionClient
   ) {
     const db = getDb(tx);
-    return db.auditEvent.create({
-      data: {
+    return createAuditEvent(
+      {
         userId: input.userId,
         obligationId: input.obligationId,
         eventType: input.eventType,
         metadata: input.metadata
-      }
-    });
+      },
+      db
+    );
   }
 }
 

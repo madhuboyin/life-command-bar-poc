@@ -8,6 +8,7 @@ import {
   Prisma
 } from "@prisma/client";
 import { prisma } from "../clients/prisma.client";
+import { createAuditEvent } from "../observability/audit-event";
 
 export type CreateImportSourceInput = {
   userId: string;
@@ -133,13 +134,11 @@ export class IngestionRepository {
     eventType: string;
     metadata?: Prisma.InputJsonValue;
   }) {
-    return prisma.auditEvent.create({
-      data: {
-        userId: input.userId,
-        obligationId: input.obligationId,
-        eventType: input.eventType,
-        metadata: input.metadata
-      }
+    return createAuditEvent({
+      userId: input.userId,
+      obligationId: input.obligationId,
+      eventType: input.eventType,
+      metadata: input.metadata
     });
   }
 

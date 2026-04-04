@@ -9,6 +9,7 @@ import {
   UpdateObligationInput
 } from "../types/obligation.types";
 import { listActiveHouseholdIdsForUser } from "../utils/household-access";
+import { createAuditEvent } from "../observability/audit-event";
 
 export class ObligationRepository {
   async findMany(query: ObligationListQuery & { userId: string }) {
@@ -135,18 +136,16 @@ export class ObligationRepository {
       include: obligationTrustInclude
     });
 
-    await prisma.auditEvent.create({
-      data: {
-        userId: input.userId,
-        householdId: obligation.householdId,
-        obligationId: obligation.id,
-        eventType: "obligation_created",
-        metadata: {
-          title: input.title,
-          type: input.type,
-          scopeType,
-          assignedToUserId: obligation.assignedToUserId
-        }
+    await createAuditEvent({
+      userId: input.userId,
+      householdId: obligation.householdId,
+      obligationId: obligation.id,
+      eventType: "obligation_created",
+      metadata: {
+        title: input.title,
+        type: input.type,
+        scopeType,
+        assignedToUserId: obligation.assignedToUserId
       }
     });
 
@@ -197,14 +196,12 @@ export class ObligationRepository {
       include: obligationTrustInclude
     });
 
-    await prisma.auditEvent.create({
-      data: {
-        userId,
-        householdId: obligation.householdId,
-        obligationId: id,
-        eventType: "obligation_updated",
-        metadata: toAuditMetadata(input)
-      }
+    await createAuditEvent({
+      userId,
+      householdId: obligation.householdId,
+      obligationId: id,
+      eventType: "obligation_updated",
+      metadata: toAuditMetadata(input)
     });
 
     return obligation;
@@ -240,16 +237,14 @@ export class ObligationRepository {
       include: obligationTrustInclude
     });
 
-    await prisma.auditEvent.create({
-      data: {
-        userId: actorUserId,
-        householdId: obligation.householdId,
-        obligationId: id,
-        eventType: auditEventType,
-        metadata: {
-          previousAssignedToUserId: existing.assignedToUserId,
-          assignedToUserId
-        }
+    await createAuditEvent({
+      userId: actorUserId,
+      householdId: obligation.householdId,
+      obligationId: id,
+      eventType: auditEventType,
+      metadata: {
+        previousAssignedToUserId: existing.assignedToUserId,
+        assignedToUserId
       }
     });
 
@@ -270,14 +265,12 @@ export class ObligationRepository {
       include: obligationTrustInclude
     });
 
-    await prisma.auditEvent.create({
-      data: {
-        userId,
-        householdId: obligation.householdId,
-        obligationId: id,
-        eventType: "obligation_marked_done",
-        metadata: { note: note ?? null }
-      }
+    await createAuditEvent({
+      userId,
+      householdId: obligation.householdId,
+      obligationId: id,
+      eventType: "obligation_marked_done",
+      metadata: { note: note ?? null }
     });
 
     return obligation;
@@ -297,14 +290,12 @@ export class ObligationRepository {
       include: obligationTrustInclude
     });
 
-    await prisma.auditEvent.create({
-      data: {
-        userId,
-        householdId: obligation.householdId,
-        obligationId: id,
-        eventType: "obligation_dismissed",
-        metadata: { reason: reason ?? null }
-      }
+    await createAuditEvent({
+      userId,
+      householdId: obligation.householdId,
+      obligationId: id,
+      eventType: "obligation_dismissed",
+      metadata: { reason: reason ?? null }
     });
 
     return obligation;
@@ -332,16 +323,14 @@ export class ObligationRepository {
       include: obligationTrustInclude
     });
 
-    await prisma.auditEvent.create({
-      data: {
-        userId,
-        householdId: obligation.householdId,
-        obligationId: id,
-        eventType: "obligation_postponed",
-        metadata: {
-          until: until ?? null,
-          reason: reason ?? null
-        }
+    await createAuditEvent({
+      userId,
+      householdId: obligation.householdId,
+      obligationId: id,
+      eventType: "obligation_postponed",
+      metadata: {
+        until: until ?? null,
+        reason: reason ?? null
       }
     });
 

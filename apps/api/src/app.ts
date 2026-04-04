@@ -24,6 +24,8 @@ import { controlTowerRouter } from "./routes/control-tower.routes";
 import { zeroInputRouter } from "./routes/zero-input.routes";
 import { householdRouter } from "./routes/household.routes";
 import { householdInviteRouter } from "./routes/household-invite.routes";
+import { adminObservabilityRouter } from "./routes/admin-observability.routes";
+import { requireAdmin } from "./middleware/admin.middleware";
 
 export function createApp() {
   const app = express();
@@ -54,6 +56,7 @@ export function createApp() {
   app.use("/api/zero-input", zeroInputRouter);
   app.use("/api/households", householdRouter);
   app.use("/api/household-invites", householdInviteRouter);
+  app.use("/api/admin", requireAdmin, adminObservabilityRouter);
   app.use("/api", resolutionRouter);
 
   return app;

@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { prisma } from "../clients/prisma.client";
+import { createAuditEvent } from "../observability/audit-event";
 import { IngestionService } from "./ingestion.service";
 
 type CreateUploadInput = {
@@ -26,16 +27,14 @@ export class UploadService {
       }
     });
 
-    await prisma.auditEvent.create({
-      data: {
-        userId: input.userId,
-        eventType: "upload_created",
-        metadata: {
-          uploadId: upload.id,
-          fileName: input.fileName,
-          fileType: input.fileType,
-          fileSize: input.fileSize
-        }
+    await createAuditEvent({
+      userId: input.userId,
+      eventType: "upload_created",
+      metadata: {
+        uploadId: upload.id,
+        fileName: input.fileName,
+        fileType: input.fileType,
+        fileSize: input.fileSize
       }
     });
 
@@ -61,18 +60,16 @@ export class UploadService {
         }
       });
 
-      await prisma.auditEvent.create({
-        data: {
-          userId: input.userId,
-          obligationId: ingestion.obligationId ?? undefined,
-          eventType: "upload_ingestion_completed",
-          metadata: {
-            uploadId: upload.id,
-            extractionStatus: extraction.status,
-            extractionNote: extraction.note,
-            parseStatus: ingestion.parseStatus,
-            confidence: ingestion.confidence
-          }
+      await createAuditEvent({
+        userId: input.userId,
+        obligationId: ingestion.obligationId ?? undefined,
+        eventType: "upload_ingestion_completed",
+        metadata: {
+          uploadId: upload.id,
+          extractionStatus: extraction.status,
+          extractionNote: extraction.note,
+          parseStatus: ingestion.parseStatus,
+          confidence: ingestion.confidence
         }
       });
 
@@ -91,15 +88,13 @@ export class UploadService {
         }
       });
 
-      await prisma.auditEvent.create({
-        data: {
-          userId: input.userId,
-          eventType: "upload_ingestion_failed",
-          metadata: {
-            uploadId: upload.id,
-            fileName: input.fileName,
-            error: error instanceof Error ? error.message : "unknown_error"
-          }
+      await createAuditEvent({
+        userId: input.userId,
+        eventType: "upload_ingestion_failed",
+        metadata: {
+          uploadId: upload.id,
+          fileName: input.fileName,
+          error: error instanceof Error ? error.message : "unknown_error"
         }
       });
 

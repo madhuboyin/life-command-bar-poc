@@ -300,6 +300,12 @@ enum HouseholdInviteStatus {
   REVOKED
 }
 
+enum MetricTimeBucket {
+  DAY
+  WEEK
+  MONTH
+}
+
 model User {
   id       String  @id @default(cuid())
   email    String  @unique
@@ -1061,6 +1067,56 @@ model AuditEvent {
   @@index([obligationId], map: "idx_audit_events_obligation_id")
   @@index([eventType], map: "idx_audit_events_event_type")
   @@map("audit_events")
+}
+
+model ObservabilityEvent {
+  id String @id @default(cuid())
+
+  userId String? @map("user_id")
+  householdId String? @map("household_id")
+
+  eventType String @map("event_type")
+  entityType String? @map("entity_type")
+  entityId String? @map("entity_id")
+
+  metadata Json?
+
+  traceId String? @map("trace_id")
+  correlationId String? @map("correlation_id")
+
+  dedupeKey String? @unique @map("dedupe_key")
+  sourceAuditEventId String? @unique @map("source_audit_event_id")
+
+  timestamp DateTime @default(now())
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([timestamp], map: "idx_observability_events_timestamp")
+  @@index([eventType, timestamp], map: "idx_observability_events_event_type_timestamp")
+  @@index([userId, timestamp], map: "idx_observability_events_user_id_timestamp")
+  @@index([householdId, timestamp], map: "idx_observability_events_household_id_timestamp")
+  @@index([traceId], map: "idx_observability_events_trace_id")
+  @@index([correlationId], map: "idx_observability_events_correlation_id")
+  @@index([entityType, entityId], map: "idx_observability_events_entity")
+  @@map("observability_events")
+}
+
+model MetricSnapshot {
+  id String @id @default(cuid())
+
+  metricType String @map("metric_type")
+  value Decimal @db.Decimal(14, 4)
+  dimension Json?
+  dimensionKey String @default("all") @map("dimension_key")
+
+  timeBucket MetricTimeBucket @map("time_bucket")
+  timestamp DateTime
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([metricType, timeBucket, timestamp, dimensionKey], map: "uniq_metric_snapshots_metric_bucket_timestamp_dimension")
+  @@index([timeBucket, timestamp], map: "idx_metric_snapshots_bucket_timestamp")
+  @@index([metricType, timeBucket, timestamp], map: "idx_metric_snapshots_metric_bucket_timestamp")
+  @@map("metric_snapshots")
 }
 
 model Upload {

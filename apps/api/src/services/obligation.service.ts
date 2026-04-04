@@ -1,6 +1,7 @@
 import { AutoFlowTriggerType, ObligationStatus, ScopeType } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../clients/prisma.client";
+import { createAuditEvent } from "../observability/audit-event";
 import { ObligationRepository } from "../repositories/obligation.repository";
 import { ObligationSort, ObligationView, SortDirection } from "../types/obligation.types";
 import { mapObligation } from "../utils/obligation.mapper";
@@ -380,18 +381,16 @@ export class ObligationService {
       return null;
     }
 
-    await prisma.auditEvent.create({
-      data: {
-        userId,
-        householdId: corrected.householdId,
-        obligationId: id,
-        eventType: "obligation_corrected",
-        metadata: {
-          correctedFields: Object.keys(updatePayload),
-          reason: input.reason ?? null,
-          dismissPermanently: Boolean(input.dismissPermanently),
-          dontShowSimilar: Boolean(input.dontShowSimilar)
-        }
+    await createAuditEvent({
+      userId,
+      householdId: corrected.householdId,
+      obligationId: id,
+      eventType: "obligation_corrected",
+      metadata: {
+        correctedFields: Object.keys(updatePayload),
+        reason: input.reason ?? null,
+        dismissPermanently: Boolean(input.dismissPermanently),
+        dontShowSimilar: Boolean(input.dontShowSimilar)
       }
     });
 

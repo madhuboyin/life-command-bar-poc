@@ -8,6 +8,7 @@ import {
 } from "@prisma/client";
 import { prisma } from "../clients/prisma.client";
 import type { GuidedJourneyTemplate } from "../types/guided-journey.types";
+import { createAuditEvent } from "../observability/audit-event";
 
 const journeyInclude = {
   obligation: true,
@@ -228,15 +229,15 @@ export class GuidedJourneyRepository {
     tx?: Prisma.TransactionClient
   ) {
     const db = getDb(tx);
-
-    return db.auditEvent.create({
-      data: {
+    return createAuditEvent(
+      {
         userId: input.userId,
         obligationId: input.obligationId,
         eventType: input.eventType,
         metadata: input.metadata
-      }
-    });
+      },
+      db
+    );
   }
 
   async createOutcomeFeedback(

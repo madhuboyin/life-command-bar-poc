@@ -1,5 +1,6 @@
 import { FlowSessionState, FlowSourceType, Prisma } from "@prisma/client";
 import { prisma } from "../clients/prisma.client";
+import { createAuditEvent } from "../observability/audit-event";
 
 const flowSessionInclude = {
   currentObligation: {
@@ -132,14 +133,15 @@ export class FlowSessionRepository {
     tx?: Prisma.TransactionClient
   ) {
     const db = getDb(tx);
-    return db.auditEvent.create({
-      data: {
+    return createAuditEvent(
+      {
         userId: input.userId,
         obligationId: input.obligationId,
         eventType: input.eventType,
         metadata: input.metadata
-      }
-    });
+      },
+      db
+    );
   }
 }
 

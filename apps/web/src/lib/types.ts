@@ -1131,3 +1131,153 @@ export interface CommandExecuteResponse {
     offset: number;
   };
 }
+
+export type AdminTimeBucket = "DAY" | "WEEK" | "MONTH";
+
+export interface AdminPeriodMetrics {
+  bucket: AdminTimeBucket;
+  window: {
+    start: string;
+    end: string;
+  };
+  systemHealth: {
+    ingestionVolume: number;
+    predictionVolume: number;
+    autoFlowVolume: number;
+  };
+  ingestionQuality: {
+    totalIngestions: number;
+    highConfidenceRate: number;
+    mediumConfidenceRate: number;
+    lowConfidenceRate: number;
+    correctedRate: number;
+    rejectedRate: number;
+    duplicateRate: number;
+  };
+  predictionAccuracy: {
+    confirmedRate: number;
+    dismissedRate: number;
+    promotedRate: number;
+    confidenceOutcomeCorrelation: number;
+  };
+  automationPerformance: {
+    acceptedRate: number;
+    dismissedRate: number;
+    ignoredRate: number;
+    avgTimeToActionMinutes: number;
+    autonomySuccessRate: number;
+  };
+  executionLayer: {
+    guidedCompletionRate: number;
+    guidedDropOffRate: number;
+    avgStepsPerSession: number;
+    stepDropOff: Array<{
+      stepKey: string;
+      completionRate: number;
+      completedCount: number;
+    }>;
+  };
+  trustAndCorrection: {
+    correctionsPerSession: number;
+    reviewQueueSize: number;
+    approvalQueueSize: number;
+    rejectionRate: number;
+    correctionRate: number;
+  };
+  householdMetrics: {
+    collaborationEfficiency: number;
+    assignmentBalance: number;
+    assignmentMismatchRate: number;
+    reassignmentFrequency: number;
+    unclaimedItemsRate: number;
+  };
+  autonomySafety: {
+    totalAutoActions: number;
+    undoneRate: number;
+    overriddenRate: number;
+    requiringApprovalRate: number;
+  };
+  qualityScores: {
+    ingestionQualityScore: number;
+    predictionAccuracyScore: number;
+    automationEffectivenessScore: number;
+    trustScore: number;
+  };
+}
+
+export interface AdminMetricsOverviewResponse {
+  generatedAt: string;
+  periods: {
+    day: AdminPeriodMetrics;
+    week: AdminPeriodMetrics;
+    month: AdminPeriodMetrics;
+  };
+  qualityScores: AdminPeriodMetrics["qualityScores"];
+}
+
+export interface AdminMetricSeriesResponse {
+  metricType: string;
+  timeBucket: AdminTimeBucket;
+  points: Array<{
+    timestamp: string;
+    value: number;
+    dimension?: Record<string, unknown> | null;
+  }>;
+}
+
+export interface AdminMetricTrendsResponse {
+  timeBucket: AdminTimeBucket;
+  trends: Array<{
+    metricType: string;
+    points: Array<{
+      timestamp: string;
+      value: number;
+    }>;
+  }>;
+}
+
+export interface AdminObservabilityEvent {
+  id: string;
+  userId: string | null;
+  householdId: string | null;
+  eventType: string;
+  entityType: string | null;
+  entityId: string | null;
+  metadata?: Record<string, unknown> | null;
+  traceId: string | null;
+  correlationId: string | null;
+  sourceAuditEventId: string | null;
+  timestamp: string;
+}
+
+export interface AdminObservabilityEventsResponse {
+  items: AdminObservabilityEvent[];
+  pagination: {
+    limit: number;
+    offset: number;
+    total: number;
+  };
+}
+
+export interface AdminAlertItem {
+  id: string;
+  severity: "LOW" | "MEDIUM" | "HIGH";
+  title: string;
+  description: string;
+  metricType: string;
+  currentValue: number;
+  baselineValue: number | null;
+  threshold: number;
+  timestamp: string;
+}
+
+export interface AdminAlertsResponse {
+  generatedAt: string;
+  alerts: AdminAlertItem[];
+  summary: {
+    total: number;
+    high: number;
+    medium: number;
+    low: number;
+  };
+}

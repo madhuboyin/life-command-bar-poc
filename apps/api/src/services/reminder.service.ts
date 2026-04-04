@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { AutoFlowTriggerType } from "@prisma/client";
 import { prisma } from "../clients/prisma.client";
+import { createAuditEvent } from "../observability/audit-event";
 import { AppError } from "../utils/app-error";
 import { AutoFlowService } from "./auto-flow.service";
 import { ObligationRepository } from "../repositories/obligation.repository";
@@ -45,16 +46,14 @@ export class ReminderService {
       }
     });
 
-    await prisma.auditEvent.create({
-      data: {
-        userId: input.userId,
-        householdId: linkedObligation?.householdId ?? null,
-        obligationId: input.obligationId,
-        eventType: "reminder_created",
-        metadata: {
-          reminderId: reminder.id,
-          scheduledFor: input.scheduledFor
-        }
+    await createAuditEvent({
+      userId: input.userId,
+      householdId: linkedObligation?.householdId ?? null,
+      obligationId: input.obligationId,
+      eventType: "reminder_created",
+      metadata: {
+        reminderId: reminder.id,
+        scheduledFor: input.scheduledFor
       }
     });
 

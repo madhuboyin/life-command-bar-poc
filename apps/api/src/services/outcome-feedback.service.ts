@@ -1,6 +1,7 @@
 import { OutcomeSourceContext, OutcomeType, Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../clients/prisma.client";
+import { createAuditEvent } from "../observability/audit-event";
 import { AppError } from "../utils/app-error";
 import { HomeMemoryService } from "./home-memory.service";
 
@@ -86,18 +87,16 @@ export class OutcomeFeedbackService {
       }
     });
 
-    await prisma.auditEvent.create({
-      data: {
-        userId: input.userId,
-        obligationId,
-        eventType: "outcome_feedback_submitted",
-        metadata: {
-          outcomeFeedbackId: outcomeFeedback.id,
-          sourceContext: input.sourceContext,
-          outcomeType: input.outcomeType,
-          selectedActionKey: input.selectedActionKey,
-          recommendationKey: input.recommendationKey ?? null
-        }
+    await createAuditEvent({
+      userId: input.userId,
+      obligationId,
+      eventType: "outcome_feedback_submitted",
+      metadata: {
+        outcomeFeedbackId: outcomeFeedback.id,
+        sourceContext: input.sourceContext,
+        outcomeType: input.outcomeType,
+        selectedActionKey: input.selectedActionKey,
+        recommendationKey: input.recommendationKey ?? null
       }
     });
 

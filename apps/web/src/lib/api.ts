@@ -1,4 +1,9 @@
 import type {
+  AdminAlertsResponse,
+  AdminMetricsOverviewResponse,
+  AdminMetricSeriesResponse,
+  AdminMetricTrendsResponse,
+  AdminObservabilityEventsResponse,
   AutoFlowListResponse,
   CommandExecuteResponse,
   CommandParseResponse,
@@ -1855,4 +1860,115 @@ export async function trackDailyPulseAction(action: "COMPLETED" | "DISMISSED" | 
     completedCount: number;
     dismissedCount: number;
   }>(res);
+}
+
+export async function getAdminMetrics(params?: {
+  userId?: string;
+  householdId?: string;
+}): Promise<AdminMetricsOverviewResponse> {
+  const query = new URLSearchParams();
+  if (params?.userId) query.set("userId", params.userId);
+  if (params?.householdId) query.set("householdId", params.householdId);
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+
+  const res = await apiFetch(`/admin/metrics${suffix}`, {
+    cache: "no-store"
+  });
+
+  return handleResponse<AdminMetricsOverviewResponse>(res);
+}
+
+export async function getAdminMetricByType(
+  metricType: string,
+  params?: {
+    timeBucket?: "DAY" | "WEEK" | "MONTH";
+    limit?: number;
+    userId?: string;
+    householdId?: string;
+  }
+): Promise<AdminMetricSeriesResponse> {
+  const query = new URLSearchParams();
+  if (params?.timeBucket) query.set("timeBucket", params.timeBucket);
+  if (typeof params?.limit === "number") query.set("limit", String(params.limit));
+  if (params?.userId) query.set("userId", params.userId);
+  if (params?.householdId) query.set("householdId", params.householdId);
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+
+  const res = await apiFetch(`/admin/metrics/${encodeURIComponent(metricType)}${suffix}`, {
+    cache: "no-store"
+  });
+
+  return handleResponse<AdminMetricSeriesResponse>(res);
+}
+
+export async function getAdminMetricTrends(params?: {
+  metricTypes?: string[];
+  timeBucket?: "DAY" | "WEEK" | "MONTH";
+  limit?: number;
+  userId?: string;
+  householdId?: string;
+}): Promise<AdminMetricTrendsResponse> {
+  const query = new URLSearchParams();
+  if (params?.metricTypes?.length) query.set("metricTypes", params.metricTypes.join(","));
+  if (params?.timeBucket) query.set("timeBucket", params.timeBucket);
+  if (typeof params?.limit === "number") query.set("limit", String(params.limit));
+  if (params?.userId) query.set("userId", params.userId);
+  if (params?.householdId) query.set("householdId", params.householdId);
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+
+  const res = await apiFetch(`/admin/metrics/trends${suffix}`, {
+    cache: "no-store"
+  });
+
+  return handleResponse<AdminMetricTrendsResponse>(res);
+}
+
+export async function getAdminEvents(params?: {
+  eventType?: string;
+  entityType?: string;
+  entityId?: string;
+  traceId?: string;
+  correlationId?: string;
+  userId?: string;
+  householdId?: string;
+  start?: string;
+  end?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<AdminObservabilityEventsResponse> {
+  const query = new URLSearchParams();
+  if (params?.eventType) query.set("eventType", params.eventType);
+  if (params?.entityType) query.set("entityType", params.entityType);
+  if (params?.entityId) query.set("entityId", params.entityId);
+  if (params?.traceId) query.set("traceId", params.traceId);
+  if (params?.correlationId) query.set("correlationId", params.correlationId);
+  if (params?.userId) query.set("userId", params.userId);
+  if (params?.householdId) query.set("householdId", params.householdId);
+  if (params?.start) query.set("start", params.start);
+  if (params?.end) query.set("end", params.end);
+  if (typeof params?.limit === "number") query.set("limit", String(params.limit));
+  if (typeof params?.offset === "number") query.set("offset", String(params.offset));
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+
+  const res = await apiFetch(`/admin/events${suffix}`, {
+    cache: "no-store"
+  });
+
+  return handleResponse<AdminObservabilityEventsResponse>(res);
+}
+
+export async function getAdminAlerts(params?: {
+  userId?: string;
+  householdId?: string;
+}): Promise<AdminAlertsResponse> {
+  const query = new URLSearchParams();
+  if (params?.userId) query.set("userId", params.userId);
+  if (params?.householdId) query.set("householdId", params.householdId);
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+
+  const res = await apiFetch(`/admin/alerts${suffix}`, {
+    cache: "no-store"
+  });
+
+  return handleResponse<AdminAlertsResponse>(res);
 }

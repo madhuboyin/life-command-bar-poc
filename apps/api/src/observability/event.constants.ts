@@ -1,0 +1,49 @@
+export const OBSERVABILITY_EVENT_TYPES = {
+  INGESTION_CREATED: "ingestion_created",
+  INGESTION_CORRECTED: "ingestion_corrected",
+  INGESTION_REJECTED: "ingestion_rejected",
+
+  PREDICTION_CREATED: "prediction_created",
+  PREDICTION_CONFIRMED: "prediction_confirmed",
+  PREDICTION_DISMISSED: "prediction_dismissed",
+  PREDICTION_PROMOTED: "prediction_promoted",
+
+  AUTO_FLOW_TRIGGERED: "auto_flow_triggered",
+  AUTO_FLOW_ACCEPTED: "auto_flow_accepted",
+  AUTO_FLOW_DISMISSED: "auto_flow_dismissed",
+
+  GUIDED_STARTED: "guided_started",
+  GUIDED_STEP_COMPLETED: "guided_step_completed",
+  GUIDED_COMPLETED: "guided_completed",
+  GUIDED_ABANDONED: "guided_abandoned",
+
+  OBLIGATION_CREATED: "obligation_created",
+  OBLIGATION_COMPLETED: "obligation_completed",
+  OBLIGATION_POSTPONED: "obligation_postponed",
+  OBLIGATION_DISMISSED: "obligation_dismissed",
+
+  REVIEW_REQUIRED: "review_required",
+  REVIEW_CONFIRMED: "review_confirmed",
+  REVIEW_REJECTED: "review_rejected",
+  CORRECTION_APPLIED: "correction_applied",
+
+  APPROVAL_REQUIRED: "approval_required",
+  APPROVAL_APPROVED: "approval_approved",
+  APPROVAL_REJECTED: "approval_rejected",
+
+  AUTONOMY_ACTION_EXECUTED: "autonomy_action_executed",
+  AUTONOMY_ACTION_UNDONE: "autonomy_action_undone",
+
+  ASSIGNMENT_CHANGED: "assignment_changed",
+  ITEM_CLAIMED: "item_claimed",
+  ITEM_REASSIGNED: "item_reassigned"
+} as const;
+
+export type ObservabilityEventType =
+  (typeof OBSERVABILITY_EVENT_TYPES)[keyof typeof OBSERVABILITY_EVENT_TYPES];
+
+export const EVENT_TYPE_SET = new Set<string>(Object.values(OBSERVABILITY_EVENT_TYPES));
+
+export type TimeBucket = "DAY" | "WEEK" | "MONTH";
+
+export const TIME_BUCKETS: TimeBucket[] = ["DAY", "WEEK", "MONTH"];

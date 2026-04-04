@@ -9,6 +9,7 @@ import {
   ZeroInputDecision
 } from "@prisma/client";
 import { prisma } from "../clients/prisma.client";
+import { createAuditEvent } from "../observability/audit-event";
 
 const obligationSourceInclude = {
   importSource: {
@@ -454,14 +455,15 @@ export class ZeroInputRepository {
     tx?: Prisma.TransactionClient
   ) {
     const db = getDb(tx);
-    return db.auditEvent.create({
-      data: {
+    return createAuditEvent(
+      {
         userId: input.userId,
         obligationId: input.obligationId ?? null,
         eventType: input.eventType,
         metadata: input.metadata
-      }
-    });
+      },
+      db
+    );
   }
 
   async createFeedbackEvent(
