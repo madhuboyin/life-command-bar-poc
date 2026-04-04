@@ -1,11 +1,19 @@
 export type GmailQueryKey =
   | "subscription_renewal"
+  | "subscription_welcome"
+  | "subscription_cancellation"
   | "billing_due"
   | "recurring_receipt";
 
 export type GmailQueryDefinition = {
   key: GmailQueryKey;
-  category: "subscriptions" | "bills" | "renewals" | "receipts";
+  category:
+    | "subscriptions"
+    | "bills"
+    | "renewals"
+    | "receipts"
+    | "cancellations"
+    | "welcome";
   query: string;
 };
 
@@ -23,6 +31,18 @@ const BASE_QUERY_BY_KEY: Record<GmailQueryKey, Omit<GmailQueryDefinition, "query
     category: "subscriptions",
     base:
       'subject:(renew OR renewal OR subscription OR expires OR expiring OR auto-renew OR "membership renewal")'
+  },
+  subscription_welcome: {
+    key: "subscription_welcome",
+    category: "welcome",
+    base:
+      'subject:("welcome to" OR "thanks for subscribing" OR "plan is active" OR "membership confirmed" OR "trial started")'
+  },
+  subscription_cancellation: {
+    key: "subscription_cancellation",
+    category: "cancellations",
+    base:
+      'subject:(cancelled OR canceled OR "will not renew" OR "subscription canceled" OR "subscription cancelled" OR "auto-renew off" OR "membership ends")'
   },
   billing_due: {
     key: "billing_due",
@@ -48,6 +68,24 @@ export class GmailQueryService {
       definitions.push({
         key: item.key,
         category: config.scanRenewals && !config.scanSubscriptions ? "renewals" : item.category,
+        query: `${item.base} ${windowClause}`.trim()
+      });
+    }
+
+    if (config.scanSubscriptions) {
+      const item = BASE_QUERY_BY_KEY.subscription_welcome;
+      definitions.push({
+        key: item.key,
+        category: item.category,
+        query: `${item.base} ${windowClause}`.trim()
+      });
+    }
+
+    if (config.scanSubscriptions || config.scanRenewals) {
+      const item = BASE_QUERY_BY_KEY.subscription_cancellation;
+      definitions.push({
+        key: item.key,
+        category: item.category,
         query: `${item.base} ${windowClause}`.trim()
       });
     }

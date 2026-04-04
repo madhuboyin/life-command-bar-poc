@@ -690,6 +690,10 @@ function buildReviewReasons(item: {
   conflictDetected?: boolean;
   duplicateCandidate?: boolean;
   extractionStatus?: string | null;
+  sourceMetadata?: {
+    sourceSubtype?: string | null;
+    rawData?: unknown;
+  } | null;
 }) {
   const reasons: string[] = [];
 
@@ -700,9 +704,33 @@ function buildReviewReasons(item: {
   if (item.extractionStatus === "PARTIAL") reasons.push("Partial extraction");
   if (item.extractionStatus === "FAILED") reasons.push("Extraction failed");
 
+  if (item.sourceMetadata?.sourceSubtype === "GMAIL_READONLY") {
+    const raw = asRecord(item.sourceMetadata.rawData);
+    const lifecycle = asRecord(raw?.subscriptionLifecycle);
+    const lifecycleType =
+      typeof lifecycle?.lifecycleEmailType === "string"
+        ? lifecycle.lifecycleEmailType.toLowerCase()
+        : null;
+    if (lifecycleType && lifecycleType !== "unknown") {
+      reasons.push(`Detected from Gmail ${lifecycleType} email`);
+    }
+    const lifecycleConfidence = asRecord(lifecycle?.confidence);
+    const lifecycleReviewReasons = Array.isArray(lifecycleConfidence?.reviewReasons)
+      ? lifecycleConfidence.reviewReasons.filter((entry): entry is string => typeof entry === "string")
+      : [];
+    for (const reason of lifecycleReviewReasons) {
+      reasons.push(reason);
+    }
+  }
+
   if (reasons.length === 0) {
     reasons.push("Draft item needs quick review");
   }
 
-  return reasons;
+  return Array.from(new Set(reasons));
+}
+
+function asRecord(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
 }

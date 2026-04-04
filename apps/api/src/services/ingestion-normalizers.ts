@@ -59,6 +59,7 @@ type GmailReadonlyIngestionPayload = {
   labelIds?: string[];
   messageDate?: string | null;
   internalDate?: string | null;
+  subscriptionLifecycle?: Record<string, unknown> | null;
 };
 
 export function normalizeEmailForwardInput(payload: EmailForwardPayload): NormalizedIngestionInput {
@@ -181,7 +182,8 @@ export function normalizeGmailReadonlyInput(
       snippet: snippet || null,
       labelIds: payload.labelIds ?? [],
       messageDate: payload.messageDate ?? null,
-      internalDate: payload.internalDate ?? null
+      internalDate: payload.internalDate ?? null,
+      subscriptionLifecycle: payload.subscriptionLifecycle ?? null
     }
   };
 }

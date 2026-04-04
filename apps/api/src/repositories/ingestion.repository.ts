@@ -308,6 +308,54 @@ export class IngestionRepository {
 
     return null;
   }
+
+  async findPotentialSubscriptionMatches(input: {
+    userId: string;
+    vendor: string;
+    limit?: number;
+  }) {
+    const vendor = input.vendor.trim();
+    if (!vendor) return [];
+
+    return prisma.obligation.findMany({
+      where: {
+        userId: input.userId,
+        type: {
+          in: [ObligationType.SUBSCRIPTION, ObligationType.RENEWAL, ObligationType.BILL]
+        },
+        status: {
+          in: [
+            ObligationStatus.DRAFT,
+            ObligationStatus.ACTIVE,
+            ObligationStatus.POSTPONED,
+            ObligationStatus.RESOLVED
+          ]
+        },
+        OR: [
+          {
+            vendor: {
+              equals: vendor,
+              mode: "insensitive"
+            }
+          },
+          {
+            vendor: {
+              contains: vendor,
+              mode: "insensitive"
+            }
+          },
+          {
+            title: {
+              contains: vendor,
+              mode: "insensitive"
+            }
+          }
+        ]
+      },
+      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+      take: input.limit ?? 20
+    });
+  }
 }
 
 function startOfDayUTC(input: Date) {

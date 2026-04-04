@@ -277,10 +277,30 @@ export class ControlTowerService {
     const obligationItems = reviewQueue.items.map<ControlTowerReviewItem>((item) => {
       const reasons = item.reviewReasons.length > 0 ? item.reviewReasons : ["Needs confirmation"];
       const rawData = asRecord(item.sourceMetadata?.rawData);
+      const lifecycle = asRecord(rawData?.subscriptionLifecycle);
+      const lifecycleExtraction = asRecord(lifecycle?.extraction);
+      const lifecycleEmailType =
+        typeof lifecycle?.lifecycleEmailType === "string"
+          ? lifecycle.lifecycleEmailType
+          : null;
+      const lifecycleReviewReasons = Array.isArray(asRecord(lifecycle?.confidence)?.reviewReasons)
+        ? (asRecord(lifecycle?.confidence)?.reviewReasons as unknown[])
+            .filter((entry): entry is string => typeof entry === "string")
+        : [];
       const extractedFields = {
         ...(asRecord(item.extractedFields) ?? {}),
         ...(typeof rawData?.from === "string" ? { sender: rawData.from } : {}),
-        ...(typeof rawData?.subject === "string" ? { subject: rawData.subject } : {})
+        ...(typeof rawData?.subject === "string" ? { subject: rawData.subject } : {}),
+        ...(lifecycleEmailType ? { lifecycle: lifecycleEmailType } : {}),
+        ...(typeof lifecycleExtraction?.planName === "string"
+          ? { plan: lifecycleExtraction.planName }
+          : {}),
+        ...(typeof lifecycleExtraction?.recurringPrice === "number"
+          ? { recurringPrice: lifecycleExtraction.recurringPrice }
+          : {}),
+        ...(typeof lifecycleExtraction?.amountCharged === "number"
+          ? { amountCharged: lifecycleExtraction.amountCharged }
+          : {})
       };
       return {
         id: `obl:${item.id}`,
@@ -292,7 +312,7 @@ export class ControlTowerService {
         sourceLabel: item.sourceMetadata?.provenanceLabel ?? sourceLabelFromType(item.sourceType),
         confidenceBand: item.confidenceBand,
         confidenceScore: item.confidenceScore,
-        reviewReasons: reasons,
+        reviewReasons: Array.from(new Set([...reasons, ...lifecycleReviewReasons])),
         extractedFields,
         predictedDate: item.dueDate,
         status: item.status,
@@ -499,6 +519,9 @@ export class ControlTowerService {
               "gmail_candidate_skipped",
               "gmail_duplicate_suppressed",
               "gmail_prediction_strengthened",
+              "gmail_subscription_matched_existing",
+              "gmail_subscription_conflict_detected",
+              "gmail_subscription_cancellation_detected",
               "gmail_sync_error",
               "auto_flow_triggered",
               "prediction_rebuilt",
@@ -873,6 +896,61 @@ function toSystemDecisionFromAudit(
       obligationId: event.obligationId,
       referenceId:
         typeof metadata?.gmailMessageId === "string" ? metadata.gmailMessageId : null
+    };
+  }
+
+  if (event.eventType === "gmail_subscription_matched_existing") {
+    return {
+      id: event.id,
+      decisionType: "PREDICTION",
+      title: "Subscription lifecycle matched existing item",
+      explanation:
+        "A Gmail lifecycle email matched an existing subscription, so duplicate creation was suppressed.",
+      sourceSignals: [
+        event.eventType,
+        typeof metadata?.lifecycleEmailType === "string"
+          ? `lifecycle:${String(metadata.lifecycleEmailType).toLowerCase()}`
+          : "lifecycle:unknown"
+      ],
+      createdAt: event.createdAt.toISOString(),
+      obligationId: event.obligationId,
+      referenceId: typeof metadata?.importSourceId === "string" ? metadata.importSourceId : null
+    };
+  }
+
+  if (event.eventType === "gmail_subscription_conflict_detected") {
+    return {
+      id: event.id,
+      decisionType: "ROUTING",
+      title: "Conflicting subscription lifecycle signal",
+      explanation:
+        "A Gmail lifecycle signal conflicted with existing subscription state and was routed for review.",
+      sourceSignals: [
+        event.eventType,
+        typeof metadata?.reason === "string" ? metadata.reason : "lifecycle_conflict"
+      ],
+      createdAt: event.createdAt.toISOString(),
+      obligationId: event.obligationId,
+      referenceId: typeof metadata?.importSourceId === "string" ? metadata.importSourceId : null
+    };
+  }
+
+  if (event.eventType === "gmail_subscription_cancellation_detected") {
+    return {
+      id: event.id,
+      decisionType: "SUPPRESSION",
+      title: "Cancellation signal applied",
+      explanation:
+        "A Gmail cancellation email reduced future recurring expectations for this subscription.",
+      sourceSignals: [
+        event.eventType,
+        typeof metadata?.autoRenewStatus === "string"
+          ? `auto_renew:${String(metadata.autoRenewStatus).toLowerCase()}`
+          : "auto_renew:unknown"
+      ],
+      createdAt: event.createdAt.toISOString(),
+      obligationId: event.obligationId,
+      referenceId: typeof metadata?.importSourceId === "string" ? metadata.importSourceId : null
     };
   }
 

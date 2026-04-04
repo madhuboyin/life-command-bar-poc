@@ -21,6 +21,7 @@ import {
 } from "../repositories/ingestion.repository";
 import {
   classifyObligationType,
+  type ClassificationResult,
   type SupportedObligationType
 } from "./ingestion.classifier";
 import {
@@ -28,7 +29,7 @@ import {
   type ConfidenceBand,
   type ConfidenceEvaluation
 } from "./ingestion.confidence";
-import { extractStructuredFields } from "./ingestion.extractor";
+import { extractStructuredFields, type ExtractedFields } from "./ingestion.extractor";
 import {
   normalizeCommandCaptureInput,
   normalizeEmailForwardInput,
@@ -36,6 +37,7 @@ import {
   normalizeUploadInput,
   type NormalizedIngestionInput
 } from "./ingestion-normalizers";
+import type { GmailSubscriptionHeuristicResult } from "./gmail-subscription-heuristics";
 import { AutoFlowService } from "./auto-flow.service";
 import { HomeMemoryService } from "./home-memory.service";
 import { PredictionEngineService } from "./prediction-engine.service";
@@ -73,7 +75,8 @@ const gmailReadonlySchema = z.object({
   snippet: z.string().nullable().optional(),
   labelIds: z.array(z.string()).optional(),
   messageDate: z.string().nullable().optional(),
-  internalDate: z.string().nullable().optional()
+  internalDate: z.string().nullable().optional(),
+  subscriptionLifecycle: z.record(z.string(), z.unknown()).nullable().optional()
 });
 
 const commandCaptureSchema = z.object({
@@ -275,6 +278,21 @@ export class IngestionService {
           action: "confirmed"
         }
       });
+
+      const lifecycle = getGmailSubscriptionLifecycleMetadata(
+        asRecord(updated.importSource.rawData) ?? {}
+      );
+      if (lifecycle && lifecycle.lifecycleEmailType !== "UNKNOWN") {
+        await this.repository.createAuditEvent({
+          userId,
+          obligationId,
+          eventType: "gmail_subscription_review_confirmed",
+          metadata: {
+            lifecycleEmailType: lifecycle.lifecycleEmailType,
+            confidenceBand: lifecycle.confidence.confidenceBand
+          }
+        });
+      }
     }
 
     await this.captureMemorySignal({
@@ -350,6 +368,21 @@ export class IngestionService {
           reason: input.reason ?? null
         }
       });
+
+      const lifecycle = getGmailSubscriptionLifecycleMetadata(
+        asRecord(updated.importSource.rawData) ?? {}
+      );
+      if (lifecycle && lifecycle.lifecycleEmailType !== "UNKNOWN") {
+        await this.repository.createAuditEvent({
+          userId,
+          obligationId,
+          eventType: "gmail_subscription_review_rejected",
+          metadata: {
+            lifecycleEmailType: lifecycle.lifecycleEmailType,
+            reason: input.reason ?? null
+          }
+        });
+      }
     }
 
     await this.captureMemorySignal({
@@ -496,9 +529,15 @@ export class IngestionService {
       return duplicateResult;
     }
 
-    const classification = classifyObligationType(
+    const gmailSubscriptionLifecycle = getGmailSubscriptionLifecycleMetadata(normalized.metadata);
+
+    const baseClassification = classifyObligationType(
       normalized.normalizedText,
       normalized.titleHint
+    );
+    const classification = applyGmailLifecycleClassificationHint(
+      baseClassification,
+      gmailSubscriptionLifecycle
     );
 
     await this.repository.createAuditEvent({
@@ -509,11 +548,13 @@ export class IngestionService {
         type: classification.type,
         confidence: classification.confidence,
         scores: classification.scores,
-        matchedIndicators: classification.matchedIndicators
+        matchedIndicators: classification.matchedIndicators,
+        gmailLifecycleEmailType: gmailSubscriptionLifecycle?.lifecycleEmailType ?? null,
+        gmailLifecycleConfidence: gmailSubscriptionLifecycle?.confidence.confidenceScore ?? null
       }
     });
 
-    const extracted = extractStructuredFields({
+    const baseExtracted = extractStructuredFields({
       channel: normalized.channel,
       classificationType: classification.type,
       rawText: normalized.rawText,
@@ -522,13 +563,192 @@ export class IngestionService {
       metadata: normalized.metadata,
       now: new Date()
     });
+    const extracted = applyGmailLifecycleExtractionHint(baseExtracted, gmailSubscriptionLifecycle);
 
-    const confidence = evaluateIngestionConfidence({
+    const baseConfidence = evaluateIngestionConfidence({
       channel: normalized.channel,
       classification,
       extracted,
       hasUsableText: options.hasUsableText
     });
+    const confidence = applyGmailLifecycleConfidenceHint(baseConfidence, gmailSubscriptionLifecycle);
+
+    const existingLifecycleMatch =
+      normalized.channel === "EMAIL_GMAIL" && gmailSubscriptionLifecycle
+        ? await this.findLifecycleExistingMatch(normalized.userId, gmailSubscriptionLifecycle)
+        : null;
+
+    if (
+      existingLifecycleMatch &&
+      gmailSubscriptionLifecycle &&
+      shouldSuppressForLifecycleMatch(gmailSubscriptionLifecycle, confidence)
+    ) {
+      const lifecycle = gmailSubscriptionLifecycle;
+      const lifecycleUpdateData = buildLifecycleObligationUpdate({
+        existing: existingLifecycleMatch,
+        lifecycle
+      });
+
+      const updatedExisting =
+        lifecycleUpdateData && Object.keys(lifecycleUpdateData).length > 0
+          ? await this.repository.updateObligationForUser({
+              obligationId: existingLifecycleMatch.id,
+              userId: normalized.userId,
+              data: lifecycleUpdateData
+            })
+          : existingLifecycleMatch;
+
+      const lifecycleConflict = detectLifecycleConflict(
+        lifecycle,
+        updatedExisting ?? existingLifecycleMatch
+      );
+
+      const lifecycleConfidence = Math.max(
+        confidence.score,
+        lifecycle.confidence.confidenceScore
+      );
+
+      await this.repository.updateImportSourceParseResult({
+        importSourceId: importSource.id,
+        parseStatus: lifecycleConflict
+          ? ImportParseStatus.NEEDS_CONFIRMATION
+          : ImportParseStatus.REJECTED,
+        parseConfidence: lifecycleConfidence,
+        extractionSummary: {
+          classification,
+          extracted,
+          confidence: {
+            score: lifecycleConfidence,
+            band: toConfidenceBand(lifecycleConfidence),
+            rationale: confidence.rationale
+          },
+          gmailSubscriptionLifecycle: summarizeGmailLifecycle(lifecycle),
+          validation: {
+            duplicateCandidate: true,
+            conflictDetected: lifecycleConflict,
+            duplicateOfObligationId: existingLifecycleMatch.id,
+            conflictWithObligationId: lifecycleConflict ? existingLifecycleMatch.id : null,
+            reason: "matched_existing_subscription_lifecycle"
+          }
+        }
+      });
+
+      await this.repository.createAuditEvent({
+        userId: normalized.userId,
+        obligationId: existingLifecycleMatch.id,
+        eventType: "gmail_subscription_matched_existing",
+        metadata: {
+          importSourceId: importSource.id,
+          lifecycleEmailType: lifecycle.lifecycleEmailType,
+          lifecycleConfidence: lifecycle.confidence.confidenceScore,
+          vendor: lifecycle.extraction.vendor,
+          planName: lifecycle.extraction.planName
+        }
+      });
+
+      if (lifecycleConflict) {
+        await this.repository.createAuditEvent({
+          userId: normalized.userId,
+          obligationId: existingLifecycleMatch.id,
+          eventType: "gmail_subscription_conflict_detected",
+          metadata: {
+            importSourceId: importSource.id,
+            lifecycleEmailType: lifecycle.lifecycleEmailType,
+            reason: "lifecycle_conflicts_with_existing_state"
+          }
+        });
+      }
+
+      if (lifecycle.lifecycleEmailType === "CANCELLATION") {
+        await this.repository.createAuditEvent({
+          userId: normalized.userId,
+          obligationId: existingLifecycleMatch.id,
+          eventType: "gmail_subscription_cancellation_detected",
+          metadata: {
+            importSourceId: importSource.id,
+            effectiveDate: lifecycle.extraction.cancellationEffectiveDate ?? null,
+            autoRenewStatus: lifecycle.extraction.autoRenewStatus
+          }
+        });
+      }
+
+      await this.captureMemorySignal({
+        userId: normalized.userId,
+        sourceType: "INGESTION",
+        referenceId: existingLifecycleMatch.id,
+        eventType: "gmail_subscription_matched_existing",
+        metadata: {
+          importSourceId: importSource.id,
+          lifecycleEmailType: lifecycle.lifecycleEmailType
+        }
+      });
+
+      await this.predictionEngineService
+        .resolveWithObligation({
+          userId: normalized.userId,
+          obligationId: existingLifecycleMatch.id,
+          obligationType: existingLifecycleMatch.type,
+          vendor: existingLifecycleMatch.vendor,
+          dueDate: existingLifecycleMatch.dueDate
+        })
+        .catch(() => null);
+
+      const existingAmount = decimalToNumber(updatedExisting?.amount ?? existingLifecycleMatch.amount);
+      const existingDueDate =
+        (updatedExisting?.dueDate ?? existingLifecycleMatch.dueDate)?.toISOString() ?? null;
+
+      const duplicateResult: IngestionResult = {
+        importSourceId: importSource.id,
+        candidateId: existingLifecycleMatch.id,
+        obligationId: existingLifecycleMatch.id,
+        status: "DUPLICATE",
+        parseStatus: lifecycleConflict
+          ? ImportParseStatus.NEEDS_CONFIRMATION
+          : ImportParseStatus.REJECTED,
+        confidence: lifecycleConfidence,
+        confidenceBand: toConfidenceBand(lifecycleConfidence),
+        needsConfirmation: lifecycleConflict,
+        needsReview: lifecycleConflict || confidence.band !== "HIGH",
+        isDuplicate: true,
+        duplicateCandidate: true,
+        conflictDetected: lifecycleConflict,
+        duplicateOfObligationId: existingLifecycleMatch.id,
+        conflictWithObligationId: lifecycleConflict ? existingLifecycleMatch.id : null,
+        extracted: {
+          type: existingLifecycleMatch.type,
+          title: updatedExisting?.title ?? existingLifecycleMatch.title,
+          vendor: updatedExisting?.vendor ?? existingLifecycleMatch.vendor,
+          amount: existingAmount,
+          currency: updatedExisting?.currency ?? existingLifecycleMatch.currency,
+          dueDate: existingDueDate,
+          recurrence: updatedExisting?.recurrence ?? existingLifecycleMatch.recurrence,
+          description: updatedExisting?.description ?? existingLifecycleMatch.description
+        }
+      };
+
+      await this.zeroInputService
+        .evaluateIngestionResult({
+          userId: normalized.userId,
+          channel: normalized.channel,
+          importSourceId: importSource.id,
+          obligationId: duplicateResult.obligationId,
+          status: duplicateResult.status,
+          confidence: duplicateResult.confidence,
+          duplicateCandidate: true,
+          conflictDetected: lifecycleConflict,
+          needsReview: duplicateResult.needsReview,
+          extracted: {
+            type: duplicateResult.extracted.type,
+            title: duplicateResult.extracted.title,
+            vendor: duplicateResult.extracted.vendor,
+            amount: duplicateResult.extracted.amount,
+            dueDate: duplicateResult.extracted.dueDate
+          }
+        })
+        .catch(() => null);
+
+      return duplicateResult;
+    }
 
     const structuredDuplicate = await this.repository.findDuplicateByStructuredFields({
       userId: normalized.userId,
@@ -551,6 +771,7 @@ export class IngestionService {
             band: confidence.band,
             rationale: confidence.rationale
           },
+          gmailSubscriptionLifecycle: summarizeGmailLifecycle(gmailSubscriptionLifecycle),
           validation: {
             duplicateCandidate: true,
             conflictDetected: false,
@@ -657,6 +878,7 @@ export class IngestionService {
           band: guardedConfidence.band,
           rationale: guardedConfidence.rationale
         },
+        gmailSubscriptionLifecycle: summarizeGmailLifecycle(gmailSubscriptionLifecycle),
         validation: {
           duplicateCandidate: false,
           conflictDetected,
@@ -676,17 +898,37 @@ export class IngestionService {
         band: guardedConfidence.band,
         parseStatus: guardedConfidence.importParseStatus,
         conflictDetected,
-        conflictWithObligationId: conflictMatch?.obligationId ?? null
+        conflictWithObligationId: conflictMatch?.obligationId ?? null,
+        gmailLifecycleEmailType: gmailSubscriptionLifecycle?.lifecycleEmailType ?? null
       }
     });
 
+    if (conflictDetected && gmailSubscriptionLifecycle) {
+      await this.repository.createAuditEvent({
+        userId: normalized.userId,
+        obligationId: conflictMatch?.obligationId ?? undefined,
+        eventType: "gmail_subscription_conflict_detected",
+        metadata: {
+          importSourceId: importSource.id,
+          lifecycleEmailType: gmailSubscriptionLifecycle.lifecycleEmailType,
+          reason: conflictMatch?.reason ?? "conflicting_signal_detected"
+        }
+      });
+    }
+
     if (!guardedConfidence.shouldCreateObligation || !guardedConfidence.obligationStatus) {
+      const skippedReason = conflictDetected
+        ? "conflict_detected"
+        : gmailSubscriptionLifecycle?.confidence.shouldIgnore
+          ? "gmail_lifecycle_low_signal"
+          : "insufficient_confidence";
+
       await this.repository.createAuditEvent({
         userId: normalized.userId,
         eventType: "ingestion_candidate_skipped",
         metadata: {
           importSourceId: importSource.id,
-          reason: conflictDetected ? "conflict_detected" : "insufficient_confidence"
+          reason: skippedReason
         }
       });
 
@@ -697,7 +939,7 @@ export class IngestionService {
         eventType: "ingestion_candidate_skipped",
         metadata: {
           conflictDetected,
-          reason: conflictDetected ? "conflict_detected" : "insufficient_confidence"
+          reason: skippedReason
         }
       });
 
@@ -786,7 +1028,8 @@ export class IngestionService {
         importSourceId: importSource.id,
         obligationStatus,
         confidenceBand: guardedConfidence.band,
-        needsConfirmation: guardedConfidence.needsConfirmation
+        needsConfirmation: guardedConfidence.needsConfirmation,
+        gmailLifecycleEmailType: gmailSubscriptionLifecycle?.lifecycleEmailType ?? null
       }
     });
 
@@ -800,7 +1043,8 @@ export class IngestionService {
         confidence: guardedConfidence.score,
         confidenceBand: guardedConfidence.band,
         conflictDetected,
-        conflictWithObligationId: conflictMatch?.obligationId ?? null
+        conflictWithObligationId: conflictMatch?.obligationId ?? null,
+        gmailLifecycleEmailType: gmailSubscriptionLifecycle?.lifecycleEmailType ?? null
       }
     });
 
@@ -891,6 +1135,41 @@ export class IngestionService {
       .catch(() => null);
   }
 
+  private async findLifecycleExistingMatch(
+    userId: string,
+    lifecycle: GmailSubscriptionHeuristicResult
+  ) {
+    const vendor = lifecycle.extraction.vendor?.trim();
+    if (!vendor) return null;
+
+    const candidates = await this.repository.findPotentialSubscriptionMatches({
+      userId,
+      vendor,
+      limit: 25
+    });
+
+    if (candidates.length === 0) {
+      return null;
+    }
+
+    let bestMatch: (typeof candidates)[number] | null = null;
+    let bestScore = 0;
+
+    for (const candidate of candidates) {
+      const score = scoreLifecycleMatchCandidate(candidate, lifecycle);
+      if (score > bestScore) {
+        bestScore = score;
+        bestMatch = candidate;
+      }
+    }
+
+    if (!bestMatch || bestScore < 0.58) {
+      return null;
+    }
+
+    return bestMatch;
+  }
+
   private buildObligationPayload(input: {
     userId: string;
     importSourceId: string;
@@ -929,6 +1208,440 @@ export class IngestionService {
       status: input.sourceStatus
     };
   }
+}
+
+function getGmailSubscriptionLifecycleMetadata(
+  metadata: Record<string, unknown>
+): GmailSubscriptionHeuristicResult | null {
+  const raw = asRecord(metadata.subscriptionLifecycle);
+  if (!raw) return null;
+
+  const lifecycleEmailType = asString(raw.lifecycleEmailType);
+  const classification = asRecord(raw.classification);
+  const extraction = asRecord(raw.extraction);
+  const confidence = asRecord(raw.confidence);
+
+  if (!lifecycleEmailType || !classification || !extraction || !confidence) {
+    return null;
+  }
+
+  if (
+    lifecycleEmailType !== "WELCOME" &&
+    lifecycleEmailType !== "RENEWAL" &&
+    lifecycleEmailType !== "RECEIPT" &&
+    lifecycleEmailType !== "CANCELLATION" &&
+    lifecycleEmailType !== "UNKNOWN"
+  ) {
+    return null;
+  }
+
+  return raw as GmailSubscriptionHeuristicResult;
+}
+
+function applyGmailLifecycleClassificationHint(
+  classification: ClassificationResult,
+  lifecycle: GmailSubscriptionHeuristicResult | null
+): ClassificationResult {
+  if (!lifecycle || lifecycle.lifecycleEmailType === "UNKNOWN") {
+    return classification;
+  }
+
+  const nextScores = {
+    ...classification.scores
+  };
+  const nextIndicators = {
+    ...classification.matchedIndicators,
+    SUBSCRIPTION: [...classification.matchedIndicators.SUBSCRIPTION],
+    RENEWAL: [...classification.matchedIndicators.RENEWAL],
+    BILL: [...classification.matchedIndicators.BILL],
+    COMMITMENT: [...classification.matchedIndicators.COMMITMENT]
+  };
+
+  let nextType = classification.type;
+  if (lifecycle.lifecycleEmailType === "RENEWAL") {
+    nextType = "RENEWAL";
+    nextScores.RENEWAL += 0.85;
+    nextIndicators.RENEWAL.push("gmail_lifecycle:renewal");
+  } else if (
+    lifecycle.lifecycleEmailType === "WELCOME" ||
+    lifecycle.lifecycleEmailType === "RECEIPT" ||
+    lifecycle.lifecycleEmailType === "CANCELLATION"
+  ) {
+    nextType = "SUBSCRIPTION";
+    nextScores.SUBSCRIPTION += lifecycle.lifecycleEmailType === "RECEIPT" ? 0.8 : 0.72;
+    nextIndicators.SUBSCRIPTION.push(
+      `gmail_lifecycle:${lifecycle.lifecycleEmailType.toLowerCase()}`
+    );
+  }
+
+  const nextConfidence = clamp(
+    Math.max(classification.confidence, lifecycle.classification.classConfidence),
+    0,
+    1
+  );
+
+  return {
+    type: nextType,
+    confidence: nextConfidence,
+    scores: nextScores,
+    matchedIndicators: nextIndicators
+  };
+}
+
+function applyGmailLifecycleExtractionHint(
+  extracted: ExtractedFields,
+  lifecycle: GmailSubscriptionHeuristicResult | null
+): ExtractedFields {
+  if (!lifecycle || lifecycle.lifecycleEmailType === "UNKNOWN") {
+    return extracted;
+  }
+
+  const vendor = lifecycle.extraction.vendor ?? extracted.vendor;
+  const amount =
+    lifecycle.extraction.amountCharged ??
+    lifecycle.extraction.recurringPrice ??
+    lifecycle.extraction.introPrice ??
+    extracted.amount;
+  const currency = lifecycle.extraction.currency ?? extracted.currency;
+  const dueDate =
+    lifecycle.extraction.renewalDate ??
+    lifecycle.extraction.cancellationEffectiveDate ??
+    lifecycle.extraction.trialEndDate ??
+    extracted.dueDate;
+  const recurrence =
+    mapLifecycleBillingPeriodToRecurrence(lifecycle.extraction.billingPeriod) ??
+    extracted.recurrence;
+
+  const title =
+    lifecycle.extraction.subscriptionName ??
+    lifecycle.extraction.planName ??
+    extracted.title;
+  const description = mergeDescription(
+    extracted.description,
+    `Detected from Gmail ${lifecycle.lifecycleEmailType.toLowerCase()} email`
+  );
+
+  const type =
+    lifecycle.lifecycleEmailType === "RENEWAL"
+      ? "RENEWAL"
+      : lifecycle.lifecycleEmailType === "WELCOME" ||
+          lifecycle.lifecycleEmailType === "RECEIPT" ||
+          lifecycle.lifecycleEmailType === "CANCELLATION"
+        ? "SUBSCRIPTION"
+        : extracted.type;
+
+  return {
+    ...extracted,
+    type,
+    title,
+    description,
+    vendor,
+    amount,
+    currency,
+    dueDate,
+    recurrence,
+    fieldConfidence: {
+      ...extracted.fieldConfidence,
+      title: title ? Math.max(extracted.fieldConfidence.title, 0.78) : extracted.fieldConfidence.title,
+      vendor: vendor ? Math.max(extracted.fieldConfidence.vendor, 0.78) : extracted.fieldConfidence.vendor,
+      amount: amount !== null ? Math.max(extracted.fieldConfidence.amount, 0.7) : extracted.fieldConfidence.amount,
+      dueDate: dueDate ? Math.max(extracted.fieldConfidence.dueDate, 0.72) : extracted.fieldConfidence.dueDate,
+      recurrence:
+        recurrence ? Math.max(extracted.fieldConfidence.recurrence, 0.7) : extracted.fieldConfidence.recurrence
+    }
+  };
+}
+
+function applyGmailLifecycleConfidenceHint(
+  confidence: ConfidenceEvaluation,
+  lifecycle: GmailSubscriptionHeuristicResult | null
+): ConfidenceEvaluation {
+  if (!lifecycle) return confidence;
+
+  const lifecycleScore = lifecycle.confidence.confidenceScore;
+  const mergedScore = clamp(confidence.score * 0.62 + lifecycleScore * 0.38, 0, 1);
+  const mergedBand = mergedScore >= 0.78 ? "HIGH" : mergedScore >= 0.48 ? "MEDIUM" : "LOW";
+  const mergedRationale = Array.from(
+    new Set([
+      ...confidence.rationale,
+      ...lifecycle.confidence.rationaleSignals,
+      ...lifecycle.confidence.reviewReasons
+    ])
+  );
+
+  if (lifecycle.confidence.shouldIgnore && mergedScore < 0.5) {
+    return {
+      ...confidence,
+      score: mergedScore,
+      band: mergedBand,
+      needsConfirmation: true,
+      shouldCreateObligation: false,
+      importParseStatus: ImportParseStatus.PARTIAL,
+      obligationStatus: null,
+      rationale: mergedRationale
+    };
+  }
+
+  if (mergedScore >= 0.78 && lifecycle.confidence.confidenceBand === "HIGH") {
+    return {
+      ...confidence,
+      score: mergedScore,
+      band: "HIGH",
+      needsConfirmation: false,
+      shouldCreateObligation: true,
+      importParseStatus: ImportParseStatus.READY,
+      obligationStatus: ObligationStatus.ACTIVE,
+      rationale: mergedRationale
+    };
+  }
+
+  if (mergedScore >= 0.48) {
+    return {
+      ...confidence,
+      score: mergedScore,
+      band: mergedBand,
+      needsConfirmation: true,
+      shouldCreateObligation: true,
+      importParseStatus: ImportParseStatus.NEEDS_CONFIRMATION,
+      obligationStatus: ObligationStatus.DRAFT,
+      rationale: mergedRationale
+    };
+  }
+
+  return {
+    ...confidence,
+    score: mergedScore,
+    band: mergedBand,
+    needsConfirmation: true,
+    shouldCreateObligation: confidence.shouldCreateObligation,
+    importParseStatus: confidence.shouldCreateObligation
+      ? ImportParseStatus.NEEDS_CONFIRMATION
+      : ImportParseStatus.PARTIAL,
+    obligationStatus: confidence.shouldCreateObligation ? ObligationStatus.DRAFT : null,
+    rationale: mergedRationale
+  };
+}
+
+function shouldSuppressForLifecycleMatch(
+  lifecycle: GmailSubscriptionHeuristicResult,
+  confidence: ConfidenceEvaluation
+) {
+  if (lifecycle.lifecycleEmailType === "UNKNOWN") return false;
+  if (lifecycle.confidence.confidenceBand === "LOW") return false;
+  if (lifecycle.lifecycleEmailType === "CANCELLATION") {
+    return lifecycle.confidence.confidenceScore >= 0.56;
+  }
+  return confidence.score >= 0.48 || lifecycle.confidence.confidenceScore >= 0.58;
+}
+
+function scoreLifecycleMatchCandidate(
+  candidate: {
+    title: string;
+    vendor: string | null;
+    amount: Prisma.Decimal | null;
+    recurrence: string | null;
+    status: ObligationStatus;
+  },
+  lifecycle: GmailSubscriptionHeuristicResult
+) {
+  const vendor = lifecycle.extraction.vendor;
+  if (!vendor) return 0;
+
+  let score = 0;
+  const incomingVendor = normalizeKey(vendor);
+  const candidateVendor = normalizeKey(candidate.vendor ?? "");
+  if (incomingVendor && candidateVendor) {
+    if (incomingVendor === candidateVendor) score += 0.56;
+    else if (candidateVendor.includes(incomingVendor) || incomingVendor.includes(candidateVendor)) {
+      score += 0.42;
+    }
+  }
+
+  const planName = lifecycle.extraction.planName;
+  if (planName && candidate.title.toLowerCase().includes(planName.toLowerCase())) {
+    score += 0.22;
+  }
+
+  const incomingAmount =
+    lifecycle.extraction.recurringPrice ??
+    lifecycle.extraction.amountCharged ??
+    lifecycle.extraction.introPrice;
+  const candidateAmount = decimalToNumber(candidate.amount);
+  if (
+    incomingAmount !== null &&
+    candidateAmount !== null &&
+    Math.abs(incomingAmount - candidateAmount) <= 0.51
+  ) {
+    score += 0.18;
+  }
+
+  if (
+    lifecycle.extraction.billingPeriod !== "UNKNOWN" &&
+    candidate.recurrence &&
+    candidate.recurrence.toLowerCase().includes(lifecycle.extraction.billingPeriod.toLowerCase())
+  ) {
+    score += 0.1;
+  }
+
+  if (candidate.status === ObligationStatus.IGNORED) {
+    score -= 0.18;
+  }
+
+  return clamp(score, 0, 1);
+}
+
+function buildLifecycleObligationUpdate(input: {
+  existing: {
+    title: string;
+    amount: Prisma.Decimal | null;
+    currency: string | null;
+    dueDate: Date | null;
+    recurrence: string | null;
+    status: ObligationStatus;
+  };
+  lifecycle: GmailSubscriptionHeuristicResult;
+}): Prisma.ObligationUpdateInput | null {
+  const data: Prisma.ObligationUpdateInput = {};
+  const nextAmount =
+    input.lifecycle.extraction.amountCharged ??
+    input.lifecycle.extraction.recurringPrice ??
+    input.lifecycle.extraction.introPrice;
+
+  if (input.existing.amount === null && nextAmount !== null) {
+    data.amount = nextAmount;
+  }
+  if (!input.existing.currency && input.lifecycle.extraction.currency) {
+    data.currency = input.lifecycle.extraction.currency;
+  }
+
+  const candidateDueDate = parseLifecycleDueDate(input.lifecycle);
+  if (!input.existing.dueDate && candidateDueDate) {
+    data.dueDate = candidateDueDate;
+  }
+
+  const recurrence = mapLifecycleBillingPeriodToRecurrence(input.lifecycle.extraction.billingPeriod);
+  if (!input.existing.recurrence && recurrence) {
+    data.recurrence = recurrence;
+  }
+
+  if (
+    isGenericTitle(input.existing.title) &&
+    input.lifecycle.extraction.subscriptionName &&
+    input.lifecycle.extraction.subscriptionName.length > 2
+  ) {
+    data.title = input.lifecycle.extraction.subscriptionName;
+  }
+
+  const cancellationDetected =
+    input.lifecycle.lifecycleEmailType === "CANCELLATION" &&
+    (input.lifecycle.confidence.confidenceScore >= 0.72 ||
+      input.lifecycle.extraction.autoRenewStatus === "OFF" ||
+      Boolean(input.lifecycle.extraction.cancellationEffectiveDate));
+
+  if (cancellationDetected && input.existing.status !== ObligationStatus.RESOLVED) {
+    data.status = ObligationStatus.RESOLVED;
+    data.lastActedAt = new Date();
+  }
+
+  return Object.keys(data).length > 0 ? data : null;
+}
+
+function detectLifecycleConflict(
+  lifecycle: GmailSubscriptionHeuristicResult,
+  existing: {
+    status: ObligationStatus;
+    recurrence: string | null;
+    dueDate: Date | null;
+  }
+) {
+  if (
+    lifecycle.lifecycleEmailType === "CANCELLATION" &&
+    existing.status === ObligationStatus.ACTIVE &&
+    existing.recurrence
+  ) {
+    const effectiveDate = parseLifecycleDueDate(lifecycle);
+    if (effectiveDate && existing.dueDate && existing.dueDate.getTime() > effectiveDate.getTime()) {
+      return true;
+    }
+  }
+
+  if (
+    (lifecycle.lifecycleEmailType === "RECEIPT" || lifecycle.lifecycleEmailType === "RENEWAL") &&
+    existing.status === ObligationStatus.RESOLVED
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function summarizeGmailLifecycle(lifecycle: GmailSubscriptionHeuristicResult | null) {
+  if (!lifecycle) return null;
+
+  return {
+    lifecycleEmailType: lifecycle.lifecycleEmailType,
+    subscriptionLikelihood: lifecycle.classification.subscriptionLikelihood,
+    classConfidence: lifecycle.classification.classConfidence,
+    confidenceScore: lifecycle.confidence.confidenceScore,
+    confidenceBand: lifecycle.confidence.confidenceBand,
+    rationaleSignals: lifecycle.confidence.rationaleSignals,
+    reviewReasons: lifecycle.confidence.reviewReasons,
+    extraction: lifecycle.extraction
+  };
+}
+
+function parseLifecycleDueDate(lifecycle: GmailSubscriptionHeuristicResult) {
+  const value =
+    lifecycle.extraction.renewalDate ??
+    lifecycle.extraction.cancellationEffectiveDate ??
+    lifecycle.extraction.trialEndDate ??
+    lifecycle.extraction.receiptDate;
+  if (!value) return null;
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+}
+
+function mapLifecycleBillingPeriodToRecurrence(value: string) {
+  if (value === "MONTHLY") return "MONTHLY";
+  if (value === "YEARLY") return "YEARLY";
+  if (value === "QUARTERLY") return "QUARTERLY";
+  return null;
+}
+
+function mergeDescription(current: string | null, next: string) {
+  if (!current) return next;
+  if (current.toLowerCase().includes(next.toLowerCase())) return current;
+  return `${current}. ${next}`;
+}
+
+function isGenericTitle(value: string | null) {
+  if (!value) return true;
+  const normalized = value.toLowerCase();
+  return (
+    normalized.includes("obligation") ||
+    normalized === "subscription" ||
+    normalized === "renewal" ||
+    normalized === "bill"
+  );
+}
+
+function asRecord(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function asString(value: unknown) {
+  return typeof value === "string" ? value : null;
+}
+
+function normalizeKey(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 80);
 }
 
 function toOptionalDate(value: string | null | undefined) {

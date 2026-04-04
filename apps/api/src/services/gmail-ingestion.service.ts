@@ -5,6 +5,7 @@ import {
   NormalizedGmailMessage
 } from "./gmail-message-normalizer";
 import { GmailDedupeService } from "./gmail-dedupe.service";
+import { runGmailSubscriptionHeuristics } from "./gmail-subscription-heuristics";
 
 export type GmailMessageIngestionResult = {
   skippedAsExactDuplicate: boolean;
@@ -23,6 +24,33 @@ export class GmailIngestionService {
     matchedQueryKey: string;
     normalizedMessage: NormalizedGmailMessage;
   }): Promise<GmailMessageIngestionResult> {
+    const lifecycle = runGmailSubscriptionHeuristics({
+      subject: input.normalizedMessage.subject,
+      from: input.normalizedMessage.from,
+      bodyText: input.normalizedMessage.bodyText,
+      snippet: input.normalizedMessage.snippet,
+      messageDate: input.normalizedMessage.messageDate,
+      matchedQueryKey: input.matchedQueryKey
+    });
+
+    await this.externalAccountRepository.createAuditEvent({
+      userId: input.userId,
+      eventType: "gmail_subscription_lifecycle_classified",
+      metadata: {
+        externalConnectionId: input.externalConnectionId,
+        gmailMessageId: input.normalizedMessage.gmailMessageId,
+        gmailThreadId: input.normalizedMessage.gmailThreadId,
+        matchedQueryKey: input.matchedQueryKey,
+        lifecycleEmailType: lifecycle.lifecycleEmailType,
+        subscriptionLikelihood: lifecycle.classification.subscriptionLikelihood,
+        classConfidence: lifecycle.classification.classConfidence,
+        confidenceScore: lifecycle.confidence.confidenceScore,
+        confidenceBand: lifecycle.confidence.confidenceBand,
+        rationaleSignals: lifecycle.confidence.rationaleSignals,
+        reviewReasons: lifecycle.confidence.reviewReasons
+      }
+    });
+
     const existing = await this.externalAccountRepository.findMessageIngestion(
       input.externalConnectionId,
       input.normalizedMessage.gmailMessageId
@@ -60,7 +88,8 @@ export class GmailIngestionService {
       snippet: input.normalizedMessage.snippet,
       labelIds: input.normalizedMessage.labelIds,
       messageDate: input.normalizedMessage.messageDate,
-      internalDate: input.normalizedMessage.internalDate
+      internalDate: input.normalizedMessage.internalDate,
+      subscriptionLifecycle: lifecycle
     });
 
     const messageStatus = this.dedupeService.toMessageStatus(ingestion);
@@ -92,11 +121,15 @@ export class GmailIngestionService {
           confidence: ingestion.confidence,
           confidenceBand: ingestion.confidenceBand,
           needsReview: ingestion.needsReview,
-          status: ingestion.status
+          status: ingestion.status,
+          lifecycleEmailType: lifecycle.lifecycleEmailType,
+          subscriptionLikelihood: lifecycle.classification.subscriptionLikelihood,
+          lifecycleConfidence: lifecycle.confidence.confidenceScore,
+          lifecycleConfidenceBand: lifecycle.confidence.confidenceBand
         }
       });
 
-      await this.emitIngestionAuditEvents(input, ingestion, dedupeReason);
+      await this.emitIngestionAuditEvents(input, ingestion, dedupeReason, lifecycle);
 
       return {
         skippedAsExactDuplicate: false,
@@ -135,7 +168,8 @@ export class GmailIngestionService {
       normalizedMessage: NormalizedGmailMessage;
     },
     ingestion: IngestionResult,
-    dedupeReason: string | null
+    dedupeReason: string | null,
+    lifecycle: ReturnType<typeof runGmailSubscriptionHeuristics>
   ) {
     if (ingestion.status === "DUPLICATE" || ingestion.duplicateCandidate) {
       await this.externalAccountRepository.createAuditEvent({
@@ -150,17 +184,19 @@ export class GmailIngestionService {
         }
       });
 
-      await this.externalAccountRepository.createAuditEvent({
-        userId: input.userId,
-        obligationId: ingestion.obligationId,
-        eventType: "gmail_prediction_strengthened",
-        metadata: {
-          externalConnectionId: input.externalConnectionId,
-          gmailMessageId: input.normalizedMessage.gmailMessageId,
-          duplicateOfObligationId: ingestion.duplicateOfObligationId,
-          conflictWithObligationId: ingestion.conflictWithObligationId
-        }
-      });
+      if (lifecycle.lifecycleEmailType !== "CANCELLATION") {
+        await this.externalAccountRepository.createAuditEvent({
+          userId: input.userId,
+          obligationId: ingestion.obligationId,
+          eventType: "gmail_prediction_strengthened",
+          metadata: {
+            externalConnectionId: input.externalConnectionId,
+            gmailMessageId: input.normalizedMessage.gmailMessageId,
+            duplicateOfObligationId: ingestion.duplicateOfObligationId,
+            conflictWithObligationId: ingestion.conflictWithObligationId
+          }
+        });
+      }
       return;
     }
 
@@ -180,6 +216,25 @@ export class GmailIngestionService {
           conflictDetected: ingestion.conflictDetected
         }
       });
+
+      if (lifecycle.lifecycleEmailType !== "UNKNOWN") {
+        await this.externalAccountRepository.createAuditEvent({
+          userId: input.userId,
+          obligationId: ingestion.obligationId,
+          eventType: "gmail_subscription_candidate_created",
+          metadata: {
+            externalConnectionId: input.externalConnectionId,
+            gmailMessageId: input.normalizedMessage.gmailMessageId,
+            matchedQueryKey: input.matchedQueryKey,
+            lifecycleEmailType: lifecycle.lifecycleEmailType,
+            confidenceScore: lifecycle.confidence.confidenceScore,
+            confidenceBand: lifecycle.confidence.confidenceBand,
+            reviewReasons: lifecycle.confidence.reviewReasons,
+            subscriptionVendor: lifecycle.extraction.vendor,
+            planName: lifecycle.extraction.planName
+          }
+        });
+      }
       return;
     }
 

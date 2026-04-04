@@ -107,6 +107,20 @@ function mapEventType(
       return OBSERVABILITY_EVENT_TYPES.GMAIL_PREDICTION_STRENGTHENED;
     case "gmail_sync_error":
       return OBSERVABILITY_EVENT_TYPES.GMAIL_SYNC_ERROR;
+    case "gmail_subscription_lifecycle_classified":
+      return OBSERVABILITY_EVENT_TYPES.GMAIL_SUBSCRIPTION_LIFECYCLE_CLASSIFIED;
+    case "gmail_subscription_candidate_created":
+      return OBSERVABILITY_EVENT_TYPES.GMAIL_SUBSCRIPTION_CANDIDATE_CREATED;
+    case "gmail_subscription_matched_existing":
+      return OBSERVABILITY_EVENT_TYPES.GMAIL_SUBSCRIPTION_MATCHED_EXISTING;
+    case "gmail_subscription_conflict_detected":
+      return OBSERVABILITY_EVENT_TYPES.GMAIL_SUBSCRIPTION_CONFLICT_DETECTED;
+    case "gmail_subscription_cancellation_detected":
+      return OBSERVABILITY_EVENT_TYPES.GMAIL_SUBSCRIPTION_CANCELLATION_DETECTED;
+    case "gmail_subscription_review_confirmed":
+      return OBSERVABILITY_EVENT_TYPES.GMAIL_SUBSCRIPTION_REVIEW_CONFIRMED;
+    case "gmail_subscription_review_rejected":
+      return OBSERVABILITY_EVENT_TYPES.GMAIL_SUBSCRIPTION_REVIEW_REJECTED;
 
     case "prediction_rebuilt":
     case "prediction_updated":

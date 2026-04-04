@@ -13,6 +13,13 @@ export const OBSERVABILITY_EVENT_TYPES = {
   GMAIL_DUPLICATE_SUPPRESSED: "gmail_duplicate_suppressed",
   GMAIL_PREDICTION_STRENGTHENED: "gmail_prediction_strengthened",
   GMAIL_SYNC_ERROR: "gmail_sync_error",
+  GMAIL_SUBSCRIPTION_LIFECYCLE_CLASSIFIED: "gmail_subscription_lifecycle_classified",
+  GMAIL_SUBSCRIPTION_CANDIDATE_CREATED: "gmail_subscription_candidate_created",
+  GMAIL_SUBSCRIPTION_MATCHED_EXISTING: "gmail_subscription_matched_existing",
+  GMAIL_SUBSCRIPTION_CONFLICT_DETECTED: "gmail_subscription_conflict_detected",
+  GMAIL_SUBSCRIPTION_CANCELLATION_DETECTED: "gmail_subscription_cancellation_detected",
+  GMAIL_SUBSCRIPTION_REVIEW_CONFIRMED: "gmail_subscription_review_confirmed",
+  GMAIL_SUBSCRIPTION_REVIEW_REJECTED: "gmail_subscription_review_rejected",
 
   PREDICTION_CREATED: "prediction_created",
   PREDICTION_CONFIRMED: "prediction_confirmed",

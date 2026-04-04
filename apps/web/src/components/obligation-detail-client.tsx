@@ -241,6 +241,38 @@ export default function ObligationDetailClient({ obligation }: Props) {
     }
   }
 
+  const gmailSourceRaw =
+    sourceDetails?.sourceSubtype === "GMAIL_READONLY" &&
+    sourceDetails.rawData &&
+    typeof sourceDetails.rawData === "object"
+      ? (sourceDetails.rawData as Record<string, unknown>)
+      : null;
+  const gmailLifecycle =
+    gmailSourceRaw?.subscriptionLifecycle &&
+    typeof gmailSourceRaw.subscriptionLifecycle === "object"
+      ? (gmailSourceRaw.subscriptionLifecycle as Record<string, unknown>)
+      : null;
+  const gmailLifecycleExtraction =
+    gmailLifecycle?.extraction && typeof gmailLifecycle.extraction === "object"
+      ? (gmailLifecycle.extraction as Record<string, unknown>)
+      : null;
+  const gmailLifecycleType =
+    typeof gmailLifecycle?.lifecycleEmailType === "string"
+      ? gmailLifecycle.lifecycleEmailType
+      : null;
+  const gmailLifecyclePlan =
+    typeof gmailLifecycleExtraction?.planName === "string"
+      ? gmailLifecycleExtraction.planName
+      : null;
+  const gmailLifecycleConfidence =
+    gmailLifecycle?.confidence && typeof gmailLifecycle.confidence === "object"
+      ? (gmailLifecycle.confidence as Record<string, unknown>)
+      : null;
+  const gmailLifecycleConfidenceBand =
+    typeof gmailLifecycleConfidence?.confidenceBand === "string"
+      ? gmailLifecycleConfidence.confidenceBand
+      : null;
+
   const overview = (
     <div style={{ display: "grid", gap: 14 }}>
       <section style={cardStyles.bordered}>
@@ -276,6 +308,13 @@ export default function ObligationDetailClient({ obligation }: Props) {
             {sourceDetails.parseConfidence !== null && sourceDetails.parseConfidence !== undefined
               ? ` (${Math.round(sourceDetails.parseConfidence * 100)}%)`
               : ""}
+          </div>
+        ) : null}
+        {gmailLifecycleType ? (
+          <div>
+            <strong>Gmail lifecycle:</strong> {gmailLifecycleType}
+            {gmailLifecyclePlan ? ` · Plan ${gmailLifecyclePlan}` : ""}
+            {gmailLifecycleConfidenceBand ? ` · Confidence ${gmailLifecycleConfidenceBand}` : ""}
           </div>
         ) : null}
         <div><strong>Recurrence:</strong> {current.recurrence ?? "—"}</div>

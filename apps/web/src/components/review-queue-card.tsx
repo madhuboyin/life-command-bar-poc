@@ -25,6 +25,29 @@ export default function ReviewQueueCard({ item, onUpdated }: Props) {
       : null;
   const gmailFrom = typeof gmailSource?.from === "string" ? gmailSource.from : null;
   const gmailSubject = typeof gmailSource?.subject === "string" ? gmailSource.subject : null;
+  const gmailLifecycle =
+    gmailSource?.subscriptionLifecycle &&
+    typeof gmailSource.subscriptionLifecycle === "object"
+      ? (gmailSource.subscriptionLifecycle as Record<string, unknown>)
+      : null;
+  const lifecycleType =
+    typeof gmailLifecycle?.lifecycleEmailType === "string"
+      ? gmailLifecycle.lifecycleEmailType
+      : null;
+  const lifecycleExtraction =
+    gmailLifecycle?.extraction && typeof gmailLifecycle.extraction === "object"
+      ? (gmailLifecycle.extraction as Record<string, unknown>)
+      : null;
+  const lifecyclePlan =
+    typeof lifecycleExtraction?.planName === "string" ? lifecycleExtraction.planName : null;
+  const lifecycleRecurringPrice =
+    typeof lifecycleExtraction?.recurringPrice === "number"
+      ? lifecycleExtraction.recurringPrice
+      : null;
+  const lifecycleAmountCharged =
+    typeof lifecycleExtraction?.amountCharged === "number"
+      ? lifecycleExtraction.amountCharged
+      : null;
 
   async function handleConfirm() {
     try {
@@ -82,6 +105,25 @@ export default function ReviewQueueCard({ item, onUpdated }: Props) {
           {gmailFrom ? `From: ${gmailFrom}` : ""}
           {gmailFrom && gmailSubject ? " · " : ""}
           {gmailSubject ? `Subject: ${gmailSubject}` : ""}
+        </div>
+      ) : null}
+
+      {lifecycleType || lifecyclePlan || lifecycleRecurringPrice !== null || lifecycleAmountCharged !== null ? (
+        <div style={{ fontSize: 12, color: colors.textMuted }}>
+          {lifecycleType ? `Lifecycle: ${lifecycleType}` : ""}
+          {lifecycleType && lifecyclePlan ? " · " : ""}
+          {lifecyclePlan ? `Plan: ${lifecyclePlan}` : ""}
+          {(lifecycleType || lifecyclePlan) && lifecycleRecurringPrice !== null ? " · " : ""}
+          {lifecycleRecurringPrice !== null
+            ? `Recurring: ${lifecycleRecurringPrice}${item.currency ? ` ${item.currency}` : ""}`
+            : ""}
+          {(lifecycleType || lifecyclePlan || lifecycleRecurringPrice !== null) &&
+          lifecycleAmountCharged !== null
+            ? " · "
+            : ""}
+          {lifecycleAmountCharged !== null
+            ? `Charged: ${lifecycleAmountCharged}${item.currency ? ` ${item.currency}` : ""}`
+            : ""}
         </div>
       ) : null}
 
