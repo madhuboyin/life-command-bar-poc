@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   createFeedback,
   createOrResumeGuidedJourney,
+  createOutcomeFeedback,
   dismissObligation,
   markObligationDone,
   postponeObligation,
@@ -24,6 +25,27 @@ export default function PulseItemCard({ item, onResolved }: Props) {
   const [loading, setLoading] = useState<string | null>(null);
   const router = useRouter();
   const { showToast } = useToast();
+
+  async function reportOutcome(input: {
+    selectedActionKey: string;
+    outcomeType: "COMPLETED_SUCCESSFULLY" | "POSTPONED_INTENTIONALLY" | "DISMISSED_NOT_RELEVANT";
+    note?: string;
+    metadata?: Record<string, unknown>;
+  }) {
+    try {
+      await createOutcomeFeedback({
+        obligationId: item.obligationId,
+        sourceContext: "DAILY_PULSE",
+        recommendationKey: item.actionLabel,
+        selectedActionKey: input.selectedActionKey,
+        outcomeType: input.outcomeType,
+        note: input.note,
+        metadata: input.metadata
+      });
+    } catch {
+      // Non-blocking feedback signal capture.
+    }
+  }
 
   async function handleGuideMe() {
     try {
@@ -48,6 +70,11 @@ export default function PulseItemCard({ item, onResolved }: Props) {
         note: "Completed from Daily Pulse"
       });
       await trackDailyPulseAction("COMPLETED");
+      await reportOutcome({
+        selectedActionKey: "mark_done",
+        outcomeType: "COMPLETED_SUCCESSFULLY",
+        note: "Completed from Daily Pulse"
+      });
 
       onResolved(item.obligationId);
       showToast({
@@ -73,6 +100,11 @@ export default function PulseItemCard({ item, onResolved }: Props) {
         note: "Dismissed from Daily Pulse"
       });
       await trackDailyPulseAction("DISMISSED");
+      await reportOutcome({
+        selectedActionKey: "dismiss",
+        outcomeType: "DISMISSED_NOT_RELEVANT",
+        note: "Dismissed from Daily Pulse"
+      });
 
       onResolved(item.obligationId);
       showToast({
@@ -102,6 +134,14 @@ export default function PulseItemCard({ item, onResolved }: Props) {
         note: "Postponed from Daily Pulse"
       });
       await trackDailyPulseAction("POSTPONED");
+      await reportOutcome({
+        selectedActionKey: "postpone_1_day",
+        outcomeType: "POSTPONED_INTENTIONALLY",
+        note: "Postponed from Daily Pulse",
+        metadata: {
+          postponedUntil: until
+        }
+      });
 
       onResolved(item.obligationId);
       showToast({

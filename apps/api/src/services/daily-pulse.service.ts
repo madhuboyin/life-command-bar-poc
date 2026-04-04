@@ -1,9 +1,11 @@
-import { ObligationStatus } from "@prisma/client";
+import { ObligationStatus, ObligationType } from "@prisma/client";
 import { DashboardInsightsService } from "./dashboard-insights.service";
 import { TodayFeedService } from "./today-feed.service";
 import { ObligationRepository } from "../repositories/obligation.repository";
 import { mapObligation } from "../utils/obligation.mapper";
 import { prisma } from "../clients/prisma.client";
+import { PersonalizationService } from "./personalization.service";
+import type { PersonalizationSignals } from "../types/personalization.types";
 
 type PulseHookType = "urgent" | "quick_win" | "money" | "postponed" | "important";
 type PulseTrend = "up" | "down" | "flat";
@@ -20,6 +22,7 @@ type PulseItem = {
 type PulseCandidate = {
   obligationId: string;
   title: string;
+  type: ObligationType;
   status: ObligationStatus;
   urgencyScore: number;
   importanceScore: number;
@@ -41,18 +44,21 @@ export class DailyPulseService {
   private readonly dashboardInsightsService = new DashboardInsightsService();
   private readonly todayFeedService = new TodayFeedService();
   private readonly obligationRepository = new ObligationRepository();
+  private readonly personalizationService = new PersonalizationService();
 
   async getPulse(userId: string, options?: { markOpened?: boolean; refresh?: boolean }) {
     const markOpened = options?.markOpened ?? true;
     const refresh = options?.refresh ?? false;
     const todayKey = getDateKeyUTC(new Date());
 
-    const [insights, todayFeed, activeObligations, recentlyPostponedIds] = await Promise.all([
+    const [insights, todayFeed, activeObligations, recentlyPostponedIds, personalizationSummary] = await Promise.all([
       this.dashboardInsightsService.getInsights(userId),
       this.todayFeedService.getTodayFeed(userId),
       this.obligationRepository.findActiveForFeed(userId),
-      this.getRecentlyPostponedIds(userId)
+      this.getRecentlyPostponedIds(userId),
+      this.personalizationService.getSummary(userId).catch(() => null)
     ]);
+    const signals = personalizationSummary?.signals ?? getDefaultSignals();
 
     const feedByObligationId = new Map(
       todayFeed.items.map((item) => [item.obligationId, item])
@@ -68,10 +74,19 @@ export class DailyPulseService {
       const isPostponed =
         obligation.status === ObligationStatus.POSTPONED ||
         recentlyPostponedIds.has(obligation.id);
+      const personalization = this.personalizationService.getDailyPulseScoreAdjustment(signals, {
+        obligationType: obligation.type,
+        isUrgent,
+        isQuickWin,
+        isMoney,
+        importanceScore: obligation.importanceScore,
+        urgencyScore: obligation.urgencyScore
+      });
 
       return {
         obligationId: obligation.id,
         title: obligation.title,
+        type: obligation.type,
         status: obligation.status,
         urgencyScore: obligation.urgencyScore,
         importanceScore: obligation.importanceScore,
@@ -79,7 +94,7 @@ export class DailyPulseService {
         impactLevel: obligation.impactLevel,
         amount: obligation.amount,
         dueDate,
-        priorityScore,
+        priorityScore: priorityScore + personalization.delta,
         isUrgent,
         isQuickWin,
         isMoney,
@@ -320,6 +335,18 @@ export class DailyPulseService {
     }
     return ids;
   }
+}
+
+function getDefaultSignals(): PersonalizationSignals {
+  return {
+    subscriptionPreferenceBias: "balanced",
+    postponementPattern: "none",
+    quickWinAffinity: "medium",
+    urgencyResponsiveness: "medium",
+    moneySensitivity: "review_first",
+    journeyCompletionStyle: "mixed",
+    reminderReliance: "low"
+  };
 }
 
 function computePriorityScore(item: {

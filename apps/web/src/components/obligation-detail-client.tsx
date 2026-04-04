@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   createOrResumeGuidedJourney,
   createFeedback,
+  createOutcomeFeedback,
   dismissObligation,
   getActiveGuidedJourneyForObligation,
   getResolution,
@@ -46,6 +47,26 @@ export default function ObligationDetailClient({ obligation }: Props) {
   const { showToast } = useToast();
   const router = useRouter();
 
+  async function reportOutcome(input: {
+    selectedActionKey: string;
+    outcomeType: "COMPLETED_SUCCESSFULLY" | "POSTPONED_INTENTIONALLY" | "DISMISSED_NOT_RELEVANT";
+    note?: string;
+    metadata?: Record<string, unknown>;
+  }) {
+    try {
+      await createOutcomeFeedback({
+        obligationId: current.id,
+        sourceContext: "OBLIGATION_DETAIL",
+        selectedActionKey: input.selectedActionKey,
+        outcomeType: input.outcomeType,
+        note: input.note,
+        metadata: input.metadata
+      });
+    } catch {
+      // Keep primary action flow resilient.
+    }
+  }
+
   useEffect(() => {
     let cancelled = false;
 
@@ -79,6 +100,11 @@ export default function ObligationDetailClient({ obligation }: Props) {
         type: "COMPLETED",
         note: "Marked done from detail page"
       });
+      await reportOutcome({
+        selectedActionKey: "mark_done",
+        outcomeType: "COMPLETED_SUCCESSFULLY",
+        note: "Completed from obligation detail"
+      });
       setCurrent(data.obligation);
       showToast({ variant: "success", title: "Marked done", description: current.title });
     } catch (err) {
@@ -99,6 +125,11 @@ export default function ObligationDetailClient({ obligation }: Props) {
         obligationId: current.id,
         type: "DONT_SHOW_AGAIN",
         note: "Dismissed from detail page"
+      });
+      await reportOutcome({
+        selectedActionKey: "dismiss",
+        outcomeType: "DISMISSED_NOT_RELEVANT",
+        note: "Dismissed from obligation detail"
       });
       setCurrent(data.obligation);
       showToast({ variant: "success", title: "Dismissed", description: current.title });
@@ -121,6 +152,14 @@ export default function ObligationDetailClient({ obligation }: Props) {
         obligationId: current.id,
         type: "POSTPONED",
         note: "Postponed 1 day from detail page"
+      });
+      await reportOutcome({
+        selectedActionKey: "postpone_1_day",
+        outcomeType: "POSTPONED_INTENTIONALLY",
+        note: "Postponed from obligation detail",
+        metadata: {
+          postponedUntil: until
+        }
       });
       setCurrent(data.obligation);
       showToast({ variant: "success", title: "Postponed", description: current.title });

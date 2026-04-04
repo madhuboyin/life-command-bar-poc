@@ -173,6 +173,62 @@ export interface DailyPulseState {
   dismissedCount: number;
 }
 
+export type OutcomeSourceContext =
+  | "TODAY_FEED"
+  | "DASHBOARD_INSIGHT"
+  | "DAILY_PULSE"
+  | "GUIDED_MODE"
+  | "OBLIGATION_DETAIL";
+
+export type OutcomeType =
+  | "FOLLOWED_RECOMMENDATION"
+  | "CHOSE_DIFFERENT_OPTION"
+  | "HELPFUL"
+  | "NOT_HELPFUL"
+  | "COMPLETED_SUCCESSFULLY"
+  | "POSTPONED_INTENTIONALLY"
+  | "DISMISSED_NOT_RELEVANT"
+  | "ABANDONED"
+  | "RECOMMENDATION_MISMATCH";
+
+export interface OutcomeFeedbackEvent {
+  id: string;
+  sourceContext: OutcomeSourceContext;
+  recommendationKey?: string | null;
+  selectedActionKey: string;
+  outcomeType: OutcomeType;
+  note?: string | null;
+  createdAt: string;
+}
+
+export interface PersonalizationSignals {
+  subscriptionPreferenceBias: "cancel_leaning" | "keep_leaning" | "review_first" | "balanced";
+  postponementPattern:
+    | "none"
+    | "commitments_often_postponed"
+    | "renewals_often_postponed"
+    | "low_importance_postponed"
+    | "mixed";
+  quickWinAffinity: "high" | "medium" | "low";
+  urgencyResponsiveness: "high" | "medium" | "low";
+  moneySensitivity: "act_now" | "review_first" | "low";
+  journeyCompletionStyle: "usually_completes" | "often_abandons" | "alternative_leaning" | "mixed";
+  reminderReliance: "high" | "medium" | "low";
+}
+
+export interface PersonalizationSummary {
+  signals: PersonalizationSignals;
+  lastUpdatedAt?: string | null;
+}
+
+export interface PersonalizationDebug extends PersonalizationSummary {
+  influences: Array<{
+    signal: keyof PersonalizationSignals;
+    reason: string;
+    metrics: Record<string, number | string>;
+  }>;
+}
+
 export interface ObligationHistory {
   auditEvents: Array<{
     id: string;
@@ -218,6 +274,7 @@ export interface ObligationHistory {
     updatedAt: string;
     completedAt?: string | null;
   }>;
+  outcomeFeedbackEvents: OutcomeFeedbackEvent[];
 }
 
 export interface GuidedJourneyOption {

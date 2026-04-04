@@ -9,6 +9,10 @@ import type {
   ObligationHistory,
   ObligationSort,
   ObligationView,
+  OutcomeSourceContext,
+  OutcomeType,
+  PersonalizationDebug,
+  PersonalizationSummary,
   Reminder,
   ResolutionResponse,
   SortDirection,
@@ -78,6 +82,8 @@ type GuidedJourneyMaybeResponse = {
 
 type DailyPulseApiResponse = DailyPulseResponse;
 type DailyPulseStateApiResponse = DailyPulseState;
+type PersonalizationSummaryApiResponse = PersonalizationSummary;
+type PersonalizationDebugApiResponse = PersonalizationDebug;
 
 function isAbsoluteHttpUrl(value: string) {
   return /^https?:\/\//i.test(value);
@@ -467,6 +473,42 @@ export async function createFeedback(input: {
   });
 
   return handleResponse<unknown>(res);
+}
+
+export async function createOutcomeFeedback(input: {
+  obligationId?: string;
+  guidedJourneyId?: string;
+  resolutionRunId?: string;
+  sourceContext: OutcomeSourceContext;
+  recommendationKey?: string;
+  selectedActionKey: string;
+  outcomeType: OutcomeType;
+  note?: string;
+  metadata?: Record<string, unknown>;
+}): Promise<unknown> {
+  const res = await apiFetch("/outcome-feedback", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+
+  return handleResponse<unknown>(res);
+}
+
+export async function getPersonalizationSummary(): Promise<PersonalizationSummaryApiResponse> {
+  const res = await apiFetch("/personalization/summary", {
+    cache: "no-store"
+  });
+
+  return handleResponse<PersonalizationSummaryApiResponse>(res);
+}
+
+export async function getPersonalizationDebug(): Promise<PersonalizationDebugApiResponse> {
+  const res = await apiFetch("/personalization/debug", {
+    cache: "no-store"
+  });
+
+  return handleResponse<PersonalizationDebugApiResponse>(res);
 }
 
 export async function createObligation(input: {

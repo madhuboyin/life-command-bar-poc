@@ -5,6 +5,7 @@ import { useState } from "react";
 import {
   createOrResumeGuidedJourney,
   createFeedback,
+  createOutcomeFeedback,
   dismissObligation,
   getResolution,
   markObligationDone,
@@ -37,6 +38,31 @@ export default function TodayFeedCard({ item, onRefresh }: Props) {
   const { showToast } = useToast();
   const isMobile = useIsMobile();
   const router = useRouter();
+
+  async function reportOutcome(input: {
+    recommendationKey?: string;
+    selectedActionKey: string;
+    outcomeType:
+      | "COMPLETED_SUCCESSFULLY"
+      | "POSTPONED_INTENTIONALLY"
+      | "DISMISSED_NOT_RELEVANT";
+    note?: string;
+    metadata?: Record<string, unknown>;
+  }) {
+    try {
+      await createOutcomeFeedback({
+        obligationId: item.obligationId,
+        sourceContext: "TODAY_FEED",
+        recommendationKey: input.recommendationKey,
+        selectedActionKey: input.selectedActionKey,
+        outcomeType: input.outcomeType,
+        note: input.note,
+        metadata: input.metadata
+      });
+    } catch {
+      // Outcome feedback should never block the primary action flow.
+    }
+  }
 
   async function runAction(
     action: () => Promise<void>,
@@ -71,6 +97,12 @@ export default function TodayFeedCard({ item, onRefresh }: Props) {
         type: "COMPLETED",
         note: "Marked done from Today Feed"
       });
+      await reportOutcome({
+        recommendationKey: item.primaryAction.key,
+        selectedActionKey: "mark_done",
+        outcomeType: "COMPLETED_SUCCESSFULLY",
+        note: "Completed from Today Feed"
+      });
     }, "done", "Marked done");
   }
 
@@ -81,6 +113,12 @@ export default function TodayFeedCard({ item, onRefresh }: Props) {
         obligationId: item.obligationId,
         feedItemId: item.id,
         type: "DONT_SHOW_AGAIN",
+        note: "Dismissed from Today Feed"
+      });
+      await reportOutcome({
+        recommendationKey: item.primaryAction.key,
+        selectedActionKey: "dismiss",
+        outcomeType: "DISMISSED_NOT_RELEVANT",
         note: "Dismissed from Today Feed"
       });
     }, "dismiss", "Dismissed");
@@ -96,6 +134,15 @@ export default function TodayFeedCard({ item, onRefresh }: Props) {
         feedItemId: item.id,
         type: "POSTPONED",
         note: "Postponed 1 day from Today Feed"
+      });
+      await reportOutcome({
+        recommendationKey: item.primaryAction.key,
+        selectedActionKey: "postpone_1_day",
+        outcomeType: "POSTPONED_INTENTIONALLY",
+        note: "Postponed from Today Feed",
+        metadata: {
+          postponedUntil: until
+        }
       });
     }, "postpone", "Postponed");
   }

@@ -3,6 +3,8 @@ import {
   GuidedJourneyInputType,
   GuidedJourneyStatus,
   ObligationStatus,
+  OutcomeSourceContext,
+  OutcomeType,
   Prisma
 } from "@prisma/client";
 import { z } from "zod";
@@ -16,6 +18,8 @@ import {
   buildGuidedJourneyTemplate,
   normalizeTemplateSteps
 } from "./guided-journey.builder";
+import { PersonalizationService } from "./personalization.service";
+import type { PersonalizationSignals } from "../types/personalization.types";
 import type {
   GuidedJourneyOption,
   GuidedJourneyPayload,
@@ -32,6 +36,7 @@ const advanceSchema = z.object({
 
 export class GuidedJourneyService {
   private readonly repository = new GuidedJourneyRepository();
+  private readonly personalizationService = new PersonalizationService();
 
   async createOrResume(userId: string, obligationId: string) {
     const obligation = await this.repository.findObligationById(userId, obligationId);
@@ -78,7 +83,21 @@ export class GuidedJourneyService {
       };
     }
 
-    const template = buildGuidedJourneyTemplate(mapObligation(obligation));
+    const personalizationSummary = await this.personalizationService
+      .getSummary(userId)
+      .catch(() => null);
+    const signals = personalizationSummary?.signals ?? getDefaultSignals();
+
+    const baseTemplate = buildGuidedJourneyTemplate(mapObligation(obligation));
+    const personalizedTemplate = this.personalizationService.personalizeGuidedTemplate(
+      baseTemplate,
+      signals,
+      {
+        urgencyScore: Number(obligation.urgencyScore),
+        effortLevel: obligation.effortLevel
+      }
+    );
+    const template = personalizedTemplate.template;
     template.steps = normalizeTemplateSteps(template.steps);
 
     const created = await this.repository.runInTransaction(async (tx) => {
@@ -99,7 +118,8 @@ export class GuidedJourneyService {
           eventType: GuidedJourneyEventType.JOURNEY_CREATED,
           metadata: {
             stepCount: journey.steps.length,
-            journeyType: journey.journeyType
+            journeyType: journey.journeyType,
+            personalizationAdjustments: personalizedTemplate.adjustments
           }
         },
         tx
@@ -198,6 +218,31 @@ export class GuidedJourneyService {
         tx
       );
 
+      if (currentStep.recommendedOption) {
+        await this.repository.createOutcomeFeedback(
+          {
+            userId,
+            obligationId: journey.obligationId,
+            guidedJourneyId: journey.id,
+            sourceContext: OutcomeSourceContext.GUIDED_MODE,
+            recommendationKey: currentStep.recommendedOption,
+            selectedActionKey: input.optionKey,
+            outcomeType:
+              input.optionKey === currentStep.recommendedOption
+                ? OutcomeType.FOLLOWED_RECOMMENDATION
+                : OutcomeType.CHOSE_DIFFERENT_OPTION,
+            note:
+              input.optionKey === currentStep.recommendedOption
+                ? "Selected the recommended guided option."
+                : "Selected a different guided option than recommended.",
+            metadata: {
+              stepKey: currentStep.stepKey
+            }
+          },
+          tx
+        );
+      }
+
     });
 
     const updated = await this.requireJourney(userId, journeyId);
@@ -259,6 +304,20 @@ export class GuidedJourneyService {
             metadata: {
               journeyId: journey.id
             }
+          },
+          tx
+        );
+
+        await this.repository.createOutcomeFeedback(
+          {
+            userId,
+            obligationId: journey.obligationId,
+            guidedJourneyId: journey.id,
+            sourceContext: OutcomeSourceContext.GUIDED_MODE,
+            recommendationKey: journey.recommendedPath,
+            selectedActionKey: "complete_journey",
+            outcomeType: OutcomeType.COMPLETED_SUCCESSFULLY,
+            note: "Guided journey completed from advance flow."
           },
           tx
         );
@@ -361,6 +420,7 @@ export class GuidedJourneyService {
         },
         tx
       );
+
     });
 
     const updated = await this.requireJourney(userId, journeyId);
@@ -422,6 +482,21 @@ export class GuidedJourneyService {
         },
         tx
       );
+
+      await this.repository.createOutcomeFeedback(
+        {
+          userId,
+          obligationId: journey.obligationId,
+          guidedJourneyId: journey.id,
+          sourceContext: OutcomeSourceContext.GUIDED_MODE,
+          recommendationKey: journey.recommendedPath,
+          selectedActionKey: "complete_journey",
+          outcomeType: OutcomeType.COMPLETED_SUCCESSFULLY,
+          note: "Guided journey completed explicitly."
+        },
+        tx
+      );
+
     });
 
     const updated = await this.requireJourney(userId, journeyId);
@@ -493,6 +568,29 @@ export class GuidedJourneyService {
           metadata: {
             journeyId: journey.id
           }
+        },
+        tx
+      );
+
+      await this.repository.createOutcomeFeedback(
+        {
+          userId,
+          obligationId: journey.obligationId,
+          guidedJourneyId: journey.id,
+          sourceContext: OutcomeSourceContext.GUIDED_MODE,
+          recommendationKey: journey.recommendedPath,
+          selectedActionKey:
+            targetStatus === GuidedJourneyStatus.ABANDONED
+              ? "abandon_journey"
+              : "dismiss_journey",
+          outcomeType:
+            targetStatus === GuidedJourneyStatus.ABANDONED
+              ? OutcomeType.ABANDONED
+              : OutcomeType.DISMISSED_NOT_RELEVANT,
+          note:
+            targetStatus === GuidedJourneyStatus.ABANDONED
+              ? "Guided journey was abandoned."
+              : "Guided journey was dismissed."
         },
         tx
       );
@@ -702,4 +800,16 @@ function parseStepOptions(value: Prisma.JsonValue | null): GuidedJourneyOption[]
   }
 
   return options;
+}
+
+function getDefaultSignals(): PersonalizationSignals {
+  return {
+    subscriptionPreferenceBias: "balanced",
+    postponementPattern: "none",
+    quickWinAffinity: "medium",
+    urgencyResponsiveness: "medium",
+    moneySensitivity: "review_first",
+    journeyCompletionStyle: "mixed",
+    reminderReliance: "low"
+  };
 }

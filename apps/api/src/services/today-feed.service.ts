@@ -7,20 +7,28 @@ import {
 import { ObligationRepository } from "../repositories/obligation.repository";
 import { FeedbackRepository } from "../repositories/feedback.repository";
 import { mapObligation } from "../utils/obligation.mapper";
+import { PersonalizationService } from "./personalization.service";
+import type { PersonalizationSignals } from "../types/personalization.types";
 
 type FeedCandidate = {
   obligation: Awaited<ReturnType<ObligationRepository["findActiveForFeed"]>>[number];
   candidateScore: number;
   hookType: "urgent" | "money" | "quick_win" | "none";
+  personalizationReasons: string[];
 };
 
 export class TodayFeedService {
   private readonly obligationRepository = new ObligationRepository();
   private readonly feedbackRepository = new FeedbackRepository();
+  private readonly personalizationService = new PersonalizationService();
 
   async getTodayFeed(userId: string) {
-    const items = await this.obligationRepository.findActiveForFeed(userId);
-    const feedbackMap = await this.feedbackRepository.getRecentFeedbackMap(userId);
+    const [items, feedbackMap, personalizationSummary] = await Promise.all([
+      this.obligationRepository.findActiveForFeed(userId),
+      this.feedbackRepository.getRecentFeedbackMap(userId),
+      this.personalizationService.getSummary(userId).catch(() => null)
+    ]);
+    const signals = personalizationSummary?.signals ?? getDefaultSignals();
 
     const eligible = items.filter((item) => {
       const feedback = feedbackMap.get(item.id) ?? [];
@@ -64,6 +72,14 @@ export class TodayFeedService {
         moneyHook * 0.15 -
         effortPenalty * 0.03 -
         postponedPenalty;
+      const adjustment = this.personalizationService.getTodayFeedScoreAdjustment(signals, {
+        obligationType: obligation.type,
+        isUrgent: urgency >= 85 || Boolean(obligation.dueDate && obligation.dueDate <= new Date(Date.now() + 48 * 60 * 60 * 1000)),
+        isQuickWin: quickWin > 0,
+        isMoney: moneyHook > 0,
+        importanceScore: importance,
+        urgencyScore: urgency
+      });
 
       let hookType: FeedCandidate["hookType"] = "none";
       if (urgency >= 85) hookType = "urgent";
@@ -72,8 +88,9 @@ export class TodayFeedService {
 
       return {
         obligation,
-        candidateScore: score,
-        hookType
+        candidateScore: score + adjustment.delta,
+        hookType,
+        personalizationReasons: adjustment.reasons
       };
     });
 
@@ -99,7 +116,7 @@ export class TodayFeedService {
     );
 
     const feedItems = selected.map((item, index) => {
-      const flow = this.buildFlow(item.obligation);
+      const flow = this.buildFlow(item.obligation, signals);
 
       return {
         id: `feed_${item.obligation.id}`,
@@ -130,30 +147,51 @@ export class TodayFeedService {
     };
   }
 
-  private buildFlow(obligation: FeedCandidate["obligation"]) {
+  private buildFlow(obligation: FeedCandidate["obligation"], signals: PersonalizationSignals) {
     const mapped = mapObligation(obligation);
+    const flow =
+      obligation.type === ObligationType.SUBSCRIPTION
+        ? buildSubscriptionFlow(mapped as never)
+        : obligation.type === ObligationType.RENEWAL
+          ? buildRenewalFlow(mapped as never)
+          : obligation.type === ObligationType.BILL
+            ? buildBillFlow(mapped as never)
+            : {
+                flowKey: "commitment.default",
+                recommendation: `Handle ${mapped.title} now if it only takes a few minutes, or postpone it intentionally.`,
+                whyItMatters: "This is still unresolved and continuing to take up mental space.",
+                steps: [
+                  "Review what is actually required.",
+                  "Do it now if it is quick.",
+                  "Otherwise postpone it intentionally to a specific time."
+                ],
+                primaryAction: "Do this now",
+                secondaryActions: ["Postpone 1 day", "Dismiss"]
+              };
 
-    switch (obligation.type) {
-      case ObligationType.SUBSCRIPTION:
-        return buildSubscriptionFlow(mapped as never);
-      case ObligationType.RENEWAL:
-        return buildRenewalFlow(mapped as never);
-      case ObligationType.BILL:
-        return buildBillFlow(mapped as never);
-      case ObligationType.COMMITMENT:
-      default:
-        return {
-          flowKey: "commitment.default",
-          recommendation: `Handle ${mapped.title} now if it only takes a few minutes, or postpone it intentionally.`,
-          whyItMatters: "This is still unresolved and continuing to take up mental space.",
-          steps: [
-            "Review what is actually required.",
-            "Do it now if it is quick.",
-            "Otherwise postpone it intentionally to a specific time."
-          ],
-          primaryAction: "Do this now",
-          secondaryActions: ["Postpone 1 day", "Dismiss"]
-        };
+    const toneHint = this.personalizationService.getGuidanceToneHint(
+      signals,
+      obligation.type
+    );
+    if (!toneHint) {
+      return flow;
     }
+
+    return {
+      ...flow,
+      whyItMatters: `${flow.whyItMatters} ${toneHint}`
+    };
   }
+}
+
+function getDefaultSignals(): PersonalizationSignals {
+  return {
+    subscriptionPreferenceBias: "balanced",
+    postponementPattern: "none",
+    quickWinAffinity: "medium",
+    urgencyResponsiveness: "medium",
+    moneySensitivity: "review_first",
+    journeyCompletionStyle: "mixed",
+    reminderReliance: "low"
+  };
 }

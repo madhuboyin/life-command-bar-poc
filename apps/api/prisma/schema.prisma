@@ -109,6 +109,26 @@ enum GuidedJourneyEventType {
   JOURNEY_DISMISSED
 }
 
+enum OutcomeSourceContext {
+  TODAY_FEED
+  DASHBOARD_INSIGHT
+  DAILY_PULSE
+  GUIDED_MODE
+  OBLIGATION_DETAIL
+}
+
+enum OutcomeType {
+  FOLLOWED_RECOMMENDATION
+  CHOSE_DIFFERENT_OPTION
+  HELPFUL
+  NOT_HELPFUL
+  COMPLETED_SUCCESSFULLY
+  POSTPONED_INTENTIONALLY
+  DISMISSED_NOT_RELEVANT
+  ABANDONED
+  RECOMMENDATION_MISMATCH
+}
+
 model User {
   id       String  @id @default(cuid())
   email    String  @unique
@@ -126,6 +146,7 @@ model User {
   guidedJourneys      GuidedJourney[]
   guidedJourneyEvents GuidedJourneyEvent[]
   dailyPulseStates    DailyPulseState[]
+  outcomeFeedback     OutcomeFeedback[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -169,6 +190,7 @@ model Obligation {
   resolutionRuns      ResolutionRun[]
   guidedJourneys      GuidedJourney[]
   guidedJourneyEvents GuidedJourneyEvent[]
+  outcomeFeedback     OutcomeFeedback[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -204,6 +226,7 @@ model GuidedJourney {
 
   steps  GuidedJourneyStep[]
   events GuidedJourneyEvent[]
+  outcomeFeedback OutcomeFeedback[]
 
   @@index([userId, status], map: "idx_guided_journeys_user_id_status")
   @@index([obligationId, status], map: "idx_guided_journeys_obligation_id_status")
@@ -280,6 +303,39 @@ model DailyPulseState {
   @@unique([userId, date], map: "uniq_daily_pulse_state_user_id_date")
   @@index([userId, createdAt], map: "idx_daily_pulse_state_user_id_created_at")
   @@map("daily_pulse_states")
+}
+
+model OutcomeFeedback {
+  id String @id @default(cuid())
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  obligationId String?     @map("obligation_id")
+  obligation   Obligation? @relation(fields: [obligationId], references: [id], onDelete: SetNull)
+
+  guidedJourneyId String?         @map("guided_journey_id")
+  guidedJourney   GuidedJourney?  @relation(fields: [guidedJourneyId], references: [id], onDelete: SetNull)
+
+  resolutionRunId String?        @map("resolution_run_id")
+  resolutionRun   ResolutionRun? @relation(fields: [resolutionRunId], references: [id], onDelete: SetNull)
+
+  sourceContext OutcomeSourceContext @map("source_context")
+  recommendationKey String?          @map("recommendation_key")
+  selectedActionKey String           @map("selected_action_key")
+  outcomeType OutcomeType            @map("outcome_type")
+  note String?
+  metadata Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt], map: "idx_outcome_feedback_user_id_created_at")
+  @@index([obligationId], map: "idx_outcome_feedback_obligation_id")
+  @@index([guidedJourneyId], map: "idx_outcome_feedback_guided_journey_id")
+  @@index([resolutionRunId], map: "idx_outcome_feedback_resolution_run_id")
+  @@index([sourceContext], map: "idx_outcome_feedback_source_context")
+  @@index([outcomeType], map: "idx_outcome_feedback_outcome_type")
+  @@map("outcome_feedback")
 }
 
 model Reminder {
@@ -394,6 +450,8 @@ model ResolutionRun {
   flowKey           String               @map("flow_key")
   recommendedOption String               @map("recommended_option")
   confidence        ResolutionConfidence
+
+  outcomeFeedback OutcomeFeedback[]
 
   createdAt DateTime @default(now()) @map("created_at")
 

@@ -7,6 +7,8 @@ import {
 } from "@prisma/client";
 import { prisma } from "../clients/prisma.client";
 import { ObligationView } from "../types/obligation.types";
+import { PersonalizationService } from "./personalization.service";
+import type { PersonalizationSignals } from "../types/personalization.types";
 
 const LOOKBACK_DAYS = 7;
 const QUICK_WIN_CONFIDENCE_THRESHOLD = 0.85;
@@ -128,9 +130,12 @@ type TopInsightInput = {
   postponedRecently: number;
   repeatedPostponementCount: number;
   moneyExposure: MoneyExposure;
+  signals: PersonalizationSignals;
 };
 
 export class DashboardInsightsService {
+  private readonly personalizationService = new PersonalizationService();
+
   async getInsights(userId: string): Promise<DashboardInsightsResponse> {
     const now = new Date();
     const windowStart = getTrailingWindowStart(now, LOOKBACK_DAYS);
@@ -142,7 +147,8 @@ export class DashboardInsightsService {
       recentFeedbackEvents,
       recentAuditEvents,
       resolutionRunsThisWeek,
-      remindersDueSoon
+      remindersDueSoon,
+      personalizationSummary
     ] = await Promise.all([
       prisma.obligation.findMany({
         where: {
@@ -227,8 +233,10 @@ export class DashboardInsightsService {
             lte: dueSoonThreshold
           }
         }
-      })
+      }),
+      this.personalizationService.getSummary(userId).catch(() => null)
     ]);
+    const signals = personalizationSummary?.signals ?? getDefaultSignals();
 
     const handledIds = collectHandledObligationIds(
       resolvedObligationsThisWeek,
@@ -296,7 +304,8 @@ export class DashboardInsightsService {
       overdueOrUrgent,
       postponedRecently: postponedStats.uniqueCount,
       repeatedPostponementCount: postponedStats.repeatedCount,
-      moneyExposure
+      moneyExposure,
+      signals
     });
 
     const cards = buildCards({
@@ -592,6 +601,28 @@ function chooseTopInsight(input: TopInsightInput): TopInsight {
     };
   }
 
+  if (
+    input.signals.moneySensitivity === "low" &&
+    input.moneyExposure.amount !== null &&
+    input.moneyExposure.amount > 0
+  ) {
+    return {
+      title: `${formatMoneyValue(input.moneyExposure)} needs a quick money check`,
+      description: "Money-related items have been easy to defer recently, so this is worth reviewing now.",
+      tone: "warning",
+      targetView: "money"
+    };
+  }
+
+  if (input.signals.quickWinAffinity === "high" && input.quickWinsAvailable > 0) {
+    return {
+      title: `${input.quickWinsAvailable} quick ${pluralize("win", input.quickWinsAvailable)} can build momentum`,
+      description: "You usually clear quick wins well, so starting there should feel lighter.",
+      tone: "positive",
+      targetView: "quick_wins"
+    };
+  }
+
   if (input.repeatedPostponementCount > 0 || input.postponedRecently >= 3) {
     return {
       title: `You postponed ${input.postponedRecently} ${pluralize("item", input.postponedRecently)} recently`,
@@ -799,4 +830,16 @@ function formatMoneyValue(exposure: MoneyExposure) {
 
 function roundTo2(value: number) {
   return Math.round(value * 100) / 100;
+}
+
+function getDefaultSignals(): PersonalizationSignals {
+  return {
+    subscriptionPreferenceBias: "balanced",
+    postponementPattern: "none",
+    quickWinAffinity: "medium",
+    urgencyResponsiveness: "medium",
+    moneySensitivity: "review_first",
+    journeyCompletionStyle: "mixed",
+    reminderReliance: "low"
+  };
 }

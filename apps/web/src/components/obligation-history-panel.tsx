@@ -53,7 +53,8 @@ export default function ObligationHistoryPanel({ obligationId }: Props) {
     (history?.resolutionRuns.length ?? 0) +
     (history?.reminders.length ?? 0) +
     (history?.guidedJourneyEvents.length ?? 0) +
-    (history?.guidedJourneys.length ?? 0);
+    (history?.guidedJourneys.length ?? 0) +
+    (history?.outcomeFeedbackEvents.length ?? 0);
 
   if (!history || totalCount === 0) {
     return (
@@ -156,6 +157,29 @@ export default function ObligationHistoryPanel({ obligationId }: Props) {
               <div style={{ fontSize: 12, color: colors.textMuted }}>
                 Journey: {item.journeyId}
               </div>
+              <div style={metaText}>{formatDateTime(item.createdAt)}</div>
+            </div>
+          ))
+        )}
+      </section>
+
+      <section style={cardStyles.bordered}>
+        <h3 style={{ marginTop: 0 }}>Outcome Feedback</h3>
+        {history.outcomeFeedbackEvents.length === 0 ? (
+          <div style={{ color: colors.textMuted }}>No outcome feedback yet.</div>
+        ) : (
+          history.outcomeFeedbackEvents.map((item) => (
+            <div key={item.id} style={eventRow}>
+              <div style={{ fontWeight: 600 }}>{item.outcomeType}</div>
+              <div style={{ fontSize: 12, color: colors.textMuted }}>
+                Context: {item.sourceContext} · Action: {item.selectedActionKey}
+              </div>
+              {item.recommendationKey ? (
+                <div style={{ fontSize: 12, color: colors.textMuted }}>
+                  Recommendation: {item.recommendationKey}
+                </div>
+              ) : null}
+              {item.note ? <div>{item.note}</div> : null}
               <div style={metaText}>{formatDateTime(item.createdAt)}</div>
             </div>
           ))

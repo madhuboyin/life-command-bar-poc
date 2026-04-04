@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   abandonGuidedJourney,
   advanceGuidedJourney,
   backGuidedJourney,
   completeGuidedJourney,
+  createOutcomeFeedback,
   dismissGuidedJourney,
   selectGuidedJourneyOption
 } from "../lib/api";
@@ -23,6 +24,7 @@ import GuidedStepCard from "./guided-step-card";
 import EmptyState from "./ui/empty-state";
 import StatusMessage from "./ui/status-message";
 import { useToast } from "./ui/toast-provider";
+import OutcomeFeedbackPrompt from "./outcome-feedback-prompt";
 
 type Props = {
   initialJourney: GuidedJourney | null;
@@ -36,7 +38,12 @@ export default function GuidedJourneyShell({
   const [journey, setJourney] = useState<GuidedJourney | null>(initialJourney);
   const [error, setError] = useState<string | null>(initialError);
   const [loading, setLoading] = useState<string | null>(null);
+  const [helpfulnessSubmitted, setHelpfulnessSubmitted] = useState(false);
   const { showToast } = useToast();
+
+  useEffect(() => {
+    setHelpfulnessSubmitted(false);
+  }, [journey?.id]);
 
   async function handleSelectOption(optionKey: string) {
     if (!journey) return;
@@ -147,6 +154,38 @@ export default function GuidedJourneyShell({
     }
   }
 
+  async function handleHelpfulness(helpful: boolean) {
+    if (!journey) return;
+
+    try {
+      setLoading("helpful");
+      setError(null);
+
+      await createOutcomeFeedback({
+        obligationId: journey.obligationId,
+        guidedJourneyId: journey.id,
+        sourceContext: "GUIDED_MODE",
+        selectedActionKey: helpful ? "helpful_yes" : "helpful_no",
+        outcomeType: helpful ? "HELPFUL" : "NOT_HELPFUL",
+        note: helpful
+          ? "User said guided journey was helpful."
+          : "User said guided journey was not very helpful."
+      });
+
+      setHelpfulnessSubmitted(true);
+      showToast({
+        variant: "success",
+        title: "Feedback saved"
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not save feedback";
+      setError(message);
+      showToast({ variant: "error", title: "Feedback failed", description: message });
+    } finally {
+      setLoading(null);
+    }
+  }
+
   return (
     <main style={pageStyles.shell}>
       <div style={{ marginBottom: 18 }}>
@@ -215,6 +254,15 @@ export default function GuidedJourneyShell({
               </p>
             </section>
           )}
+
+          {journey.status !== "ACTIVE" ? (
+            <OutcomeFeedbackPrompt
+              loading={loading === "helpful"}
+              submitted={helpfulnessSubmitted}
+              onHelpful={async () => handleHelpfulness(true)}
+              onNotHelpful={async () => handleHelpfulness(false)}
+            />
+          ) : null}
 
           <section style={cardStyles.bordered}>
             <div

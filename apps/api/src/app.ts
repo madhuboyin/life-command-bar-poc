@@ -13,6 +13,8 @@ import { requireAuth } from "./middleware/auth.middleware";
 import { dashboardRouter } from "./routes/dashboard.routes";
 import { guidedJourneyRouter } from "./routes/guided-journey.routes";
 import { dailyPulseRouter } from "./routes/daily-pulse.routes";
+import { outcomeFeedbackRouter } from "./routes/outcome-feedback.routes";
+import { personalizationRouter } from "./routes/personalization.routes";
 
 export function createApp() {
   const app = express();
@@ -32,6 +34,8 @@ export function createApp() {
   app.use("/api/dashboard", dashboardRouter);
   app.use("/api/daily-pulse", dailyPulseRouter);
   app.use("/api/guided-journeys", guidedJourneyRouter);
+  app.use("/api/outcome-feedback", outcomeFeedbackRouter);
+  app.use("/api/personalization", personalizationRouter);
   app.use("/api", resolutionRouter);
 
   return app;

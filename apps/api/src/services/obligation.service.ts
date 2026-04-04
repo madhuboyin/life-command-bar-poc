@@ -141,6 +141,15 @@ export class ObligationService {
         createdAt: item.createdAt.toISOString(),
         updatedAt: item.updatedAt.toISOString(),
         completedAt: item.completedAt?.toISOString() ?? null
+      })),
+      outcomeFeedbackEvents: history.outcomeFeedbackEvents.map((item) => ({
+        id: item.id,
+        sourceContext: item.sourceContext,
+        recommendationKey: item.recommendationKey,
+        selectedActionKey: item.selectedActionKey,
+        outcomeType: item.outcomeType,
+        note: item.note,
+        createdAt: item.createdAt.toISOString()
       }))
     };
   }

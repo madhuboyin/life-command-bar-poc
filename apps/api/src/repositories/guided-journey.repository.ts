@@ -2,6 +2,8 @@ import {
   GuidedJourneyEventType,
   GuidedJourneyStatus,
   GuidedJourneyType,
+  OutcomeSourceContext,
+  OutcomeType,
   Prisma
 } from "@prisma/client";
 import { prisma } from "../clients/prisma.client";
@@ -216,6 +218,37 @@ export class GuidedJourneyRepository {
         userId: input.userId,
         obligationId: input.obligationId,
         eventType: input.eventType,
+        metadata: input.metadata
+      }
+    });
+  }
+
+  async createOutcomeFeedback(
+    input: {
+      userId: string;
+      obligationId: string;
+      guidedJourneyId: string;
+      sourceContext: OutcomeSourceContext;
+      recommendationKey?: string | null;
+      selectedActionKey: string;
+      outcomeType: OutcomeType;
+      note?: string;
+      metadata?: Prisma.InputJsonValue;
+    },
+    tx?: Prisma.TransactionClient
+  ) {
+    const db = getDb(tx);
+
+    return db.outcomeFeedback.create({
+      data: {
+        userId: input.userId,
+        obligationId: input.obligationId,
+        guidedJourneyId: input.guidedJourneyId,
+        sourceContext: input.sourceContext,
+        recommendationKey: input.recommendationKey ?? null,
+        selectedActionKey: input.selectedActionKey,
+        outcomeType: input.outcomeType,
+        note: input.note,
         metadata: input.metadata
       }
     });
