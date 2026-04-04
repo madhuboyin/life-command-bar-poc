@@ -246,6 +246,37 @@ enum AutoFlowStateStatus {
   DISMISSED
 }
 
+enum ZeroInputAutonomyTier {
+  OBSERVE_ONLY
+  PREPARE_ONLY
+  SAFE_AUTOMATION
+}
+
+enum ZeroInputDecision {
+  EXECUTED
+  REVIEW
+  APPROVAL_REQUIRED
+  SUPPRESSED
+}
+
+enum ZeroInputActionType {
+  CREATE_DRAFT_FROM_INGESTION
+  PROMOTE_RECURRING_PREDICTION
+  AUTO_CREATE_REMINDER
+  PREPARE_AUTO_FLOW
+  SUPPRESS_DUPLICATE
+  AUTO_REFRESH_SURFACES
+}
+
+enum ZeroInputApprovalStatus {
+  NONE
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+  UNDONE
+}
+
 model User {
   id       String  @id @default(cuid())
   email    String  @unique
@@ -274,6 +305,8 @@ model User {
   memoryContext       MemoryContext?
   memoryEvents        MemoryEvent[]
   predictions         Prediction[]
+  zeroInputPolicy     ZeroInputPolicy?
+  autonomyDecisions   AutonomyDecision[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -326,6 +359,7 @@ model Obligation {
   autoFlowStates      AutoFlowState[]
   focusSessionItems   FocusSessionItem[]
   promotedPredictions Prediction[] @relation("PredictionPromotedObligation")
+  autonomyDecisions   AutonomyDecision[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -534,6 +568,34 @@ model FocusSessionItem {
   @@map("focus_session_items")
 }
 
+model ZeroInputPolicy {
+  id String @id @default(cuid())
+
+  userId String @unique @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  modeEnabled  Boolean              @default(false) @map("mode_enabled")
+  autonomyTier ZeroInputAutonomyTier @default(OBSERVE_ONLY) @map("autonomy_tier")
+
+  allowRecurringPromotion Boolean @default(true) @map("allow_recurring_promotion")
+  allowReminderAutocreate Boolean @default(true) @map("allow_reminder_autocreate")
+  allowDuplicateSuppression Boolean @default(true) @map("allow_duplicate_suppression")
+  allowAutoFlowPreparation Boolean @default(true) @map("allow_auto_flow_preparation")
+  allowPredictionPromotion Boolean @default(true) @map("allow_prediction_promotion")
+
+  requireApprovalForFinancialItems Boolean @default(true) @map("require_approval_for_financial_items")
+  requireApprovalForLowConfidence Boolean @default(true) @map("require_approval_for_low_confidence")
+
+  quietHoursStart String? @map("quiet_hours_start") @db.VarChar(5)
+  quietHoursEnd   String? @map("quiet_hours_end") @db.VarChar(5)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId], map: "idx_zero_input_policy_user_id")
+  @@map("zero_input_policies")
+}
+
 model Prediction {
   id String @id @default(cuid())
 
@@ -561,6 +623,7 @@ model Prediction {
 
   promotedObligationId String? @map("promoted_obligation_id")
   promotedObligation   Obligation? @relation("PredictionPromotedObligation", fields: [promotedObligationId], references: [id], onDelete: SetNull)
+  autonomyDecisions    AutonomyDecision[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -687,6 +750,55 @@ model AutoFlowState {
   @@map("auto_flow_states")
 }
 
+model AutonomyDecision {
+  id String @id @default(cuid())
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  obligationId String?     @map("obligation_id")
+  obligation   Obligation? @relation(fields: [obligationId], references: [id], onDelete: SetNull)
+
+  predictionId String?      @map("prediction_id")
+  prediction   Prediction?  @relation(fields: [predictionId], references: [id], onDelete: SetNull)
+
+  reminderId String?     @map("reminder_id")
+  reminder   Reminder?   @relation(fields: [reminderId], references: [id], onDelete: SetNull)
+
+  sourceType    String  @map("source_type")
+  referenceType String  @map("reference_type")
+  referenceId   String? @map("reference_id")
+
+  candidateAction ZeroInputActionType @map("candidate_action")
+  decision        ZeroInputDecision
+  approvalStatus  ZeroInputApprovalStatus @default(NONE) @map("approval_status")
+
+  title       String
+  description String?
+  rationale   Json?
+
+  confidenceScore Decimal @default(0.0) @map("confidence_score") @db.Decimal(5, 4)
+  guardrailResults Json?  @map("guardrail_results")
+  metadata         Json?
+
+  executedAt DateTime? @map("executed_at")
+  approvedAt DateTime? @map("approved_at")
+  rejectedAt DateTime? @map("rejected_at")
+
+  undoneAt   DateTime? @map("undone_at")
+  undoReason String?   @map("undo_reason")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, createdAt], map: "idx_autonomy_decisions_user_created_at")
+  @@index([userId, decision, approvalStatus], map: "idx_autonomy_decisions_user_decision_approval")
+  @@index([obligationId], map: "idx_autonomy_decisions_obligation_id")
+  @@index([predictionId], map: "idx_autonomy_decisions_prediction_id")
+  @@index([referenceType, referenceId], map: "idx_autonomy_decisions_reference")
+  @@map("autonomy_decisions")
+}
+
 model DailyPulseItemState {
   id String @id @default(cuid())
 
@@ -758,6 +870,8 @@ model Reminder {
   title        String
   scheduledFor DateTime       @map("scheduled_for")
   status       ReminderStatus @default(SCHEDULED)
+
+  autonomyDecisions AutonomyDecision[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

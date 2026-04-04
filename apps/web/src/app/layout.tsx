@@ -54,6 +54,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/upcoming" style={{ textDecoration: "none", color: colors.textMuted }}>
                 Upcoming
               </Link>
+              <Link href="/settings" style={{ textDecoration: "none", color: colors.textMuted }}>
+                Settings
+              </Link>
             </div>
             </nav>
 

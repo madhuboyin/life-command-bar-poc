@@ -1,11 +1,13 @@
 import { Request, Response } from "express";
 import { z } from "zod";
 import { PredictionEngineService } from "../services/prediction-engine.service";
+import { ZeroInputService } from "../services/zero-input.service";
 import { fail, ok } from "../utils/api-response";
 import { handleControllerError } from "../utils/handle-controller-error";
 import { getRequiredUserId } from "../utils/request-user";
 
 const service = new PredictionEngineService();
+const zeroInputService = new ZeroInputService();
 
 const predictionParamsSchema = z.object({
   id: z.string().min(1)
@@ -78,7 +80,13 @@ export async function rebuildPredictions(req: Request, res: Response) {
     if (!userId) return;
 
     const data = await service.rebuild(userId);
-    return ok(res, data);
+    const zeroInput = await zeroInputService
+      .evaluateRecurringPredictions(userId)
+      .catch(() => ({ evaluated: 0, createdDecisions: 0 }));
+    return ok(res, {
+      ...data,
+      zeroInput
+    });
   } catch (error) {
     return handleControllerError(res, error, "Could not rebuild predictions");
   }

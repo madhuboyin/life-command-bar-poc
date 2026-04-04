@@ -634,6 +634,30 @@ export interface ControlTowerReadyItem {
   why: WhyExplanation;
 }
 
+export interface ControlTowerApprovalItem {
+  id: string;
+  decisionId: string;
+  title: string;
+  description: string | null;
+  candidateAction:
+    | "CREATE_DRAFT_FROM_INGESTION"
+    | "PROMOTE_RECURRING_PREDICTION"
+    | "AUTO_CREATE_REMINDER"
+    | "PREPARE_AUTO_FLOW"
+    | "SUPPRESS_DUPLICATE"
+    | "AUTO_REFRESH_SURFACES";
+  sourceLabel: string;
+  confidenceBand: ConfidenceBand;
+  confidenceScore: number;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED" | "NONE" | "UNDONE";
+  obligationId: string | null;
+  predictionId: string | null;
+  reminderId: string | null;
+  rationaleSummary: string | null;
+  createdAt: string;
+  why: WhyExplanation;
+}
+
 export interface ControlTowerUpcomingItem {
   id: string;
   predictionId: string;
@@ -685,17 +709,86 @@ export interface ControlTowerUpcomingSection {
 export interface ControlTowerResponse {
   generatedAt: string;
   review: ControlTowerReviewItem[];
+  approvals: ControlTowerApprovalItem[];
   ready: ControlTowerReadyItem[];
   upcoming: ControlTowerUpcomingSection;
   recent: ControlTowerRecentItem[];
   systemDecisions: ControlTowerSystemDecisionItem[];
   summary: {
     reviewCount: number;
+    approvalCount: number;
     readyCount: number;
     upcomingCount: number;
     recentCount: number;
     systemDecisionCount: number;
   };
+}
+
+export type ZeroInputAutonomyTier = "OBSERVE_ONLY" | "PREPARE_ONLY" | "SAFE_AUTOMATION";
+
+export interface ZeroInputPolicy {
+  id: string;
+  userId: string;
+  modeEnabled: boolean;
+  autonomyTier: ZeroInputAutonomyTier;
+  allowRecurringPromotion: boolean;
+  allowReminderAutocreate: boolean;
+  allowDuplicateSuppression: boolean;
+  allowAutoFlowPreparation: boolean;
+  allowPredictionPromotion: boolean;
+  requireApprovalForFinancialItems: boolean;
+  requireApprovalForLowConfidence: boolean;
+  quietHoursStart: string | null;
+  quietHoursEnd: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ZeroInputDecisionType = "EXECUTED" | "REVIEW" | "APPROVAL_REQUIRED" | "SUPPRESSED";
+export type ZeroInputApprovalStatus =
+  | "NONE"
+  | "PENDING"
+  | "APPROVED"
+  | "REJECTED"
+  | "EXPIRED"
+  | "UNDONE";
+
+export type ZeroInputActionType =
+  | "CREATE_DRAFT_FROM_INGESTION"
+  | "PROMOTE_RECURRING_PREDICTION"
+  | "AUTO_CREATE_REMINDER"
+  | "PREPARE_AUTO_FLOW"
+  | "SUPPRESS_DUPLICATE"
+  | "AUTO_REFRESH_SURFACES";
+
+export interface ZeroInputDecisionItem {
+  id: string;
+  title: string;
+  description: string | null;
+  sourceType: string;
+  referenceType: string;
+  referenceId: string | null;
+  candidateAction: ZeroInputActionType;
+  decision: ZeroInputDecisionType;
+  approvalStatus: ZeroInputApprovalStatus;
+  confidenceScore: number;
+  confidenceBand: ConfidenceBand;
+  rationale: Record<string, unknown> | null;
+  guardrailResults: Record<string, unknown> | null;
+  metadata: Record<string, unknown> | null;
+  obligationId: string | null;
+  predictionId: string | null;
+  reminderId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  executedAt: string | null;
+  approvedAt: string | null;
+  rejectedAt: string | null;
+  undoneAt: string | null;
+  undoReason: string | null;
+  canApprove: boolean;
+  canReject: boolean;
+  canUndo: boolean;
 }
 
 export interface ObligationHistory {
@@ -744,6 +837,21 @@ export interface ObligationHistory {
     completedAt?: string | null;
   }>;
   outcomeFeedbackEvents: OutcomeFeedbackEvent[];
+  autonomyDecisions: Array<{
+    id: string;
+    candidateAction: ZeroInputActionType;
+    decision: ZeroInputDecisionType;
+    approvalStatus: ZeroInputApprovalStatus;
+    title: string;
+    description: string | null;
+    confidenceScore: number;
+    createdAt: string;
+    executedAt: string | null;
+    approvedAt: string | null;
+    rejectedAt: string | null;
+    undoneAt: string | null;
+    undoReason: string | null;
+  }>;
 }
 
 export interface GuidedJourneyOption {

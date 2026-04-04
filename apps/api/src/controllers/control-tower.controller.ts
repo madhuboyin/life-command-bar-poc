@@ -13,6 +13,7 @@ export async function getControlTower(req: Request, res: Response) {
 
     const data = await service.getControlTower(userId, {
       reviewLimit: parseLimit(req.query.reviewLimit, 6, 1, 20),
+      approvalLimit: parseLimit(req.query.approvalLimit, 6, 1, 20),
       readyLimit: parseLimit(req.query.readyLimit, 6, 1, 20),
       upcomingLimitPerWindow: parseLimit(req.query.upcomingLimitPerWindow, 4, 1, 12),
       recentLimit: parseLimit(req.query.recentLimit, 6, 1, 20),
@@ -34,6 +35,18 @@ export async function getControlTowerReview(req: Request, res: Response) {
     return ok(res, data);
   } catch (error) {
     return handleControllerError(res, error, "Could not load control tower review");
+  }
+}
+
+export async function getControlTowerApprovals(req: Request, res: Response) {
+  try {
+    const userId = getRequiredUserId(req, res);
+    if (!userId) return;
+
+    const data = await service.getApprovals(userId, parseLimit(req.query.limit, 6, 1, 30));
+    return ok(res, data);
+  } catch (error) {
+    return handleControllerError(res, error, "Could not load control tower approvals");
   }
 }
 

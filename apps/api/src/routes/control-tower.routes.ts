@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   getControlTower,
+  getControlTowerApprovals,
   getControlTowerReady,
   getControlTowerRecent,
   getControlTowerReview,
@@ -12,6 +13,7 @@ export const controlTowerRouter = Router();
 
 controlTowerRouter.get("/", getControlTower);
 controlTowerRouter.get("/review", getControlTowerReview);
+controlTowerRouter.get("/approvals", getControlTowerApprovals);
 controlTowerRouter.get("/ready", getControlTowerReady);
 controlTowerRouter.get("/upcoming", getControlTowerUpcoming);
 controlTowerRouter.get("/recent", getControlTowerRecent);

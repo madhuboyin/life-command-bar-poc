@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import {
+  approveZeroInputAction,
   acceptAutoFlow,
   confirmObligationCandidate,
   confirmPrediction,
@@ -12,10 +13,12 @@ import {
   dismissAutoFlow,
   dismissObligation,
   dismissPrediction,
+  rejectZeroInputAction,
   rejectObligationCandidate
 } from "../lib/api";
 import { buildGuidedHref } from "../lib/flow-navigation";
 import type {
+  ControlTowerApprovalItem,
   ControlTowerReadyItem,
   ControlTowerRecentItem,
   ControlTowerReviewItem,
@@ -33,6 +36,7 @@ type CommonProps = {
 
 type Props =
   | (CommonProps & { section: "review"; item: ControlTowerReviewItem })
+  | (CommonProps & { section: "approvals"; item: ControlTowerApprovalItem })
   | (CommonProps & { section: "ready"; item: ControlTowerReadyItem })
   | (CommonProps & { section: "upcoming"; item: ControlTowerUpcomingItem })
   | (CommonProps & { section: "recent"; item: ControlTowerRecentItem })
@@ -47,6 +51,10 @@ export default function ControlItemCard(props: Props) {
   const dateLabel = useMemo(() => {
     if (props.section === "review") {
       return toDateLabel(props.item.predictedDate);
+    }
+
+    if (props.section === "approvals") {
+      return toDateLabel(props.item.createdAt);
     }
 
     if (props.section === "upcoming") {
@@ -272,6 +280,89 @@ export default function ControlItemCard(props: Props) {
               </button>
             </>
           ) : null}
+        </div>
+      </article>
+    );
+  }
+
+  if (props.section === "approvals") {
+    const actionLabel = humanizeAction(props.item.candidateAction);
+
+    return (
+      <article style={{ ...cardStyles.item, display: "grid", gap: 10 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+          <div>
+            <h3 style={{ margin: "0 0 6px 0" }}>{props.item.title}</h3>
+            <div style={{ color: colors.textMuted, fontSize: 13 }}>
+              {props.item.rationaleSummary ?? "Approval required before automation executes."}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <SourceLabelBadge label={props.item.sourceLabel} />
+            <ConfidenceBadge confidenceBand={props.item.confidenceBand} needsReview />
+          </div>
+        </div>
+
+        {props.item.description ? (
+          <p style={{ margin: 0, color: colors.textMuted }}>{props.item.description}</p>
+        ) : null}
+
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Tag label={actionLabel} />
+          <Tag label={`Status ${props.item.status.toLowerCase()}`} />
+          {dateLabel ? <Tag label={`Queued ${dateLabel}`} /> : null}
+        </div>
+
+        <WhyThisExplanation why={props.item.why} />
+
+        {error ? <div style={{ color: colors.errorText, fontSize: 12 }}>{error}</div> : null}
+
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() =>
+              void runAction(
+                "approve",
+                async () => {
+                  await approveZeroInputAction(props.item.decisionId);
+                },
+                "Automation approved",
+                props.item.title
+              )
+            }
+            disabled={loadingAction !== null}
+            style={buttonStyles.primary}
+          >
+            {loadingAction === "approve" ? "Saving..." : "Approve"}
+          </button>
+          {props.item.obligationId ? (
+            <Link href={`/obligations/${props.item.obligationId}/review`} style={buttonStyles.link}>
+              Edit
+            </Link>
+          ) : props.item.predictionId ? (
+            <Link href="/upcoming" style={buttonStyles.link}>
+              Inspect
+            </Link>
+          ) : null}
+          <button
+            type="button"
+            onClick={() =>
+              void runAction(
+                "reject",
+                async () => {
+                  await rejectZeroInputAction(props.item.decisionId, {
+                    reason: "rejected_from_control_tower"
+                  });
+                },
+                "Automation rejected",
+                props.item.title
+              )
+            }
+            disabled={loadingAction !== null}
+            style={buttonStyles.danger}
+          >
+            {loadingAction === "reject" ? "Saving..." : "Reject"}
+          </button>
         </div>
       </article>
     );
@@ -512,6 +603,25 @@ function formatFieldValue(value: unknown): string {
   if (Array.isArray(value)) return value.map((entry) => formatFieldValue(entry)).join(", ");
   if (value && typeof value === "object") return "structured";
   return "";
+}
+
+function humanizeAction(action: string) {
+  switch (action) {
+    case "CREATE_DRAFT_FROM_INGESTION":
+      return "Promote ingested item";
+    case "PROMOTE_RECURRING_PREDICTION":
+      return "Promote recurring prediction";
+    case "AUTO_CREATE_REMINDER":
+      return "Create reminder";
+    case "PREPARE_AUTO_FLOW":
+      return "Prepare auto-flow";
+    case "SUPPRESS_DUPLICATE":
+      return "Suppress duplicate";
+    case "AUTO_REFRESH_SURFACES":
+      return "Refresh surfaces";
+    default:
+      return action.replace(/_/g, " ").toLowerCase();
+  }
 }
 
 function Tag({ label }: { label: string }) {

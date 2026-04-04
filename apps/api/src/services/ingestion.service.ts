@@ -37,6 +37,7 @@ import {
 import { AutoFlowService } from "./auto-flow.service";
 import { HomeMemoryService } from "./home-memory.service";
 import { PredictionEngineService } from "./prediction-engine.service";
+import { ZeroInputService } from "./zero-input.service";
 
 const PARSER_VERSION = "ingestion-v1-rule-2026-04-04";
 
@@ -115,6 +116,7 @@ export class IngestionService {
   private readonly autoFlowService = new AutoFlowService();
   private readonly homeMemoryService = new HomeMemoryService();
   private readonly predictionEngineService = new PredictionEngineService();
+  private readonly zeroInputService = new ZeroInputService();
 
   async ingestEmailForward(payload: unknown): Promise<IngestionResult> {
     const input = emailForwardSchema.parse(payload);
@@ -389,7 +391,7 @@ export class IngestionService {
         }
       });
 
-      return {
+      const duplicateResult: IngestionResult = {
         importSourceId: importSource.id,
         candidateId: existing.id,
         obligationId: existing.id,
@@ -415,6 +417,29 @@ export class IngestionService {
           description: existing.description
         }
       };
+
+      await this.zeroInputService
+        .evaluateIngestionResult({
+          userId: normalized.userId,
+          channel: normalized.channel,
+          importSourceId: importSource.id,
+          obligationId: duplicateResult.obligationId,
+          status: duplicateResult.status,
+          confidence: duplicateResult.confidence,
+          duplicateCandidate: true,
+          conflictDetected: false,
+          needsReview: duplicateResult.needsReview,
+          extracted: {
+            type: duplicateResult.extracted.type,
+            title: duplicateResult.extracted.title,
+            vendor: duplicateResult.extracted.vendor,
+            amount: duplicateResult.extracted.amount,
+            dueDate: duplicateResult.extracted.dueDate
+          }
+        })
+        .catch(() => null);
+
+      return duplicateResult;
     }
 
     const classification = classifyObligationType(
@@ -503,7 +528,7 @@ export class IngestionService {
         }
       });
 
-      return {
+      const duplicateResult: IngestionResult = {
         importSourceId: importSource.id,
         candidateId: structuredDuplicate.id,
         obligationId: structuredDuplicate.id,
@@ -529,6 +554,29 @@ export class IngestionService {
           description: structuredDuplicate.description
         }
       };
+
+      await this.zeroInputService
+        .evaluateIngestionResult({
+          userId: normalized.userId,
+          channel: normalized.channel,
+          importSourceId: importSource.id,
+          obligationId: duplicateResult.obligationId,
+          status: duplicateResult.status,
+          confidence: duplicateResult.confidence,
+          duplicateCandidate: true,
+          conflictDetected: false,
+          needsReview: duplicateResult.needsReview,
+          extracted: {
+            type: duplicateResult.extracted.type,
+            title: duplicateResult.extracted.title,
+            vendor: duplicateResult.extracted.vendor,
+            amount: duplicateResult.extracted.amount,
+            dueDate: duplicateResult.extracted.dueDate
+          }
+        })
+        .catch(() => null);
+
+      return duplicateResult;
     }
 
     const conflictMatch = await this.repository.findConflictByStructuredFields({
@@ -599,7 +647,7 @@ export class IngestionService {
         }
       });
 
-      return {
+      const noCandidateResult: IngestionResult = {
         importSourceId: importSource.id,
         candidateId: null,
         obligationId: null,
@@ -625,6 +673,29 @@ export class IngestionService {
           description: extracted.description
         }
       };
+
+      await this.zeroInputService
+        .evaluateIngestionResult({
+          userId: normalized.userId,
+          channel: normalized.channel,
+          importSourceId: importSource.id,
+          obligationId: noCandidateResult.obligationId,
+          status: noCandidateResult.status,
+          confidence: noCandidateResult.confidence,
+          duplicateCandidate: noCandidateResult.duplicateCandidate,
+          conflictDetected: noCandidateResult.conflictDetected,
+          needsReview: noCandidateResult.needsReview,
+          extracted: {
+            type: noCandidateResult.extracted.type,
+            title: noCandidateResult.extracted.title,
+            vendor: noCandidateResult.extracted.vendor,
+            amount: noCandidateResult.extracted.amount,
+            dueDate: noCandidateResult.extracted.dueDate
+          }
+        })
+        .catch(() => null);
+
+      return noCandidateResult;
     }
 
     const obligationInput = this.buildObligationPayload({
@@ -700,7 +771,7 @@ export class IngestionService {
       })
       .catch(() => null);
 
-    return {
+    const successResult: IngestionResult = {
       importSourceId: importSource.id,
       candidateId: obligation.id,
       obligationId: obligation.id,
@@ -726,6 +797,29 @@ export class IngestionService {
         description: obligation.description
       }
     };
+
+    await this.zeroInputService
+      .evaluateIngestionResult({
+        userId: normalized.userId,
+        channel: normalized.channel,
+        importSourceId: importSource.id,
+        obligationId: successResult.obligationId,
+        status: successResult.status,
+        confidence: successResult.confidence,
+        duplicateCandidate: successResult.duplicateCandidate,
+        conflictDetected: successResult.conflictDetected,
+        needsReview: successResult.needsReview,
+        extracted: {
+          type: successResult.extracted.type,
+          title: successResult.extracted.title,
+          vendor: successResult.extracted.vendor,
+          amount: successResult.extracted.amount,
+          dueDate: successResult.extracted.dueDate
+        }
+      })
+      .catch(() => null);
+
+    return successResult;
   }
 
   private async captureMemorySignal(payload: {

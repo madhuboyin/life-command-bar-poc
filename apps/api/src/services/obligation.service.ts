@@ -244,6 +244,21 @@ export class ObligationService {
         outcomeType: item.outcomeType,
         note: item.note,
         createdAt: item.createdAt.toISOString()
+      })),
+      autonomyDecisions: history.autonomyDecisions.map((item) => ({
+        id: item.id,
+        candidateAction: item.candidateAction,
+        decision: item.decision,
+        approvalStatus: item.approvalStatus,
+        title: item.title,
+        description: item.description,
+        confidenceScore: Number(item.confidenceScore),
+        createdAt: item.createdAt.toISOString(),
+        executedAt: item.executedAt?.toISOString() ?? null,
+        approvedAt: item.approvedAt?.toISOString() ?? null,
+        rejectedAt: item.rejectedAt?.toISOString() ?? null,
+        undoneAt: item.undoneAt?.toISOString() ?? null,
+        undoReason: item.undoReason
       }))
     };
   }

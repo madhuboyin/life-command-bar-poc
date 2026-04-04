@@ -8,8 +8,10 @@ import { AutoFlowService } from "./auto-flow.service";
 import { ObligationService } from "./obligation.service";
 import { PredictionEngineService } from "./prediction-engine.service";
 import { HomeMemoryService } from "./home-memory.service";
+import { ZeroInputService } from "./zero-input.service";
 
 const DEFAULT_REVIEW_LIMIT = 6;
+const DEFAULT_APPROVAL_LIMIT = 6;
 const DEFAULT_READY_LIMIT = 6;
 const DEFAULT_UPCOMING_LIMIT_PER_WINDOW = 4;
 const DEFAULT_RECENT_LIMIT = 6;
@@ -43,6 +45,24 @@ type ControlTowerReadyItem = {
   priorityScore: number;
   reason: string;
   ctaLabel: string;
+  why: TrustWhy;
+};
+
+type ControlTowerApprovalItem = {
+  id: string;
+  decisionId: string;
+  title: string;
+  description: string | null;
+  candidateAction: string;
+  sourceLabel: string;
+  confidenceBand: "HIGH" | "MEDIUM" | "LOW";
+  confidenceScore: number;
+  status: string;
+  obligationId: string | null;
+  predictionId: string | null;
+  reminderId: string | null;
+  rationaleSummary: string | null;
+  createdAt: string;
   why: TrustWhy;
 };
 
@@ -106,15 +126,18 @@ export class ControlTowerService {
   private readonly autoFlowService = new AutoFlowService();
   private readonly predictionEngineService = new PredictionEngineService();
   private readonly homeMemoryService = new HomeMemoryService();
+  private readonly zeroInputService = new ZeroInputService();
 
   async getControlTower(userId: string, options?: {
     reviewLimit?: number;
+    approvalLimit?: number;
     readyLimit?: number;
     upcomingLimitPerWindow?: number;
     recentLimit?: number;
     systemDecisionsLimit?: number;
   }) {
     const reviewLimit = options?.reviewLimit ?? DEFAULT_REVIEW_LIMIT;
+    const approvalLimit = options?.approvalLimit ?? DEFAULT_APPROVAL_LIMIT;
     const readyLimit = options?.readyLimit ?? DEFAULT_READY_LIMIT;
     const upcomingLimitPerWindow =
       options?.upcomingLimitPerWindow ?? DEFAULT_UPCOMING_LIMIT_PER_WINDOW;
@@ -122,8 +145,9 @@ export class ControlTowerService {
     const systemDecisionsLimit =
       options?.systemDecisionsLimit ?? DEFAULT_SYSTEM_DECISIONS_LIMIT;
 
-    const [reviewRaw, readyRaw, upcomingRaw, recent, systemDecisions] = await Promise.all([
+    const [reviewRaw, approvalsRaw, readyRaw, upcomingRaw, recent, systemDecisions] = await Promise.all([
       this.getReview(userId, reviewLimit * 2),
+      this.getApprovals(userId, approvalLimit * 2),
       this.getReady(userId, readyLimit * 2),
       this.getUpcoming(userId, upcomingLimitPerWindow),
       this.getRecent(userId, recentLimit),
@@ -131,6 +155,18 @@ export class ControlTowerService {
     ]);
 
     const review = reviewRaw.items.slice(0, reviewLimit);
+    const approvals = approvalsRaw.items
+      .filter((item) => {
+        if (item.obligationId && review.some((reviewItem) => reviewItem.obligationId === item.obligationId)) {
+          return false;
+        }
+        if (item.predictionId && review.some((reviewItem) => reviewItem.predictionId === item.predictionId)) {
+          return false;
+        }
+        return true;
+      })
+      .slice(0, approvalLimit);
+
     const reviewObligationIds = new Set(
       review
         .map((item) => item.obligationId)
@@ -165,6 +201,7 @@ export class ControlTowerService {
     return {
       generatedAt: new Date().toISOString(),
       review,
+      approvals,
       ready,
       upcoming: {
         windows: filteredUpcomingWindows,
@@ -174,11 +211,57 @@ export class ControlTowerService {
       systemDecisions: systemDecisions.items,
       summary: {
         reviewCount: review.length,
+        approvalCount: approvals.length,
         readyCount: ready.length,
         upcomingCount: upcomingItems.length,
         recentCount: recent.items.length,
         systemDecisionCount: systemDecisions.items.length
       }
+    };
+  }
+
+  async getApprovals(userId: string, limit = DEFAULT_APPROVAL_LIMIT) {
+    const approvals = await this.zeroInputService.listApprovals(userId, Math.max(limit, 20));
+
+    const items = approvals.items
+      .map<ControlTowerApprovalItem>((item) => {
+        const reasons = asRecord(item.rationale);
+        const reasonLines = Array.isArray(reasons?.reasons)
+          ? reasons?.reasons.filter((entry): entry is string => typeof entry === "string")
+          : [];
+        const primaryReason =
+          reasonLines[0] ??
+          (item.candidateAction === "PROMOTE_RECURRING_PREDICTION"
+            ? "System found a stable recurring pattern."
+            : "Approval needed before safe automation.");
+
+        return {
+          id: `approval:${item.id}`,
+          decisionId: item.id,
+          title: item.title,
+          description: item.description,
+          candidateAction: item.candidateAction,
+          sourceLabel: approvalSourceLabel(item.sourceType),
+          confidenceBand: item.confidenceBand,
+          confidenceScore: item.confidenceScore,
+          status: item.approvalStatus,
+          obligationId: item.obligationId,
+          predictionId: item.predictionId,
+          reminderId: item.reminderId,
+          rationaleSummary: primaryReason,
+          createdAt: item.createdAt,
+          why: {
+            primaryReason,
+            signals: deriveApprovalSignals(item),
+            confidence: toWhyConfidence(item.confidenceScore),
+            personalizationReason: null
+          }
+        };
+      })
+      .slice(0, limit);
+
+    return {
+      items
     };
   }
 
@@ -396,7 +479,7 @@ export class ControlTowerService {
   }
 
   async getSystemDecisions(userId: string, limit = DEFAULT_SYSTEM_DECISIONS_LIMIT) {
-    const [auditEvents, suppressedPatterns, memoryEvents] = await Promise.all([
+    const [auditEvents, suppressedPatterns, memoryEvents, autonomyDecisions] = await Promise.all([
       prisma.auditEvent.findMany({
         where: {
           userId,
@@ -433,7 +516,15 @@ export class ControlTowerService {
           createdAt: "desc"
         },
         take: Math.max(limit, 20)
-      })
+      }),
+      this.zeroInputService
+        .listDecisions(userId, {
+          limit: Math.max(limit * 3, 30),
+          decision: ["EXECUTED", "SUPPRESSED", "REVIEW"],
+          approvalStatus: ["NONE", "APPROVED", "REJECTED", "UNDONE"]
+        })
+        .then((result) => result.items)
+        .catch(() => [])
     ]);
 
     const auditItems = auditEvents.map((event) => {
@@ -479,7 +570,18 @@ export class ControlTowerService {
       };
     });
 
-    const items = [...auditItems, ...suppressedItems, ...memoryItems]
+    const autonomyItems: ControlTowerSystemDecisionItem[] = autonomyDecisions.map((item) => ({
+      id: `autonomy:${item.id}`,
+      decisionType: toSystemDecisionTypeFromAutonomy(item),
+      title: item.title,
+      explanation: autonomyExplanation(item),
+      sourceSignals: buildAutonomySignals(item),
+      createdAt: item.createdAt,
+      obligationId: item.obligationId,
+      referenceId: item.referenceId
+    }));
+
+    const items = [...auditItems, ...suppressedItems, ...memoryItems, ...autonomyItems]
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, limit);
 
@@ -861,4 +963,98 @@ function asRecord(value: unknown) {
 
 function asNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function approvalSourceLabel(sourceType: string) {
+  const normalized = sourceType.toLowerCase();
+  if (normalized.includes("email")) return "Imported from email";
+  if (normalized.includes("upload") || normalized.includes("document")) {
+    return "Extracted from upload";
+  }
+  if (normalized.includes("command")) return "Captured from command";
+  if (normalized.includes("prediction")) return "Predicted from recurring pattern";
+  return "System automation";
+}
+
+function deriveApprovalSignals(item: {
+  candidateAction: string;
+  confidenceBand: "HIGH" | "MEDIUM" | "LOW";
+}) {
+  const signals: string[] = [];
+  if (item.candidateAction === "PROMOTE_RECURRING_PREDICTION") {
+    signals.push("recent activity");
+    signals.push("due soon");
+  }
+  if (item.candidateAction === "AUTO_CREATE_REMINDER") {
+    signals.push("quick win");
+  }
+  if (item.confidenceBand !== "HIGH") {
+    signals.push("high importance");
+  }
+  if (signals.length === 0) {
+    signals.push("high importance");
+  }
+  return Array.from(new Set(signals));
+}
+
+function toSystemDecisionTypeFromAutonomy(item: {
+  candidateAction: string;
+  decision: string;
+  approvalStatus: string;
+}) {
+  if (item.candidateAction === "SUPPRESS_DUPLICATE") return "DUPLICATE" as const;
+  if (item.candidateAction === "PREPARE_AUTO_FLOW") return "AUTO_FLOW" as const;
+  if (item.candidateAction === "PROMOTE_RECURRING_PREDICTION") return "PREDICTION" as const;
+  if (item.decision === "REVIEW" || item.approvalStatus === "PENDING") return "ROUTING" as const;
+  return "CONFIDENCE" as const;
+}
+
+function autonomyExplanation(item: {
+  candidateAction: string;
+  decision: string;
+  approvalStatus: string;
+  title: string;
+  rationale: Record<string, unknown> | null;
+}) {
+  const reasons = Array.isArray(item.rationale?.reasons)
+    ? item.rationale?.reasons.filter((entry): entry is string => typeof entry === "string")
+    : [];
+  const reason = reasons[0] ?? null;
+
+  if (item.decision === "APPROVAL_REQUIRED" && item.approvalStatus === "PENDING") {
+    return reason
+      ? `Awaiting user approval: ${reason.replace(/_/g, " ")}.`
+      : "Awaiting user approval before automation executes.";
+  }
+  if (item.decision === "SUPPRESSED") {
+    return reason ? `Suppressed by guardrail: ${reason.replace(/_/g, " ")}.` : "Suppressed by guardrail.";
+  }
+  if (item.decision === "REVIEW") {
+    return reason ? `Routed to review: ${reason.replace(/_/g, " ")}.` : "Routed to review by guardrails.";
+  }
+  if (item.candidateAction === "PROMOTE_RECURRING_PREDICTION") {
+    return "Recurring prediction was promoted under safe automation rules.";
+  }
+  return item.title;
+}
+
+function buildAutonomySignals(item: {
+  candidateAction: string;
+  decision: string;
+  approvalStatus: string;
+  rationale: Record<string, unknown> | null;
+}) {
+  const signals: string[] = [item.candidateAction.toLowerCase(), item.decision.toLowerCase()];
+  if (item.approvalStatus !== "NONE") {
+    signals.push(`approval:${item.approvalStatus.toLowerCase()}`);
+  }
+
+  const reasons = Array.isArray(item.rationale?.reasons)
+    ? item.rationale?.reasons.filter((entry): entry is string => typeof entry === "string")
+    : [];
+  for (const reason of reasons.slice(0, 3)) {
+    signals.push(reason);
+  }
+
+  return signals;
 }

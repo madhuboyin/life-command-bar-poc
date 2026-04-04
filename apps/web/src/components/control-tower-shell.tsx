@@ -19,6 +19,7 @@ type Props = {
 const EMPTY_CONTROL_TOWER: ControlTowerResponse = {
   generatedAt: new Date().toISOString(),
   review: [],
+  approvals: [],
   ready: [],
   upcoming: {
     windows: [],
@@ -28,6 +29,7 @@ const EMPTY_CONTROL_TOWER: ControlTowerResponse = {
   systemDecisions: [],
   summary: {
     reviewCount: 0,
+    approvalCount: 0,
     readyCount: 0,
     upcomingCount: 0,
     recentCount: 0,
@@ -46,6 +48,7 @@ export default function ControlTowerShell({ initialData, initialError = null }: 
       setError(null);
       const next = await getControlTower({
         reviewLimit: 6,
+        approvalLimit: 6,
         readyLimit: 6,
         upcomingLimitPerWindow: 4,
         recentLimit: 6,
@@ -87,6 +90,7 @@ export default function ControlTowerShell({ initialData, initialError = null }: 
         <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 8 }}>At a glance</div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Pill label={`Needs review ${data.summary.reviewCount}`} />
+          <Pill label={`Approval needed ${data.summary.approvalCount}`} />
           <Pill label={`Ready now ${data.summary.readyCount}`} />
           <Pill label={`Upcoming ${data.summary.upcomingCount}`} />
           <Pill label={`Recent ${data.summary.recentCount}`} />
@@ -114,6 +118,25 @@ export default function ControlTowerShell({ initialData, initialError = null }: 
             <div style={{ display: "grid", gap: 10 }}>
               {data.review.map((item) => (
                 <ControlItemCard key={item.id} section="review" item={item} onUpdated={refresh} />
+              ))}
+            </div>
+          )}
+        </ControlSection>
+
+        <ControlSection
+          title="Approval Needed"
+          description="Safe automation requests awaiting your explicit approval."
+          count={data.approvals.length}
+        >
+          {data.approvals.length === 0 ? (
+            <EmptyState
+              title="No approvals waiting"
+              description="Higher-sensitivity actions will appear here before they run."
+            />
+          ) : (
+            <div style={{ display: "grid", gap: 10 }}>
+              {data.approvals.map((item) => (
+                <ControlItemCard key={item.id} section="approvals" item={item} onUpdated={refresh} />
               ))}
             </div>
           )}

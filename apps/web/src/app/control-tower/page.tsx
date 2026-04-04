@@ -9,6 +9,7 @@ export default async function ControlTowerPage() {
   try {
     data = await getControlTower({
       reviewLimit: 6,
+      approvalLimit: 6,
       readyLimit: 6,
       upcomingLimitPerWindow: 4,
       recentLimit: 6,

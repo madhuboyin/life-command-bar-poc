@@ -54,7 +54,8 @@ export default function ObligationHistoryPanel({ obligationId }: Props) {
     (history?.reminders.length ?? 0) +
     (history?.guidedJourneyEvents.length ?? 0) +
     (history?.guidedJourneys.length ?? 0) +
-    (history?.outcomeFeedbackEvents.length ?? 0);
+    (history?.outcomeFeedbackEvents.length ?? 0) +
+    (history?.autonomyDecisions.length ?? 0);
 
   if (!history || totalCount === 0) {
     return (
@@ -75,6 +76,24 @@ export default function ObligationHistoryPanel({ obligationId }: Props) {
           history.auditEvents.map((item) => (
             <div key={item.id} style={eventRow}>
               <div style={{ fontWeight: 600 }}>{item.eventType}</div>
+              <div style={metaText}>{formatDateTime(item.createdAt)}</div>
+            </div>
+          ))
+        )}
+      </section>
+
+      <section style={cardStyles.bordered}>
+        <h3 style={{ marginTop: 0 }}>Autonomous Decisions</h3>
+        {history.autonomyDecisions.length === 0 ? (
+          <div style={{ color: colors.textMuted }}>No autonomous decisions recorded.</div>
+        ) : (
+          history.autonomyDecisions.map((item) => (
+            <div key={item.id} style={eventRow}>
+              <div style={{ fontWeight: 600 }}>{item.title}</div>
+              <div style={{ fontSize: 12, color: colors.textMuted }}>
+                {item.candidateAction} · {item.decision} · {item.approvalStatus}
+              </div>
+              {item.description ? <div>{item.description}</div> : null}
               <div style={metaText}>{formatDateTime(item.createdAt)}</div>
             </div>
           ))

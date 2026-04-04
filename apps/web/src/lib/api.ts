@@ -35,7 +35,9 @@ import type {
   Reminder,
   ResolutionResponse,
   SortDirection,
-  TodayFeedResponse
+  TodayFeedResponse,
+  ZeroInputDecisionItem,
+  ZeroInputPolicy
 } from "./types";
 
 const PUBLIC_API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "").trim();
@@ -402,6 +404,7 @@ export async function getDashboardInsights(params?: {
 
 export async function getControlTower(params?: {
   reviewLimit?: number;
+  approvalLimit?: number;
   readyLimit?: number;
   upcomingLimitPerWindow?: number;
   recentLimit?: number;
@@ -410,6 +413,9 @@ export async function getControlTower(params?: {
   const query = new URLSearchParams();
   if (typeof params?.reviewLimit === "number") {
     query.set("reviewLimit", String(params.reviewLimit));
+  }
+  if (typeof params?.approvalLimit === "number") {
+    query.set("approvalLimit", String(params.approvalLimit));
   }
   if (typeof params?.readyLimit === "number") {
     query.set("readyLimit", String(params.readyLimit));
@@ -446,6 +452,16 @@ export async function getControlTowerReady(limit = 6) {
   return handleResponse<{ items: ControlTowerResponse["ready"] }>(res);
 }
 
+export async function getControlTowerApprovals(limit = 6) {
+  const res = await apiFetch(
+    `/control-tower/approvals?limit=${encodeURIComponent(String(limit))}`,
+    {
+      cache: "no-store"
+    }
+  );
+  return handleResponse<{ items: ControlTowerResponse["approvals"] }>(res);
+}
+
 export async function getControlTowerUpcoming(limitPerWindow = 4) {
   const res = await apiFetch(
     `/control-tower/upcoming?limitPerWindow=${encodeURIComponent(String(limitPerWindow))}`,
@@ -471,6 +487,98 @@ export async function getControlTowerSystemDecisions(limit = 6) {
     }
   );
   return handleResponse<{ items: ControlTowerResponse["systemDecisions"] }>(res);
+}
+
+export async function getZeroInputPolicy() {
+  const res = await apiFetch("/zero-input/policy", {
+    cache: "no-store"
+  });
+  return handleResponse<{ policy: ZeroInputPolicy }>(res);
+}
+
+export async function updateZeroInputPolicy(
+  input: Partial<
+    Pick<
+      ZeroInputPolicy,
+      | "modeEnabled"
+      | "autonomyTier"
+      | "allowRecurringPromotion"
+      | "allowReminderAutocreate"
+      | "allowDuplicateSuppression"
+      | "allowAutoFlowPreparation"
+      | "allowPredictionPromotion"
+      | "requireApprovalForFinancialItems"
+      | "requireApprovalForLowConfidence"
+      | "quietHoursStart"
+      | "quietHoursEnd"
+    >
+  >
+) {
+  const res = await apiFetch("/zero-input/policy", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  return handleResponse<{ policy: ZeroInputPolicy }>(res);
+}
+
+export async function getZeroInputDecisions(params?: {
+  limit?: number;
+  decision?: Array<"EXECUTED" | "REVIEW" | "APPROVAL_REQUIRED" | "SUPPRESSED">;
+  approvalStatus?: Array<"NONE" | "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED" | "UNDONE">;
+}) {
+  const query = new URLSearchParams();
+  if (typeof params?.limit === "number") query.set("limit", String(params.limit));
+  if (params?.decision?.length) query.set("decision", params.decision.join(","));
+  if (params?.approvalStatus?.length) {
+    query.set("approvalStatus", params.approvalStatus.join(","));
+  }
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+
+  const res = await apiFetch(`/zero-input/decisions${suffix}`, {
+    cache: "no-store"
+  });
+  return handleResponse<{ items: ZeroInputDecisionItem[] }>(res);
+}
+
+export async function getZeroInputApprovals(limit = 20) {
+  const res = await apiFetch(`/zero-input/approvals?limit=${encodeURIComponent(String(limit))}`, {
+    cache: "no-store"
+  });
+  return handleResponse<{ items: ZeroInputDecisionItem[] }>(res);
+}
+
+export async function approveZeroInputAction(
+  decisionId: string,
+  input?: { note?: string; dontAutoDoSimilar?: boolean }
+) {
+  const res = await apiFetch(`/zero-input/approvals/${decisionId}/approve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input ?? {})
+  });
+  return handleResponse<{ decision: ZeroInputDecisionItem }>(res);
+}
+
+export async function rejectZeroInputAction(
+  decisionId: string,
+  input?: { reason?: string; dontAutoDoSimilar?: boolean }
+) {
+  const res = await apiFetch(`/zero-input/approvals/${decisionId}/reject`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input ?? {})
+  });
+  return handleResponse<{ decision: ZeroInputDecisionItem }>(res);
+}
+
+export async function undoZeroInputDecision(decisionId: string, reason?: string) {
+  const res = await apiFetch(`/zero-input/decisions/${decisionId}/undo`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reason })
+  });
+  return handleResponse<{ decision: ZeroInputDecisionItem }>(res);
 }
 
 export async function getObligations(params?: {
