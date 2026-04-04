@@ -16,15 +16,23 @@ set -euo pipefail
 
 REG=ghcr.io/madhuboyin/life-command-bar-poc
 TAG="${TAG:-$(git rev-parse --short=7 HEAD)}"
+PLATFORM="${PLATFORM:-$(
+  case "$(uname -m)" in
+    x86_64|amd64) echo linux/amd64 ;;
+    arm64|aarch64) echo linux/arm64 ;;
+    *) echo linux/amd64 ;;
+  esac
+)}"
 
 echo "Deploying tag: ${TAG}"
+echo "Using platform: ${PLATFORM}"
 
-docker buildx build --platform linux/amd64 \
+docker buildx build --platform "${PLATFORM}" \
   -f infra/docker/api/Dockerfile \
   -t ${REG}/api:${TAG} \
   --push .
 
-docker buildx build --platform linux/amd64 \
+docker buildx build --platform "${PLATFORM}" \
   -f infra/docker/web/Dockerfile \
   --build-arg NEXT_PUBLIC_API_BASE_URL=https://api-lcb.contracttocozy.com/api \
   --build-arg NEXT_PUBLIC_APP_URL=https://lcb.contracttocozy.com \
@@ -46,6 +54,12 @@ If needed, deploy a specific commit tag:
 
 ```bash
 TAG=f1b4840 ./scripts/deploy.sh
+```
+
+Force a specific build target if needed:
+
+```bash
+PLATFORM=linux/amd64 ./scripts/deploy.sh
 ```
 
 ## Optional: push Prisma schema after DB changes
