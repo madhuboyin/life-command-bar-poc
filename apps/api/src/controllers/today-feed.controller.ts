@@ -11,7 +11,8 @@ export async function getTodayFeed(req: Request, res: Response) {
     const userId = getRequiredUserId(req, res);
     if (!userId) return;
 
-    const data = await service.getTodayFeed(userId);
+    const includeTrace = req.query.includeTrace === "true";
+    const data = await service.getTodayFeed(userId, { includeTrace });
     return ok(res, data);
   } catch (error) {
     return handleControllerError(res, error, "Could not build today feed");

@@ -173,9 +173,17 @@ export default function UploadImportPanel({ onCompleted }: Props) {
       {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
       {success ? <StatusMessage variant="success">{success}</StatusMessage> : null}
       {uploadIngestionResult ? (
-        <IngestionResultCard result={uploadIngestionResult} />
+        <IngestionResultCard
+          result={uploadIngestionResult}
+          sourceLabel="Extracted from upload"
+        />
       ) : null}
-      {emailIngestionResult ? <IngestionResultCard result={emailIngestionResult} /> : null}
+      {emailIngestionResult ? (
+        <IngestionResultCard
+          result={emailIngestionResult}
+          sourceLabel="Imported from email"
+        />
+      ) : null}
     </SectionCard>
   );
 }

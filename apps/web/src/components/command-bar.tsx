@@ -255,7 +255,12 @@ export default function CommandBar({ onFeedReplace, onCompleted }: Props) {
         </div>
       ) : null}
 
-      {ingestionResult ? <IngestionResultCard result={ingestionResult} /> : null}
+      {ingestionResult ? (
+        <IngestionResultCard
+          result={ingestionResult}
+          sourceLabel="Captured from command"
+        />
+      ) : null}
     </SectionCard>
   );
 }

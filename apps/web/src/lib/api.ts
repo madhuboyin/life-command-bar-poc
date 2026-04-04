@@ -20,6 +20,7 @@ import type {
   OutcomeType,
   PersonalizationDebug,
   PersonalizationSummary,
+  ReviewQueueResponse,
   Reminder,
   ResolutionResponse,
   SortDirection,
@@ -344,16 +345,32 @@ async function handleResponse<T>(res: Response): Promise<T> {
   return payload as T;
 }
 
-export async function getTodayFeed(): Promise<TodayFeedResponse> {
-  const res = await apiFetch("/today-feed", {
+export async function getTodayFeed(params?: {
+  includeTrace?: boolean;
+}): Promise<TodayFeedResponse> {
+  const query = new URLSearchParams();
+  if (params?.includeTrace) {
+    query.set("includeTrace", "true");
+  }
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+
+  const res = await apiFetch(`/today-feed${suffix}`, {
     cache: "no-store"
   });
 
   return handleResponse<TodayFeedResponse>(res);
 }
 
-export async function getDashboardInsights(): Promise<DashboardInsightsResponse> {
-  const res = await apiFetch("/dashboard/insights", {
+export async function getDashboardInsights(params?: {
+  includeTrace?: boolean;
+}): Promise<DashboardInsightsResponse> {
+  const query = new URLSearchParams();
+  if (params?.includeTrace) {
+    query.set("includeTrace", "true");
+  }
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+
+  const res = await apiFetch(`/dashboard/insights${suffix}`, {
     cache: "no-store"
   });
 
@@ -415,6 +432,40 @@ export async function updateObligation(
   });
 
   return handleResponse<ObligationResponse>(res);
+}
+
+export async function correctObligation(
+  obligationId: string,
+  input: {
+    correctedFields?: Record<string, unknown>;
+    reason?: string;
+    dismissPermanently?: boolean;
+    dontShowSimilar?: boolean;
+  }
+): Promise<ObligationResponse> {
+  const res = await apiFetch(`/obligations/${obligationId}/correct`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+
+  return handleResponse<ObligationResponse>(res);
+}
+
+export async function getReviewQueue(params?: {
+  limit?: number;
+}): Promise<ReviewQueueResponse> {
+  const query = new URLSearchParams();
+  if (typeof params?.limit === "number") {
+    query.set("limit", String(params.limit));
+  }
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+
+  const res = await apiFetch(`/obligations/review-queue${suffix}`, {
+    cache: "no-store"
+  });
+
+  return handleResponse<ReviewQueueResponse>(res);
 }
 
 export async function getObligationSource(
@@ -839,6 +890,7 @@ export async function dismissGuidedJourney(journeyId: string): Promise<GuidedJou
 export async function getDailyPulse(params?: {
   markOpened?: boolean;
   refresh?: boolean;
+  includeTrace?: boolean;
 }): Promise<DailyPulseApiResponse> {
   const query = new URLSearchParams();
   if (typeof params?.markOpened === "boolean") {
@@ -846,6 +898,9 @@ export async function getDailyPulse(params?: {
   }
   if (typeof params?.refresh === "boolean") {
     query.set("refresh", params.refresh ? "true" : "false");
+  }
+  if (params?.includeTrace) {
+    query.set("includeTrace", "true");
   }
 
   const suffix = query.toString() ? `?${query.toString()}` : "";

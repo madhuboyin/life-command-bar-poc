@@ -9,6 +9,8 @@ import { prisma } from "../clients/prisma.client";
 import { ObligationView } from "../types/obligation.types";
 import { PersonalizationService } from "./personalization.service";
 import type { PersonalizationSignals } from "../types/personalization.types";
+import type { DecisionTrace, TrustWhy } from "../utils/trust-layer";
+import { toWhyConfidence } from "../utils/trust-layer";
 
 const LOOKBACK_DAYS = 7;
 const QUICK_WIN_CONFIDENCE_THRESHOLD = 0.85;
@@ -55,6 +57,8 @@ type DashboardCard = {
   tone: InsightTone;
   priority: number;
   targetView: ObligationView | null;
+  why: TrustWhy;
+  decisionTrace?: DecisionTrace;
 };
 
 type TopInsight = {
@@ -62,7 +66,12 @@ type TopInsight = {
   description: string;
   tone: InsightTone;
   targetView: ObligationView | null;
+  why: TrustWhy;
+  decisionTrace?: DecisionTrace;
 };
+
+type DashboardCardBase = Omit<DashboardCard, "why" | "decisionTrace">;
+type TopInsightBase = Omit<TopInsight, "why" | "decisionTrace">;
 
 type DashboardInsightsResponse = {
   summary: SummaryType;
@@ -136,7 +145,11 @@ type TopInsightInput = {
 export class DashboardInsightsService {
   private readonly personalizationService = new PersonalizationService();
 
-  async getInsights(userId: string): Promise<DashboardInsightsResponse> {
+  async getInsights(
+    userId: string,
+    options?: { includeTrace?: boolean }
+  ): Promise<DashboardInsightsResponse> {
+    const includeTrace = options?.includeTrace ?? false;
     const now = new Date();
     const windowStart = getTrailingWindowStart(now, LOOKBACK_DAYS);
     const dueSoonThreshold = addHours(now, DUE_SOON_HOURS);
@@ -297,7 +310,7 @@ export class DashboardInsightsService {
       mostCommonOpenType
     };
 
-    const topInsight = chooseTopInsight({
+    const topInsightBase = chooseTopInsight({
       handledThisWeek,
       activeNow,
       quickWinsAvailable,
@@ -312,7 +325,14 @@ export class DashboardInsightsService {
       summary,
       postponedStats,
       remindersDueSoon
-    });
+    }).map((card) => attachCardWhy(card, summary, includeTrace));
+
+    const topInsight = attachTopInsightWhy(
+      topInsightBase,
+      summary,
+      signals,
+      includeTrace
+    );
 
     return {
       summary,
@@ -588,7 +608,7 @@ function getMentalReliefLabel(value: number, handledThisWeek: number) {
   return "Small but meaningful progress";
 }
 
-function chooseTopInsight(input: TopInsightInput): TopInsight {
+function chooseTopInsight(input: TopInsightInput): TopInsightBase {
   if (input.overdueOrUrgent > 0) {
     return {
       title: `${input.overdueOrUrgent} urgent ${pluralize("item", input.overdueOrUrgent)} need attention`,
@@ -683,10 +703,10 @@ function buildCards(input: {
   summary: SummaryType;
   postponedStats: PostponedStats;
   remindersDueSoon: number;
-}) {
+}): DashboardCardBase[] {
   const { summary, postponedStats, remindersDueSoon } = input;
 
-  const cards: DashboardCard[] = [
+  const cards: DashboardCardBase[] = [
     {
       key: "attention",
       title: "Needs attention",
@@ -772,6 +792,90 @@ function buildCards(input: {
   ];
 
   return cards.sort((a, b) => a.priority - b.priority).slice(0, 6);
+}
+
+function attachCardWhy(
+  card: DashboardCardBase,
+  summary: SummaryType,
+  includeTrace: boolean
+): DashboardCard {
+  const signals = deriveSignalsFromCardKey(card.key);
+  const why: TrustWhy = {
+    primaryReason: card.supportingText,
+    signals,
+    confidence: toWhyConfidence(1 - Math.min(card.priority, 8) / 10),
+    personalizationReason: null
+  };
+
+  return {
+    ...card,
+    why,
+    decisionTrace: includeTrace
+      ? {
+          sourceSignals: [`card:${card.key}`],
+          rankingFactors: [`priority:${card.priority}`],
+          suppressionFactors:
+            summary.postponedRecently > 0 ? ["postponement_pressure"] : [],
+          confidenceDrivers: [`tone:${card.tone}`]
+        }
+      : undefined
+  };
+}
+
+function attachTopInsightWhy(
+  insight: TopInsightBase,
+  summary: SummaryType,
+  signals: PersonalizationSignals,
+  includeTrace: boolean
+): TopInsight {
+  const derivedSignals: string[] = [];
+  if (summary.overdueOrUrgent > 0) derivedSignals.push("due soon");
+  if (summary.quickWinsAvailable > 0) derivedSignals.push("quick win");
+  if ((summary.estimatedMoneyExposure.amount ?? 0) > 0) derivedSignals.push("money exposure");
+  if (summary.postponedRecently > 0) derivedSignals.push("recent activity");
+  if (derivedSignals.length === 0) derivedSignals.push("high importance");
+
+  const personalizationReason =
+    signals.quickWinAffinity === "high" && summary.quickWinsAvailable > 0
+      ? "You usually clear quick wins first"
+      : signals.moneySensitivity === "low" &&
+          (summary.estimatedMoneyExposure.amount ?? 0) > 0
+        ? "Money tasks tend to be postponed"
+        : null;
+
+  return {
+    ...insight,
+    why: {
+      primaryReason: insight.description,
+      signals: derivedSignals,
+      confidence: toWhyConfidence(insight.tone === "warning" ? 0.82 : 0.68),
+      personalizationReason
+    },
+    decisionTrace: includeTrace
+      ? {
+          sourceSignals: [
+            `active_now:${summary.activeNow}`,
+            `urgent:${summary.overdueOrUrgent}`,
+            `quick_wins:${summary.quickWinsAvailable}`
+          ],
+          rankingFactors: [
+            `postponed_recently:${summary.postponedRecently}`,
+            `relief_score:${summary.reliefScore.value}`
+          ],
+          suppressionFactors: summary.activeNow === 0 ? ["empty_queue"] : [],
+          confidenceDrivers: [`tone:${insight.tone}`]
+        }
+      : undefined
+  };
+}
+
+function deriveSignalsFromCardKey(key: DashboardCardBase["key"]) {
+  if (key === "attention") return ["due soon", "high importance"];
+  if (key === "relief") return ["recent activity", "high importance"];
+  if (key === "quick_wins") return ["quick win"];
+  if (key === "money_exposure") return ["money exposure"];
+  if (key === "postponed") return ["recent activity"];
+  return ["high importance"];
 }
 
 function toCategoryLabel(value: ObligationType) {

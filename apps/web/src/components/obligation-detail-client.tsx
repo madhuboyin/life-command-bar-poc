@@ -39,6 +39,9 @@ import ResumeGuidedJourneyCard from "./resume-guided-journey-card";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useFlowSession } from "./flow-session-provider";
+import SourceBadge from "./source-badge";
+import ConfidenceBadge from "./confidence-badge";
+import CorrectionPanel from "./correction-panel";
 
 type Props = {
   obligation: Obligation;
@@ -238,11 +241,18 @@ export default function ObligationDetailClient({ obligation }: Props) {
     <div style={{ display: "grid", gap: 14 }}>
       <section style={cardStyles.bordered}>
         <div style={text.label}>Overview</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+          <SourceBadge sourceType={current.sourceType} />
+          <ConfidenceBadge
+            confidenceBand={current.confidenceBand}
+            needsReview={current.needsReview}
+          />
+        </div>
         <div><strong>Vendor:</strong> {current.vendor ?? "—"}</div>
         <div><strong>Description:</strong> {current.description ?? "—"}</div>
         <div><strong>Due Date:</strong> {formatDateTime(current.dueDate)}</div>
         <div><strong>Amount:</strong> {current.amount ?? "—"} {current.currency ?? ""}</div>
-        <div><strong>Source:</strong> {current.source}</div>
+        <div><strong>Source:</strong> {current.sourceType}</div>
         {sourceDetails ? (
           <div>
             <strong>Provenance:</strong> {sourceDetails.provenanceLabel}
@@ -262,6 +272,8 @@ export default function ObligationDetailClient({ obligation }: Props) {
         <div><strong>Effort:</strong> {current.effortLevel}</div>
         <div><strong>Impact:</strong> {current.impactLevel}</div>
       </section>
+
+      <CorrectionPanel obligation={current} onCorrected={setCurrent} />
 
       <section style={cardStyles.bordered}>
         <div style={text.label}>Timestamps</div>

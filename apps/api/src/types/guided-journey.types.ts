@@ -29,6 +29,18 @@ export type GuidedJourneyPayload = {
   progressPercent: number;
   summary: string | null;
   recommendedPath: string | null;
+  why: {
+    primaryReason: string;
+    signals: string[];
+    confidence: number;
+    personalizationReason: string | null;
+  };
+  decisionTrace?: {
+    sourceSignals: string[];
+    rankingFactors: string[];
+    suppressionFactors: string[];
+    confidenceDrivers: string[];
+  };
   currentStep: GuidedJourneyStepPayload | null;
   steps: GuidedJourneyStepPayload[];
   createdAt: string;

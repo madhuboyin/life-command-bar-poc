@@ -21,6 +21,71 @@ export interface Obligation {
   lastActedAt?: string | null;
   createdAt: string;
   updatedAt: string;
+  sourceType: TrustSourceType;
+  sourceMetadata: ObligationSourceMetadata;
+  ingestionConfidence: number;
+  confidenceBand: ConfidenceBand;
+  extractedFields: ObligationExtractedFields | null;
+  extractionStatus:
+    | "RECEIVED"
+    | "PARTIAL"
+    | "READY"
+    | "NEEDS_CONFIRMATION"
+    | "REJECTED"
+    | "FAILED"
+    | null;
+  needsReview: boolean;
+  duplicateCandidate: boolean;
+  conflictDetected: boolean;
+}
+
+export type ConfidenceBand = "HIGH" | "MEDIUM" | "LOW";
+
+export type TrustSourceType = "EMAIL" | "UPLOAD" | "COMMAND" | "MANUAL";
+
+export interface WhyExplanation {
+  primaryReason: string;
+  signals: string[];
+  confidence: number;
+  personalizationReason: string | null;
+}
+
+export interface DecisionTrace {
+  sourceSignals: string[];
+  rankingFactors: string[];
+  suppressionFactors: string[];
+  confidenceDrivers: string[];
+}
+
+export interface ObligationExtractedFields {
+  type: "BILL" | "SUBSCRIPTION" | "RENEWAL" | "COMMITMENT" | null;
+  title: string | null;
+  vendor: string | null;
+  amount: number | null;
+  currency: string | null;
+  dueDate: string | null;
+  recurrence: string | null;
+  description: string | null;
+}
+
+export interface ObligationSourceMetadata {
+  importSourceId: string | null;
+  sourceSubtype: "EMAIL_FORWARD" | "FILE_UPLOAD" | "COMMAND_CAPTURE" | null;
+  importedAt: string | null;
+  parserVersion: string | null;
+  parseStatus:
+    | "RECEIVED"
+    | "PARTIAL"
+    | "READY"
+    | "NEEDS_CONFIRMATION"
+    | "REJECTED"
+    | "FAILED"
+    | null;
+  parseConfidence: number | null;
+  provenanceLabel: string;
+  rawData?: Record<string, unknown> | null;
+  duplicateOfObligationId?: string | null;
+  conflictWithObligationId?: string | null;
 }
 
 export interface FeedAction {
@@ -32,6 +97,7 @@ export interface TodayFeedItem {
   id: string;
   obligationId: string;
   obligation: Obligation;
+  why: WhyExplanation;
   whyItMatters: string;
   whatToDo: string;
   howHardIsIt: string;
@@ -39,6 +105,10 @@ export interface TodayFeedItem {
   secondaryActions: FeedAction[];
   rank: number;
   hookType: "urgent" | "money" | "quick_win" | "none";
+  confidenceBand: ConfidenceBand;
+  sourceType: TrustSourceType;
+  needsReview: boolean;
+  decisionTrace?: DecisionTrace;
   generatedAt: string;
 }
 
@@ -108,6 +178,8 @@ export interface DashboardInsightCard {
   tone: "neutral" | "positive" | "warning";
   priority: number;
   targetView: ObligationView | null;
+  why: WhyExplanation;
+  decisionTrace?: DecisionTrace;
 }
 
 export interface DashboardTopInsight {
@@ -115,6 +187,8 @@ export interface DashboardTopInsight {
   description: string;
   tone: "neutral" | "positive" | "warning";
   targetView: ObligationView | null;
+  why: WhyExplanation;
+  decisionTrace?: DecisionTrace;
 }
 
 export interface DashboardInsightsResponse {
@@ -176,16 +250,23 @@ export interface DailyPulseTopInsight {
   title: string;
   description: string;
   tone: "neutral" | "positive" | "warning";
+  why: WhyExplanation;
+  decisionTrace?: DecisionTrace;
 }
 
 export interface DailyPulseItem {
   obligationId: string;
   title: string;
+  sourceType: TrustSourceType;
+  confidenceBand: ConfidenceBand;
+  needsReview: boolean;
+  why: WhyExplanation;
   whyItMatters: string;
   actionLabel: string;
   hookType: "urgent" | "quick_win" | "money" | "postponed" | "important";
   priorityScore: number;
   status: "PENDING" | "OPENED_GUIDED";
+  decisionTrace?: DecisionTrace;
 }
 
 export interface DailyPulseProgress {
@@ -385,6 +466,8 @@ export interface GuidedJourney {
   progressPercent: number;
   summary?: string | null;
   recommendedPath?: string | null;
+  why: WhyExplanation;
+  decisionTrace?: DecisionTrace;
   currentStep?: GuidedJourneyStep | null;
   steps: GuidedJourneyStep[];
   createdAt: string;
@@ -404,7 +487,7 @@ export interface CommandParseResponse {
   question?: string;
 }
 
-export type IngestionConfidenceBand = "HIGH" | "MEDIUM" | "LOW";
+export type IngestionConfidenceBand = ConfidenceBand;
 
 export interface IngestionExtractedFields {
   type: "BILL" | "SUBSCRIPTION" | "RENEWAL" | "COMMITMENT";
@@ -434,13 +517,16 @@ export interface IngestionResult {
   needsConfirmation: boolean;
   needsReview: boolean;
   isDuplicate: boolean;
+  duplicateCandidate: boolean;
+  conflictDetected: boolean;
   duplicateOfObligationId: string | null;
+  conflictWithObligationId: string | null;
   extracted: IngestionExtractedFields;
 }
 
 export interface ObligationSourceDetails {
   obligationId: string;
-  sourceType: "MANUAL" | "EMAIL" | "DOCUMENT" | "INFERRED";
+  sourceType: TrustSourceType;
   sourceSubtype: "EMAIL_FORWARD" | "FILE_UPLOAD" | "COMMAND_CAPTURE" | null;
   parseStatus:
     | "RECEIVED"
@@ -456,6 +542,18 @@ export interface ObligationSourceDetails {
   extractionSummary?: Record<string, unknown> | null;
   provenanceLabel: string;
   rawData?: Record<string, unknown> | null;
+}
+
+export interface ReviewQueueItem extends Obligation {
+  reviewReasons: string[];
+}
+
+export interface ReviewQueueResponse {
+  items: ReviewQueueItem[];
+  pagination: {
+    limit: number;
+    total: number;
+  };
 }
 
 export interface CommandExecuteResponse {

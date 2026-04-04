@@ -20,6 +20,18 @@ export async function listObligations(req: Request, res: Response) {
   }
 }
 
+export async function getObligationReviewQueue(req: Request, res: Response) {
+  try {
+    const userId = getRequiredUserId(req, res);
+    if (!userId) return;
+
+    const data = await service.getReviewQueue(userId, req.query);
+    return ok(res, data);
+  } catch (error) {
+    return handleControllerError(res, error, "Could not fetch review queue");
+  }
+}
+
 export async function getObligationById(req: Request, res: Response) {
   try {
     const userId = getRequiredUserId(req, res);
@@ -67,6 +79,23 @@ export async function updateObligation(req: Request, res: Response) {
     return ok(res, { obligation: data });
   } catch (error) {
     return handleControllerError(res, error, "Could not update obligation");
+  }
+}
+
+export async function correctObligation(req: Request, res: Response) {
+  try {
+    const userId = getRequiredUserId(req, res);
+    if (!userId) return;
+
+    const data = await service.correct(userId, req.params.id as string, req.body);
+
+    if (!data) {
+      return fail(res, "NOT_FOUND", "Obligation not found", 404);
+    }
+
+    return ok(res, { obligation: data });
+  } catch (error) {
+    return handleControllerError(res, error, "Could not correct obligation");
   }
 }
 

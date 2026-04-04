@@ -11,6 +11,8 @@ import type { Obligation, ObligationSourceDetails } from "../lib/types";
 import { buttonStyles, cardStyles, colors, inputStyles } from "../lib/ui";
 import StatusMessage from "./ui/status-message";
 import { useToast } from "./ui/toast-provider";
+import SourceBadge from "./source-badge";
+import ConfidenceBadge from "./confidence-badge";
 
 type Props = {
   obligation: Obligation;
@@ -128,6 +130,13 @@ export default function ObligationCandidateReview({ obligation, source }: Props)
     <div style={{ display: "grid", gap: 16 }}>
       <section style={cardStyles.bordered}>
         <h3 style={{ marginTop: 0 }}>Source Provenance</h3>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+          <SourceBadge sourceType={obligation.sourceType} />
+          <ConfidenceBadge
+            confidenceBand={obligation.confidenceBand}
+            needsReview={obligation.needsReview}
+          />
+        </div>
         <div style={{ fontSize: 14, color: colors.textMuted }}>
           {source?.provenanceLabel ?? "Imported source"}
         </div>

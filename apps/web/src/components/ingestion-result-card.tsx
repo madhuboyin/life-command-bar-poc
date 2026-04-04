@@ -1,14 +1,22 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
+import { createFeedback } from "../lib/api";
 import type { IngestionResult } from "../lib/types";
-import { cardStyles, colors, formatDateTime } from "../lib/ui";
+import { buttonStyles, cardStyles, colors, formatDateTime } from "../lib/ui";
+import StatusMessage from "./ui/status-message";
+import { useToast } from "./ui/toast-provider";
 
 type Props = {
   result: IngestionResult;
+  sourceLabel?: string;
 };
 
-export default function IngestionResultCard({ result }: Props) {
+export default function IngestionResultCard({ result, sourceLabel }: Props) {
+  const { showToast } = useToast();
+  const [feedbackState, setFeedbackState] = useState<"saved" | null>(null);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const candidateId = result.candidateId ?? result.obligationId;
   const statusColor =
     result.confidenceBand === "HIGH"
@@ -21,6 +29,11 @@ export default function IngestionResultCard({ result }: Props) {
     <section style={{ ...cardStyles.bordered, marginTop: 14 }}>
       <h3 style={{ marginTop: 0, marginBottom: 8 }}>Ingestion Result</h3>
       <div style={{ display: "grid", gap: 6, fontSize: 14 }}>
+        {sourceLabel ? (
+          <div>
+            <strong>Source:</strong> {sourceLabel}
+          </div>
+        ) : null}
         <div>
           <strong>Status:</strong> {result.status}
         </div>
@@ -36,6 +49,11 @@ export default function IngestionResultCard({ result }: Props) {
         {result.isDuplicate && result.duplicateOfObligationId ? (
           <div style={{ color: colors.textMuted }}>
             Duplicate capture detected for obligation {result.duplicateOfObligationId}.
+          </div>
+        ) : null}
+        {result.conflictDetected && result.conflictWithObligationId ? (
+          <div style={{ color: "#92400e" }}>
+            Potential conflict with obligation {result.conflictWithObligationId}.
           </div>
         ) : null}
       </div>
@@ -67,12 +85,59 @@ export default function IngestionResultCard({ result }: Props) {
               Review draft
             </Link>
           ) : null}
+          <button
+            type="button"
+            style={buttonStyles.secondary}
+            onClick={() => {
+              void submitFeedback("ACCEPTED");
+            }}
+          >
+            Looks correct
+          </button>
+          <button
+            type="button"
+            style={buttonStyles.secondary}
+            onClick={() => {
+              void submitFeedback("WRONG_INFO");
+            }}
+          >
+            Wrong info
+          </button>
         </div>
       ) : (
         <div style={{ marginTop: 10, color: colors.textMuted }}>
           Not enough signal to create a candidate. Try adding a due date, vendor, or amount.
         </div>
       )}
+      {feedbackState === "saved" ? (
+        <StatusMessage variant="success">Feedback saved. Thank you.</StatusMessage>
+      ) : null}
+      {feedbackError ? <StatusMessage variant="error">{feedbackError}</StatusMessage> : null}
     </section>
   );
+
+  async function submitFeedback(type: "ACCEPTED" | "WRONG_INFO") {
+    if (!candidateId) return;
+    try {
+      setFeedbackError(null);
+      await createFeedback({
+        obligationId: candidateId,
+        type,
+        note:
+          type === "ACCEPTED"
+            ? "Ingestion result confirmed by user."
+            : "Ingestion result marked as incorrect."
+      });
+      setFeedbackState("saved");
+      showToast({
+        variant: "success",
+        title: "Feedback saved",
+        description: type === "ACCEPTED" ? "Marked as correct" : "Marked as incorrect"
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not save feedback";
+      setFeedbackError(message);
+      showToast({ variant: "error", title: "Feedback failed", description: message });
+    }
+  }
 }

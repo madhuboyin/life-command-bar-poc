@@ -26,6 +26,9 @@ import ResolutionModal from "./resolution-modal";
 import { useFlowSession } from "./flow-session-provider";
 import StatusMessage from "./ui/status-message";
 import { useToast } from "./ui/toast-provider";
+import SourceBadge from "./source-badge";
+import ConfidenceBadge from "./confidence-badge";
+import WhyThisExplanation from "./why-this-explanation";
 
 type Props = {
   item: TodayFeedItem;
@@ -220,6 +223,13 @@ export default function TodayFeedCard({ item, flowObligationIds, onRefresh }: Pr
             <div style={{ fontSize: 13, color: colors.textMuted }}>
               {item.obligation.type} · Due: {formatDateTime(item.obligation.dueDate)}
             </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+              <SourceBadge sourceType={item.sourceType} />
+              <ConfidenceBadge
+                confidenceBand={item.confidenceBand}
+                needsReview={item.needsReview}
+              />
+            </div>
           </div>
 
           <span style={{ ...getHookBadgeStyle(item.hookType), alignSelf: isMobile ? "flex-start" : "auto" }}>
@@ -228,9 +238,7 @@ export default function TodayFeedCard({ item, flowObligationIds, onRefresh }: Pr
         </div>
 
         <div style={{ display: "grid", gap: 8, marginBottom: 14 }}>
-          <div>
-            <strong>Why:</strong> {item.whyItMatters}
-          </div>
+          <WhyThisExplanation why={item.why} decisionTrace={item.decisionTrace} />
           <div>
             <strong>What:</strong> {item.whatToDo}
           </div>

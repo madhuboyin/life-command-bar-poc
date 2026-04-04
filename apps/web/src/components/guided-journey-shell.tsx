@@ -23,6 +23,7 @@ import OutcomeFeedbackPrompt from "./outcome-feedback-prompt";
 import EmptyState from "./ui/empty-state";
 import StatusMessage from "./ui/status-message";
 import { useToast } from "./ui/toast-provider";
+import WhyThisExplanation from "./why-this-explanation";
 
 type Props = {
   initialJourney: GuidedJourney | null;
@@ -314,6 +315,9 @@ export default function GuidedJourneyShell({
             {journey.recommendedPath ? (
               <div style={{ color: colors.textMuted }}>{journey.recommendedPath}</div>
             ) : null}
+            <div style={{ marginTop: 10 }}>
+              <WhyThisExplanation why={journey.why} decisionTrace={journey.decisionTrace} />
+            </div>
           </section>
 
           <section style={cardStyles.bordered}>

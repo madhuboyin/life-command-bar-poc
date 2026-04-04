@@ -9,6 +9,8 @@ import { FeedbackRepository } from "../repositories/feedback.repository";
 import { mapObligation } from "../utils/obligation.mapper";
 import { PersonalizationService } from "./personalization.service";
 import type { PersonalizationSignals } from "../types/personalization.types";
+import type { DecisionTrace, TrustWhy } from "../utils/trust-layer";
+import { toWhyConfidence } from "../utils/trust-layer";
 
 type FeedCandidate = {
   obligation: Awaited<ReturnType<ObligationRepository["findActiveForFeed"]>>[number];
@@ -22,7 +24,8 @@ export class TodayFeedService {
   private readonly feedbackRepository = new FeedbackRepository();
   private readonly personalizationService = new PersonalizationService();
 
-  async getTodayFeed(userId: string) {
+  async getTodayFeed(userId: string, options?: { includeTrace?: boolean }) {
+    const includeTrace = options?.includeTrace ?? false;
     const [items, feedbackMap, personalizationSummary] = await Promise.all([
       this.obligationRepository.findActiveForFeed(userId),
       this.feedbackRepository.getRecentFeedbackMap(userId),
@@ -117,13 +120,27 @@ export class TodayFeedService {
 
     const feedItems = selected.map((item, index) => {
       const flow = this.buildFlow(item.obligation, signals);
+      const mappedObligation = mapObligation(item.obligation);
+      const why = buildFeedWhy({
+        obligation: mappedObligation,
+        hookType: item.hookType,
+        whyItMatters: flow.whyItMatters,
+        personalizationReason: item.personalizationReasons[0] ?? null,
+        candidateScore: item.candidateScore
+      });
+      const decisionTrace = buildFeedDecisionTrace({
+        obligation: mappedObligation,
+        hookType: item.hookType,
+        candidateScore: item.candidateScore
+      });
 
       return {
         id: `feed_${item.obligation.id}`,
         obligationId: item.obligation.id,
         obligation: {
-          ...mapObligation(item.obligation)
+          ...mappedObligation
         },
+        why,
         whyItMatters: flow.whyItMatters,
         whatToDo: flow.recommendation,
         howHardIsIt: item.obligation.effortLevel.toLowerCase(),
@@ -137,6 +154,10 @@ export class TodayFeedService {
         })),
         rank: index + 1,
         hookType: item.hookType,
+        confidenceBand: mappedObligation.confidenceBand,
+        sourceType: mappedObligation.sourceType,
+        needsReview: mappedObligation.needsReview,
+        decisionTrace: includeTrace ? decisionTrace : undefined,
         generatedAt: new Date().toISOString()
       };
     });
@@ -182,6 +203,91 @@ export class TodayFeedService {
       whyItMatters: `${flow.whyItMatters} ${toneHint}`
     };
   }
+}
+
+function buildFeedWhy(input: {
+  obligation: ReturnType<typeof mapObligation>;
+  hookType: FeedCandidate["hookType"];
+  whyItMatters: string;
+  personalizationReason: string | null;
+  candidateScore: number;
+}): TrustWhy {
+  const signals = new Set<string>();
+
+  if (input.hookType === "urgent") signals.add("due soon");
+  if (input.hookType === "money") signals.add("money exposure");
+  if (input.hookType === "quick_win") signals.add("quick win");
+  if (input.obligation.importanceScore >= 72) signals.add("high importance");
+  if (input.obligation.status === "POSTPONED") signals.add("recent activity");
+
+  if (signals.size === 0) {
+    signals.add("high importance");
+  }
+
+  const primaryReason =
+    input.hookType === "urgent"
+      ? "Due soon"
+      : input.hookType === "quick_win"
+        ? "Low effort, high impact"
+        : input.hookType === "money"
+          ? "Money exposure"
+          : input.whyItMatters;
+
+  const confidence = toWhyConfidence(
+    input.obligation.confidenceScore * 0.65 + normalizeCandidateScore(input.candidateScore) * 0.35
+  );
+
+  return {
+    primaryReason,
+    signals: Array.from(signals),
+    confidence,
+    personalizationReason: input.personalizationReason
+  };
+}
+
+function buildFeedDecisionTrace(input: {
+  obligation: ReturnType<typeof mapObligation>;
+  hookType: FeedCandidate["hookType"];
+  candidateScore: number;
+}): DecisionTrace {
+  const sourceSignals = [
+    `source_type:${input.obligation.sourceType.toLowerCase()}`,
+    `obligation_confidence:${Math.round(input.obligation.confidenceScore * 100)}`
+  ];
+
+  const rankingFactors = [
+    `urgency:${Math.round(input.obligation.urgencyScore)}`,
+    `importance:${Math.round(input.obligation.importanceScore)}`,
+    `candidate_score:${Math.round(input.candidateScore)}`
+  ];
+
+  const suppressionFactors = [];
+  if (input.obligation.effortLevel === "HIGH") {
+    suppressionFactors.push("high_effort_penalty");
+  }
+  if (input.obligation.status === "POSTPONED") {
+    suppressionFactors.push("postponed_penalty");
+  }
+
+  const confidenceDrivers = [
+    `confidence_band:${input.obligation.confidenceBand.toLowerCase()}`,
+    `hook_type:${input.hookType}`
+  ];
+
+  return {
+    sourceSignals,
+    rankingFactors,
+    suppressionFactors,
+    confidenceDrivers
+  };
+}
+
+function normalizeCandidateScore(value: number) {
+  if (!Number.isFinite(value)) return 0.5;
+  const normalized = value / 100;
+  if (normalized < 0) return 0;
+  if (normalized > 1) return 1;
+  return normalized;
 }
 
 function getDefaultSignals(): PersonalizationSignals {

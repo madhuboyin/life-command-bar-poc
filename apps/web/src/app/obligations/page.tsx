@@ -79,6 +79,10 @@ export default async function ObligationsPage({ searchParams }: Props) {
         <Link href="/" style={{ color: "#2563eb", textDecoration: "none" }}>
           ← Back to Today Feed
         </Link>
+        <span style={{ margin: "0 8px", color: "#9ca3af" }}>·</span>
+        <Link href="/review" style={{ color: "#2563eb", textDecoration: "none" }}>
+          Needs Review
+        </Link>
       </div>
 
       <PageHeader

@@ -27,6 +27,7 @@ import type {
   GuidedJourneyPayload,
   GuidedJourneyStepPayload
 } from "../types/guided-journey.types";
+import { toWhyConfidence } from "../utils/trust-layer";
 
 const selectOptionSchema = z.object({
   optionKey: z.string().min(1)
@@ -739,6 +740,7 @@ export class GuidedJourneyService {
       progressPercent,
       summary: journey.summary,
       recommendedPath: journey.recommendedPath,
+      why: buildJourneyWhy(journey),
       currentStep,
       steps,
       createdAt: journey.createdAt.toISOString(),
@@ -774,6 +776,30 @@ export class GuidedJourneyService {
       position: step.position
     };
   }
+}
+
+function buildJourneyWhy(journey: GuidedJourneyWithRelations) {
+  const signals: string[] = [];
+  if (Number(journey.obligation.urgencyScore) >= 80) signals.push("due soon");
+  if (Number(journey.obligation.importanceScore) >= 70) signals.push("high importance");
+  if (journey.obligation.effortLevel === "LOW") signals.push("quick win");
+  if (journey.obligation.amount && Number(journey.obligation.amount) > 0) {
+    signals.push("money exposure");
+  }
+  if (journey.obligation.status === ObligationStatus.POSTPONED) {
+    signals.push("recent activity");
+  }
+
+  if (signals.length === 0) {
+    signals.push("high importance");
+  }
+
+  return {
+    primaryReason: journey.recommendedPath ?? "Recommended path based on your obligation details",
+    signals,
+    confidence: toWhyConfidence(Number(journey.obligation.confidenceScore)),
+    personalizationReason: null
+  };
 }
 
 function ensureObligationCanStartJourney(status: ObligationStatus) {

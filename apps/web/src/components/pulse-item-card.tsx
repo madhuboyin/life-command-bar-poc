@@ -20,6 +20,9 @@ import { buildGuidedHref } from "../lib/flow-navigation";
 import { buttonStyles, cardStyles, colors } from "../lib/ui";
 import { useFlowSession } from "./flow-session-provider";
 import { useToast } from "./ui/toast-provider";
+import SourceBadge from "./source-badge";
+import ConfidenceBadge from "./confidence-badge";
+import WhyThisExplanation from "./why-this-explanation";
 
 type Props = {
   item: DailyPulseItem;
@@ -184,8 +187,15 @@ export default function PulseItemCard({ item, flowObligationIds, onItemUpdated }
 
   return (
     <article style={cardStyles.item}>
-      <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 6 }}>
-        {formatHookLabel(item.hookType)}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
+        <div style={{ fontSize: 12, color: colors.textMuted, display: "inline-flex", alignItems: "center" }}>
+          {formatHookLabel(item.hookType)}
+        </div>
+        <SourceBadge sourceType={item.sourceType} />
+        <ConfidenceBadge
+          confidenceBand={item.confidenceBand}
+          needsReview={item.needsReview}
+        />
       </div>
       {item.status === "OPENED_GUIDED" ? (
         <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 6 }}>
@@ -193,7 +203,9 @@ export default function PulseItemCard({ item, flowObligationIds, onItemUpdated }
         </div>
       ) : null}
       <h3 style={{ margin: "0 0 6px 0" }}>{item.title}</h3>
-      <p style={{ margin: "0 0 12px 0", color: colors.textMuted }}>{item.whyItMatters}</p>
+      <div style={{ marginBottom: 12 }}>
+        <WhyThisExplanation why={item.why} decisionTrace={item.decisionTrace} />
+      </div>
 
       <div
         style={{

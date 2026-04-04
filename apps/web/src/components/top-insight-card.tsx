@@ -1,6 +1,7 @@
 import type { DashboardTopInsight } from "../lib/types";
 import { cardStyles } from "../lib/ui";
 import ClickableCardLink from "./ui/clickable-card-link";
+import WhyThisExplanation from "./why-this-explanation";
 
 type Props = {
   insight: DashboardTopInsight;
@@ -15,6 +16,9 @@ export default function TopInsightCard({ insight, href }: Props) {
       </div>
       <h3 style={{ margin: "0 0 6px 0", fontSize: 20 }}>{insight.title}</h3>
       <p style={{ margin: 0, fontSize: 14, lineHeight: 1.45 }}>{insight.description}</p>
+      <div style={{ marginTop: 10 }}>
+        <WhyThisExplanation why={insight.why} decisionTrace={insight.decisionTrace} />
+      </div>
       {href ? (
         <div style={{ marginTop: 10, fontSize: 12, fontWeight: 600, color: "#1d4ed8" }}>
           View items →

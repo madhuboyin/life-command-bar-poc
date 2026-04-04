@@ -9,6 +9,11 @@ import { z } from "zod";
 import { AppError } from "../utils/app-error";
 import { mapObligation } from "../utils/obligation.mapper";
 import {
+  sourceLabelFromType,
+  sourceTypeFromObligation,
+  toConfidenceBand
+} from "../utils/trust-layer";
+import {
   CreateObligationFromIngestionInput,
   IngestionRepository
 } from "../repositories/ingestion.repository";
@@ -18,7 +23,8 @@ import {
 } from "./ingestion.classifier";
 import {
   evaluateIngestionConfidence,
-  type ConfidenceBand
+  type ConfidenceBand,
+  type ConfidenceEvaluation
 } from "./ingestion.confidence";
 import { extractStructuredFields } from "./ingestion.extractor";
 import {
@@ -84,7 +90,10 @@ export type IngestionResult = {
   needsConfirmation: boolean;
   needsReview: boolean;
   isDuplicate: boolean;
+  duplicateCandidate: boolean;
+  conflictDetected: boolean;
   duplicateOfObligationId: string | null;
+  conflictWithObligationId: string | null;
   extracted: {
     type: SupportedObligationType;
     title: string | null;
@@ -133,31 +142,35 @@ export class IngestionService {
     if (!obligation) return null;
 
     const source = obligation.importSource;
+    const trustSourceType = sourceTypeFromObligation({
+      source: obligation.source,
+      subtype: source?.subtype
+    });
     if (!source) {
       return {
         obligationId: obligation.id,
-        sourceType: obligation.source,
+        sourceType: trustSourceType,
         sourceSubtype: null,
         parseStatus: null,
         parseConfidence: null,
         parserVersion: null,
         importedAt: null,
         extractionSummary: null,
-        provenanceLabel: obligation.source === "MANUAL" ? "Created manually" : "Created in app",
+        provenanceLabel: sourceLabelFromType(trustSourceType),
         rawData: null
       };
     }
 
     return {
       obligationId: obligation.id,
-      sourceType: obligation.source,
+      sourceType: trustSourceType,
       sourceSubtype: source.subtype,
       parseStatus: source.parseStatus,
       parseConfidence: Number(source.parseConfidence),
       parserVersion: source.parserVersion,
       importedAt: source.createdAt.toISOString(),
       extractionSummary: source.extractionSummary,
-      provenanceLabel: buildProvenanceLabel(source.subtype),
+      provenanceLabel: sourceLabelFromType(trustSourceType),
       rawData: source.rawData
     };
   }
@@ -323,11 +336,14 @@ export class IngestionService {
         status: "DUPLICATE",
         parseStatus: ImportParseStatus.REJECTED,
         confidence: Number(existing.confidenceScore),
-        confidenceBand: Number(existing.confidenceScore) >= 0.78 ? "HIGH" : Number(existing.confidenceScore) >= 0.48 ? "MEDIUM" : "LOW",
+        confidenceBand: toConfidenceBand(Number(existing.confidenceScore)),
         needsConfirmation: existing.status !== ObligationStatus.ACTIVE,
         needsReview: existing.status !== ObligationStatus.ACTIVE,
         isDuplicate: true,
+        duplicateCandidate: true,
+        conflictDetected: false,
         duplicateOfObligationId: existing.id,
+        conflictWithObligationId: null,
         extracted: {
           type: existing.type,
           title: existing.title,
@@ -375,17 +391,105 @@ export class IngestionService {
       hasUsableText: options.hasUsableText
     });
 
+    const structuredDuplicate = await this.repository.findDuplicateByStructuredFields({
+      userId: normalized.userId,
+      vendor: extracted.vendor,
+      amount: extracted.amount,
+      dueDate: extracted.dueDate,
+      type: extracted.type as ObligationType
+    });
+
+    if (structuredDuplicate) {
+      await this.repository.updateImportSourceParseResult({
+        importSourceId: importSource.id,
+        parseStatus: ImportParseStatus.REJECTED,
+        parseConfidence: Math.max(confidence.score, 0.9),
+        extractionSummary: {
+          classification,
+          extracted,
+          confidence: {
+            score: confidence.score,
+            band: confidence.band,
+            rationale: confidence.rationale
+          },
+          validation: {
+            duplicateCandidate: true,
+            conflictDetected: false,
+            duplicateOfObligationId: structuredDuplicate.id,
+            conflictWithObligationId: null,
+            reason: "same_vendor_date_amount"
+          }
+        }
+      });
+
+      await this.repository.createAuditEvent({
+        userId: normalized.userId,
+        obligationId: structuredDuplicate.id,
+        eventType: "ingestion_structured_duplicate_detected",
+        metadata: {
+          importSourceId: importSource.id,
+          duplicateOfObligationId: structuredDuplicate.id
+        }
+      });
+
+      return {
+        importSourceId: importSource.id,
+        candidateId: structuredDuplicate.id,
+        obligationId: structuredDuplicate.id,
+        status: "DUPLICATE",
+        parseStatus: ImportParseStatus.REJECTED,
+        confidence: Number(structuredDuplicate.confidenceScore),
+        confidenceBand: toConfidenceBand(Number(structuredDuplicate.confidenceScore)),
+        needsConfirmation: structuredDuplicate.status !== ObligationStatus.ACTIVE,
+        needsReview: true,
+        isDuplicate: true,
+        duplicateCandidate: true,
+        conflictDetected: false,
+        duplicateOfObligationId: structuredDuplicate.id,
+        conflictWithObligationId: null,
+        extracted: {
+          type: structuredDuplicate.type,
+          title: structuredDuplicate.title,
+          vendor: structuredDuplicate.vendor,
+          amount: decimalToNumber(structuredDuplicate.amount),
+          currency: structuredDuplicate.currency,
+          dueDate: structuredDuplicate.dueDate?.toISOString() ?? null,
+          recurrence: structuredDuplicate.recurrence,
+          description: structuredDuplicate.description
+        }
+      };
+    }
+
+    const conflictMatch = await this.repository.findConflictByStructuredFields({
+      userId: normalized.userId,
+      vendor: extracted.vendor,
+      amount: extracted.amount,
+      dueDate: extracted.dueDate,
+      type: extracted.type as ObligationType
+    });
+    const conflictDetected = Boolean(conflictMatch);
+    const guardedConfidence = applyValidationGuards(confidence, {
+      conflictDetected
+    });
+
     await this.repository.updateImportSourceParseResult({
       importSourceId: importSource.id,
-      parseStatus: confidence.importParseStatus,
-      parseConfidence: confidence.score,
+      parseStatus: guardedConfidence.importParseStatus,
+      parseConfidence: guardedConfidence.score,
       extractionSummary: {
         classification,
         extracted,
         confidence: {
-          score: confidence.score,
-          band: confidence.band,
-          rationale: confidence.rationale
+          score: guardedConfidence.score,
+          band: guardedConfidence.band,
+          rationale: guardedConfidence.rationale
+        },
+        validation: {
+          duplicateCandidate: false,
+          conflictDetected,
+          duplicateOfObligationId: null,
+          conflictWithObligationId: conflictMatch?.obligationId ?? null,
+          conflictReason: conflictMatch?.reason ?? null
         }
       }
     });
@@ -395,19 +499,21 @@ export class IngestionService {
       eventType: "ingestion_extracted",
       metadata: {
         importSourceId: importSource.id,
-        score: confidence.score,
-        band: confidence.band,
-        parseStatus: confidence.importParseStatus
+        score: guardedConfidence.score,
+        band: guardedConfidence.band,
+        parseStatus: guardedConfidence.importParseStatus,
+        conflictDetected,
+        conflictWithObligationId: conflictMatch?.obligationId ?? null
       }
     });
 
-    if (!confidence.shouldCreateObligation || !confidence.obligationStatus) {
+    if (!guardedConfidence.shouldCreateObligation || !guardedConfidence.obligationStatus) {
       await this.repository.createAuditEvent({
         userId: normalized.userId,
         eventType: "ingestion_candidate_skipped",
         metadata: {
           importSourceId: importSource.id,
-          reason: "insufficient_confidence"
+          reason: conflictDetected ? "conflict_detected" : "insufficient_confidence"
         }
       });
 
@@ -416,13 +522,16 @@ export class IngestionService {
         candidateId: null,
         obligationId: null,
         status: "NO_CANDIDATE",
-        parseStatus: confidence.importParseStatus,
-        confidence: confidence.score,
-        confidenceBand: confidence.band,
+        parseStatus: guardedConfidence.importParseStatus,
+        confidence: guardedConfidence.score,
+        confidenceBand: guardedConfidence.band,
         needsConfirmation: true,
         needsReview: true,
         isDuplicate: false,
+        duplicateCandidate: false,
+        conflictDetected,
         duplicateOfObligationId: null,
+        conflictWithObligationId: conflictMatch?.obligationId ?? null,
         extracted: {
           type: extracted.type,
           title: extracted.title,
@@ -440,8 +549,8 @@ export class IngestionService {
       userId: normalized.userId,
       importSourceId: importSource.id,
       extracted,
-      sourceStatus: confidence.obligationStatus,
-      score: confidence.score,
+      sourceStatus: guardedConfidence.obligationStatus,
+      score: guardedConfidence.score,
       source: normalized.obligationSource
     });
 
@@ -465,8 +574,10 @@ export class IngestionService {
       metadata: {
         importSourceId: importSource.id,
         status: obligation.status,
-        confidence: confidence.score,
-        confidenceBand: confidence.band
+        confidence: guardedConfidence.score,
+        confidenceBand: guardedConfidence.band,
+        conflictDetected,
+        conflictWithObligationId: conflictMatch?.obligationId ?? null
       }
     });
 
@@ -478,13 +589,16 @@ export class IngestionService {
       candidateId: obligation.id,
       obligationId: obligation.id,
       status: obligationStatus,
-      parseStatus: confidence.importParseStatus,
-      confidence: confidence.score,
-      confidenceBand: confidence.band,
-      needsConfirmation: confidence.needsConfirmation,
-      needsReview: confidence.needsConfirmation,
+      parseStatus: guardedConfidence.importParseStatus,
+      confidence: guardedConfidence.score,
+      confidenceBand: guardedConfidence.band,
+      needsConfirmation: guardedConfidence.needsConfirmation,
+      needsReview: guardedConfidence.needsConfirmation || conflictDetected,
       isDuplicate: false,
+      duplicateCandidate: false,
+      conflictDetected,
       duplicateOfObligationId: null,
+      conflictWithObligationId: conflictMatch?.obligationId ?? null,
       extracted: {
         type: extracted.type,
         title: obligation.title,
@@ -619,11 +733,26 @@ function computeImpactLevel(amount: number | null, importanceScore: number) {
   return "LOW" as const;
 }
 
-function buildProvenanceLabel(subtype: string | null) {
-  if (subtype === "EMAIL_FORWARD") return "Imported from forwarded email";
-  if (subtype === "FILE_UPLOAD") return "Extracted from uploaded file";
-  if (subtype === "COMMAND_CAPTURE") return "Captured from command input";
-  return "Imported from external source";
+function applyValidationGuards(
+  confidence: ConfidenceEvaluation,
+  input: {
+    conflictDetected: boolean;
+  }
+): ConfidenceEvaluation {
+  if (!input.conflictDetected) {
+    return confidence;
+  }
+
+  const penalizedScore = Math.min(confidence.score, 0.64);
+  return {
+    ...confidence,
+    score: penalizedScore,
+    band: penalizedScore >= 0.78 ? "HIGH" : penalizedScore >= 0.48 ? "MEDIUM" : "LOW",
+    needsConfirmation: true,
+    importParseStatus: ImportParseStatus.NEEDS_CONFIRMATION,
+    obligationStatus: ObligationStatus.DRAFT,
+    rationale: [...confidence.rationale, "conflict_detected"]
+  };
 }
 
 function decimalToNumber(value: Prisma.Decimal | null) {

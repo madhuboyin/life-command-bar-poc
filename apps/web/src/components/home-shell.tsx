@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import type {
   DashboardInsightsResponse,
@@ -111,6 +112,11 @@ export default function HomeShell({
 
   const overview = (
     <div style={{ display: "grid", gap: 24 }}>
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <Link href="/review" style={{ color: "#2563eb", textDecoration: "none", fontWeight: 600 }}>
+          Needs Review →
+        </Link>
+      </div>
       {showDailyPulseBanner ? <DailyPulseEntryBanner /> : null}
       <DashboardInsightsSection
         data={insights}

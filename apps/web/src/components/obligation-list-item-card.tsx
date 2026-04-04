@@ -9,6 +9,8 @@ import type { FlowSourceType, Obligation } from "../lib/types";
 import { buttonStyles, cardStyles, colors, formatDateTime } from "../lib/ui";
 import { useFlowSession } from "./flow-session-provider";
 import { useToast } from "./ui/toast-provider";
+import SourceBadge from "./source-badge";
+import ConfidenceBadge from "./confidence-badge";
 
 type Props = {
   item: Obligation;
@@ -64,6 +66,13 @@ export default function ObligationListItemCard({
         <h3 style={{ margin: "0 0 8px 0" }}>{item.title}</h3>
         <div style={{ color: colors.textMuted, fontSize: 14 }}>
           {item.type} · {item.status} · Due: {formatDateTime(item.dueDate)}
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+          <SourceBadge sourceType={item.sourceType} />
+          <ConfidenceBadge
+            confidenceBand={item.confidenceBand}
+            needsReview={item.needsReview}
+          />
         </div>
       </div>
 

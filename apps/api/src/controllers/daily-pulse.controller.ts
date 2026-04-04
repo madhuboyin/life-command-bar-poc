@@ -22,8 +22,9 @@ export async function getDailyPulse(req: Request, res: Response) {
 
     const markOpened = req.query.markOpened === "false" ? false : true;
     const refresh = req.query.refresh === "true";
+    const includeTrace = req.query.includeTrace === "true";
 
-    const data = await service.getPulse(userId, { markOpened, refresh });
+    const data = await service.getPulse(userId, { markOpened, refresh, includeTrace });
     return ok(res, data);
   } catch (error) {
     return handleControllerError(res, error, "Could not build daily pulse");

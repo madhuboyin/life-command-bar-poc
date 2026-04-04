@@ -13,6 +13,8 @@ import { PersonalizationService } from "./personalization.service";
 import type { PersonalizationSignals } from "../types/personalization.types";
 import { DailyPulseRepository } from "../repositories/daily-pulse.repository";
 import { AppError } from "../utils/app-error";
+import type { DecisionTrace, TrustWhy } from "../utils/trust-layer";
+import { toWhyConfidence } from "../utils/trust-layer";
 
 type PulseHookType = "urgent" | "quick_win" | "money" | "postponed" | "important";
 type PulseTrend = "up" | "down" | "flat";
@@ -20,11 +22,16 @@ type PulseTrend = "up" | "down" | "flat";
 type PulseItem = {
   obligationId: string;
   title: string;
+  sourceType: "EMAIL" | "UPLOAD" | "COMMAND" | "MANUAL";
+  confidenceBand: "HIGH" | "MEDIUM" | "LOW";
+  needsReview: boolean;
+  why: TrustWhy;
   whyItMatters: string;
   actionLabel: string;
   hookType: PulseHookType;
   priorityScore: number;
   status: "PENDING" | "OPENED_GUIDED";
+  decisionTrace?: DecisionTrace;
 };
 
 type PulseProgress = {
@@ -49,6 +56,10 @@ type PulseCandidate = {
   impactLevel: "LOW" | "MEDIUM" | "HIGH";
   amount: number | null;
   dueDate: string | null;
+  confidenceScore: number;
+  confidenceBand: "HIGH" | "MEDIUM" | "LOW";
+  sourceType: "EMAIL" | "UPLOAD" | "COMMAND" | "MANUAL";
+  needsReview: boolean;
   priorityScore: number;
   isUrgent: boolean;
   isQuickWin: boolean;
@@ -67,15 +78,19 @@ export class DailyPulseService {
   private readonly personalizationService = new PersonalizationService();
   private readonly repository = new DailyPulseRepository();
 
-  async getPulse(userId: string, options?: { markOpened?: boolean; refresh?: boolean }) {
+  async getPulse(
+    userId: string,
+    options?: { markOpened?: boolean; refresh?: boolean; includeTrace?: boolean }
+  ) {
     const markOpened = options?.markOpened ?? true;
     const refresh = options?.refresh ?? false;
+    const includeTrace = options?.includeTrace ?? false;
     const todayKey = getDateKeyUTC(new Date());
 
     const [insights, todayFeed, activeObligations, recentlyPostponedIds, personalizationSummary] =
       await Promise.all([
-        this.dashboardInsightsService.getInsights(userId),
-        this.todayFeedService.getTodayFeed(userId),
+        this.dashboardInsightsService.getInsights(userId, { includeTrace }),
+        this.todayFeedService.getTodayFeed(userId, { includeTrace }),
         this.obligationRepository.findActiveForFeed(userId),
         this.getRecentlyPostponedIds(userId),
         this.personalizationService.getSummary(userId).catch(() => null)
@@ -115,6 +130,10 @@ export class DailyPulseService {
         impactLevel: obligation.impactLevel,
         amount: obligation.amount,
         dueDate,
+        confidenceScore: obligation.confidenceScore,
+        confidenceBand: obligation.confidenceBand,
+        sourceType: obligation.sourceType,
+        needsReview: obligation.needsReview,
         priorityScore: basePriorityScore + personalization.delta,
         isUrgent,
         isQuickWin,
@@ -137,7 +156,12 @@ export class DailyPulseService {
     await this.reconcileItemStatuses(state.id);
     const itemStates = await this.repository.listItemStates(state.id);
     const progress = await this.syncProgress(state.id);
-    const items = await this.buildActiveItems(itemStates, selectedCandidates, feedByObligationId);
+    const items = await this.buildActiveItems(
+      itemStates,
+      selectedCandidates,
+      feedByObligationId,
+      includeTrace
+    );
     const momentum = await this.getMomentum(userId, progress.completedCount);
 
     return {
@@ -145,7 +169,9 @@ export class DailyPulseService {
       topInsight: {
         title: insights.topInsight.title,
         description: insights.topInsight.description,
-        tone: insights.topInsight.tone
+        tone: insights.topInsight.tone,
+        why: insights.topInsight.why,
+        decisionTrace: includeTrace ? insights.topInsight.decisionTrace : undefined
       },
       items,
       momentum: {
@@ -466,8 +492,14 @@ export class DailyPulseService {
     candidates: PulseCandidate[],
     feedByObligationId: Map<
       string,
-      { whyItMatters: string; hookType: "urgent" | "money" | "quick_win" | "none" }
-    >
+      {
+        whyItMatters: string;
+        why: TrustWhy;
+        hookType: "urgent" | "money" | "quick_win" | "none";
+        decisionTrace?: DecisionTrace;
+      }
+    >,
+    includeTrace: boolean
   ): Promise<PulseItem[]> {
     const activeItemStates = itemStates.filter(
       (item) => item.status === DailyPulseItemStatus.PENDING || item.status === DailyPulseItemStatus.OPENED_GUIDED
@@ -505,6 +537,27 @@ export class DailyPulseService {
         return {
           obligationId: state.obligationId,
           title: candidate?.title ?? obligation?.title ?? "Untitled obligation",
+          sourceType: candidate?.sourceType ?? "MANUAL",
+          confidenceBand: candidate?.confidenceBand ?? "LOW",
+          needsReview: candidate?.needsReview ?? true,
+          why:
+            feed?.why ??
+            buildPulseWhy({
+              hookType,
+              whyItMatters:
+                feed?.whyItMatters ??
+                buildFallbackWhy(
+                  {
+                    dueDate: candidate?.dueDate ?? obligation?.dueDate?.toISOString() ?? null,
+                    amount:
+                      candidate?.amount ??
+                      (typeof obligation?.amount === "number" ? obligation.amount : null)
+                  },
+                  hookType
+                ),
+              confidenceBand: candidate?.confidenceBand ?? "LOW",
+              needsReview: candidate?.needsReview ?? true
+            }),
           whyItMatters:
             feed?.whyItMatters ??
             buildFallbackWhy(
@@ -520,7 +573,16 @@ export class DailyPulseService {
           status:
             state.status === DailyPulseItemStatus.OPENED_GUIDED
               ? "OPENED_GUIDED"
-              : "PENDING"
+              : "PENDING",
+          decisionTrace:
+            includeTrace && feed?.decisionTrace
+              ? feed.decisionTrace
+              : includeTrace
+                ? buildPulseDecisionTrace({
+                    hookType,
+                    candidate
+                  })
+                : undefined
         } satisfies PulseItem;
       })
       .sort((a, b) => b.priorityScore - a.priorityScore)
@@ -847,6 +909,73 @@ export class DailyPulseService {
     }
     return ids;
   }
+}
+
+function buildPulseWhy(input: {
+  hookType: PulseHookType;
+  whyItMatters: string;
+  confidenceBand: "HIGH" | "MEDIUM" | "LOW";
+  needsReview: boolean;
+}): TrustWhy {
+  const signals = new Set<string>();
+  if (input.hookType === "urgent") signals.add("due soon");
+  if (input.hookType === "quick_win") signals.add("quick win");
+  if (input.hookType === "money") signals.add("money exposure");
+  if (input.hookType === "postponed") signals.add("recent activity");
+  if (input.hookType === "important") signals.add("high importance");
+
+  const confidenceFromBand =
+    input.confidenceBand === "HIGH" ? 0.88 : input.confidenceBand === "MEDIUM" ? 0.64 : 0.38;
+
+  return {
+    primaryReason:
+      input.hookType === "urgent"
+        ? "Due soon"
+        : input.hookType === "quick_win"
+          ? "Low effort, high impact"
+          : input.hookType === "money"
+            ? "Money exposure"
+            : input.whyItMatters,
+    signals: Array.from(signals),
+    confidence: toWhyConfidence(input.needsReview ? confidenceFromBand - 0.08 : confidenceFromBand),
+    personalizationReason: null
+  };
+}
+
+function buildPulseDecisionTrace(input: {
+  hookType: PulseHookType;
+  candidate?: PulseCandidate;
+}): DecisionTrace {
+  const sourceSignals = [
+    `hook:${input.hookType}`,
+    `source:${input.candidate?.sourceType?.toLowerCase() ?? "manual"}`
+  ];
+
+  const rankingFactors = [
+    `priority:${Math.round(input.candidate?.priorityScore ?? 0)}`,
+    `urgency:${Math.round(input.candidate?.urgencyScore ?? 0)}`,
+    `importance:${Math.round(input.candidate?.importanceScore ?? 0)}`
+  ];
+
+  const suppressionFactors = [];
+  if (input.candidate?.status === "POSTPONED") {
+    suppressionFactors.push("postponed_context");
+  }
+  if (input.candidate?.effortLevel === "HIGH") {
+    suppressionFactors.push("high_effort_penalty");
+  }
+
+  const confidenceDrivers = [
+    `confidence_band:${input.candidate?.confidenceBand?.toLowerCase() ?? "low"}`,
+    input.candidate?.needsReview ? "needs_review" : "ready"
+  ];
+
+  return {
+    sourceSignals,
+    rankingFactors,
+    suppressionFactors,
+    confidenceDrivers
+  };
 }
 
 function resolveNextStatus(current: DailyPulseItemStatus, requested: DailyPulseItemStatus) {

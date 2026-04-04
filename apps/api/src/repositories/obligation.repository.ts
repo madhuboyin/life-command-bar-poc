@@ -24,6 +24,7 @@ export class ObligationRepository {
     const [items, total] = await Promise.all([
       prisma.obligation.findMany({
         where,
+        include: obligationTrustInclude,
         orderBy,
         skip: offset,
         take: limit
@@ -48,6 +49,7 @@ export class ObligationRepository {
           in: [ObligationStatus.ACTIVE, ObligationStatus.POSTPONED]
         }
       },
+      include: obligationTrustInclude,
       orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
       take: 100
     });
@@ -58,7 +60,8 @@ export class ObligationRepository {
       where: {
         id,
         userId
-      }
+      },
+      include: obligationTrustInclude
     });
   }
 
@@ -81,7 +84,8 @@ export class ObligationRepository {
         effortLevel: input.effortLevel ?? "MEDIUM",
         impactLevel: input.impactLevel ?? "MEDIUM",
         status: input.status ?? "ACTIVE"
-      }
+      },
+      include: obligationTrustInclude
     });
 
     await prisma.auditEvent.create({
@@ -121,7 +125,8 @@ export class ObligationRepository {
         effortLevel: input.effortLevel,
         impactLevel: input.impactLevel,
         status: input.status
-      }
+      },
+      include: obligationTrustInclude
     });
 
     await prisma.auditEvent.create({
@@ -289,6 +294,37 @@ export class ObligationRepository {
       outcomeFeedbackEvents
     };
   }
+
+  async findReviewQueueCandidates(userId: string, limit = 100) {
+    return prisma.obligation.findMany({
+      where: {
+        userId,
+        importSourceId: {
+          not: null
+        },
+        OR: [
+          {
+            status: ObligationStatus.DRAFT
+          },
+          {
+            confidenceScore: {
+              lt: 0.78
+            }
+          },
+          {
+            importSource: {
+              parseStatus: {
+                in: ["PARTIAL", "NEEDS_CONFIRMATION", "FAILED"]
+              }
+            }
+          }
+        ]
+      },
+      include: obligationTrustInclude,
+      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+      take: limit
+    });
+  }
 }
 
 function toAuditMetadata(input: UpdateObligationInput): Prisma.InputJsonObject {
@@ -296,6 +332,21 @@ function toAuditMetadata(input: UpdateObligationInput): Prisma.InputJsonObject {
     Object.entries(input).filter(([, value]) => value !== undefined)
   ) as Prisma.InputJsonObject;
 }
+
+const obligationTrustInclude = {
+  importSource: {
+    select: {
+      id: true,
+      subtype: true,
+      parseStatus: true,
+      parseConfidence: true,
+      parserVersion: true,
+      extractionSummary: true,
+      rawData: true,
+      createdAt: true
+    }
+  }
+} satisfies Prisma.ObligationInclude;
 
 const OPEN_STATUSES: ObligationStatus[] = [
   ObligationStatus.ACTIVE,

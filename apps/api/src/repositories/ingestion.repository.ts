@@ -181,4 +181,144 @@ export class IngestionRepository {
       }
     });
   }
+
+  async findDuplicateByStructuredFields(input: {
+    userId: string;
+    vendor: string | null;
+    amount: number | null;
+    dueDate: string | null;
+    type: ObligationType;
+  }) {
+    if (!input.vendor || input.amount === null || !input.dueDate) {
+      return null;
+    }
+
+    const dueDate = new Date(input.dueDate);
+    if (Number.isNaN(dueDate.getTime())) {
+      return null;
+    }
+
+    const dayStart = startOfDayUTC(dueDate);
+    const dayEnd = endOfDayUTC(dueDate);
+
+    return prisma.obligation.findFirst({
+      where: {
+        userId: input.userId,
+        type: input.type,
+        status: {
+          in: [ObligationStatus.DRAFT, ObligationStatus.ACTIVE, ObligationStatus.POSTPONED]
+        },
+        vendor: {
+          equals: input.vendor,
+          mode: "insensitive"
+        },
+        amount: input.amount,
+        dueDate: {
+          gte: dayStart,
+          lte: dayEnd
+        }
+      },
+      orderBy: {
+        createdAt: "desc"
+      }
+    });
+  }
+
+  async findConflictByStructuredFields(input: {
+    userId: string;
+    vendor: string | null;
+    amount: number | null;
+    dueDate: string | null;
+    type: ObligationType;
+  }) {
+    if (!input.vendor || !input.dueDate) {
+      return null;
+    }
+
+    const dueDate = new Date(input.dueDate);
+    if (Number.isNaN(dueDate.getTime())) {
+      return null;
+    }
+
+    const dayStart = startOfDayUTC(dueDate);
+    const dayEnd = endOfDayUTC(dueDate);
+    const windowStart = new Date(dayStart.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const windowEnd = new Date(dayEnd.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    const candidates = await prisma.obligation.findMany({
+      where: {
+        userId: input.userId,
+        status: {
+          in: [ObligationStatus.DRAFT, ObligationStatus.ACTIVE, ObligationStatus.POSTPONED]
+        },
+        vendor: {
+          equals: input.vendor,
+          mode: "insensitive"
+        },
+        dueDate: {
+          gte: windowStart,
+          lte: windowEnd
+        }
+      },
+      select: {
+        id: true,
+        type: true,
+        amount: true,
+        dueDate: true
+      },
+      take: 25,
+      orderBy: {
+        createdAt: "desc"
+      }
+    });
+
+    const normalizedIncomingAmount =
+      input.amount === null ? null : Number(input.amount.toFixed(2));
+
+    for (const item of candidates) {
+      if (!item.dueDate) continue;
+
+      const itemAmount = item.amount === null ? null : Number(item.amount.toFixed(2));
+      const sameDay = item.dueDate >= dayStart && item.dueDate <= dayEnd;
+
+      if (sameDay && normalizedIncomingAmount !== null && itemAmount !== normalizedIncomingAmount) {
+        return {
+          obligationId: item.id,
+          reason: "same_vendor_same_date_different_amount"
+        };
+      }
+
+      if (
+        normalizedIncomingAmount !== null &&
+        itemAmount === normalizedIncomingAmount &&
+        !sameDay
+      ) {
+        return {
+          obligationId: item.id,
+          reason: "same_vendor_same_amount_different_date"
+        };
+      }
+
+      if (sameDay && item.type !== input.type) {
+        return {
+          obligationId: item.id,
+          reason: "same_vendor_same_date_mixed_type"
+        };
+      }
+    }
+
+    return null;
+  }
+}
+
+function startOfDayUTC(input: Date) {
+  return new Date(
+    Date.UTC(input.getUTCFullYear(), input.getUTCMonth(), input.getUTCDate(), 0, 0, 0, 0)
+  );
+}
+
+function endOfDayUTC(input: Date) {
+  return new Date(
+    Date.UTC(input.getUTCFullYear(), input.getUTCMonth(), input.getUTCDate(), 23, 59, 59, 999)
+  );
 }

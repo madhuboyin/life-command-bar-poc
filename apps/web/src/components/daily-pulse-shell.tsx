@@ -14,6 +14,7 @@ import LoadingCard from "./ui/loading-card";
 import PulseItemCard from "./pulse-item-card";
 import PulseCompletionCard from "./pulse-completion-card";
 import PulseMomentumCard from "./pulse-momentum-card";
+import WhyThisExplanation from "./why-this-explanation";
 
 type Props = {
   initialPulse: DailyPulseResponse | null;
@@ -123,6 +124,9 @@ export default function DailyPulseShell({
             </div>
             <h2 style={{ margin: "0 0 6px 0", fontSize: 24 }}>{pulse.topInsight.title}</h2>
             <p style={{ margin: 0, color: colors.textMuted }}>{pulse.topInsight.description}</p>
+            <div style={{ marginTop: 10 }}>
+              <WhyThisExplanation why={pulse.topInsight.why} decisionTrace={pulse.topInsight.decisionTrace} />
+            </div>
           </section>
 
           <DailyPulseProgress progress={pulse.progress} />
