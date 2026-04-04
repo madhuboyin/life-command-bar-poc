@@ -1,23 +1,10 @@
-# Deploy Helper
-
-Use immutable image tags from the current git commit SHA so you never manually look up or edit tags.
-
-## Quick start
-
-```bash
-./scripts/deploy.sh
-```
-
-## One-shot deploy (API + Web)
-
-```bash
 #!/usr/bin/env bash
 set -euo pipefail
 
 REG=ghcr.io/madhuboyin/life-command-bar-poc
 TAG="${TAG:-$(git rev-parse --short=7 HEAD)}"
 
-echo "Deploying tag: ${TAG}"
+echo "Deploying immutable tag: ${TAG}"
 
 docker buildx build --platform linux/amd64 \
   -f infra/docker/api/Dockerfile \
@@ -38,18 +25,5 @@ kubectl -n life-command rollout status deploy/lcb-api
 kubectl -n life-command rollout status deploy/lcb-web
 kubectl -n life-command get pods -l app=lcb-api
 kubectl -n life-command get pods -l app=lcb-web
-```
 
-## Optional: override tag manually
-
-If needed, deploy a specific commit tag:
-
-```bash
-TAG=f1b4840 ./scripts/deploy.sh
-```
-
-## Optional: push Prisma schema after DB changes
-
-```bash
-./database/migrations/db_migration.sh
-```
+echo "Done. Deployed tag: ${TAG}"
