@@ -131,9 +131,14 @@ export default function HomeShell({
   const overview = (
     <div style={{ display: "grid", gap: 24 }}>
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
-        <Link href="/review" style={{ color: "#2563eb", textDecoration: "none", fontWeight: 600 }}>
-          Needs Review →
-        </Link>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <Link href="/control-tower" style={{ color: "#2563eb", textDecoration: "none", fontWeight: 600 }}>
+            Control Tower →
+          </Link>
+          <Link href="/review" style={{ color: "#2563eb", textDecoration: "none", fontWeight: 600 }}>
+            Needs Review →
+          </Link>
+        </div>
       </div>
       <ReadyToActBanner autoFlow={autoFlow} />
       <MemoryContextCard />

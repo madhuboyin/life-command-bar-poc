@@ -2,6 +2,7 @@ import type {
   AutoFlowListResponse,
   CommandExecuteResponse,
   CommandParseResponse,
+  ControlTowerResponse,
   DailyPulseItemUpdateResponse,
   DailyPulseProgressResponse,
   DailyPulseResponse,
@@ -397,6 +398,79 @@ export async function getDashboardInsights(params?: {
   });
 
   return handleResponse<DashboardInsightsResponse>(res);
+}
+
+export async function getControlTower(params?: {
+  reviewLimit?: number;
+  readyLimit?: number;
+  upcomingLimitPerWindow?: number;
+  recentLimit?: number;
+  systemDecisionsLimit?: number;
+}): Promise<ControlTowerResponse> {
+  const query = new URLSearchParams();
+  if (typeof params?.reviewLimit === "number") {
+    query.set("reviewLimit", String(params.reviewLimit));
+  }
+  if (typeof params?.readyLimit === "number") {
+    query.set("readyLimit", String(params.readyLimit));
+  }
+  if (typeof params?.upcomingLimitPerWindow === "number") {
+    query.set("upcomingLimitPerWindow", String(params.upcomingLimitPerWindow));
+  }
+  if (typeof params?.recentLimit === "number") {
+    query.set("recentLimit", String(params.recentLimit));
+  }
+  if (typeof params?.systemDecisionsLimit === "number") {
+    query.set("systemDecisionsLimit", String(params.systemDecisionsLimit));
+  }
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+
+  const res = await apiFetch(`/control-tower${suffix}`, {
+    cache: "no-store"
+  });
+
+  return handleResponse<ControlTowerResponse>(res);
+}
+
+export async function getControlTowerReview(limit = 6) {
+  const res = await apiFetch(`/control-tower/review?limit=${encodeURIComponent(String(limit))}`, {
+    cache: "no-store"
+  });
+  return handleResponse<{ items: ControlTowerResponse["review"] }>(res);
+}
+
+export async function getControlTowerReady(limit = 6) {
+  const res = await apiFetch(`/control-tower/ready?limit=${encodeURIComponent(String(limit))}`, {
+    cache: "no-store"
+  });
+  return handleResponse<{ items: ControlTowerResponse["ready"] }>(res);
+}
+
+export async function getControlTowerUpcoming(limitPerWindow = 4) {
+  const res = await apiFetch(
+    `/control-tower/upcoming?limitPerWindow=${encodeURIComponent(String(limitPerWindow))}`,
+    {
+      cache: "no-store"
+    }
+  );
+  return handleResponse<ControlTowerResponse["upcoming"]>(res);
+}
+
+export async function getControlTowerRecent(limit = 6) {
+  const res = await apiFetch(`/control-tower/recent?limit=${encodeURIComponent(String(limit))}`, {
+    cache: "no-store"
+  });
+  return handleResponse<{ items: ControlTowerResponse["recent"] }>(res);
+}
+
+export async function getControlTowerSystemDecisions(limit = 6) {
+  const res = await apiFetch(
+    `/control-tower/system-decisions?limit=${encodeURIComponent(String(limit))}`,
+    {
+      cache: "no-store"
+    }
+  );
+  return handleResponse<{ items: ControlTowerResponse["systemDecisions"] }>(res);
 }
 
 export async function getObligations(params?: {

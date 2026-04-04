@@ -1,0 +1,864 @@
+import { ObligationStatus, PredictionType } from "@prisma/client";
+import { prisma } from "../clients/prisma.client";
+import { ObligationRepository } from "../repositories/obligation.repository";
+import { mapObligation } from "../utils/obligation.mapper";
+import type { TrustWhy } from "../utils/trust-layer";
+import { sourceLabelFromType, toWhyConfidence } from "../utils/trust-layer";
+import { AutoFlowService } from "./auto-flow.service";
+import { ObligationService } from "./obligation.service";
+import { PredictionEngineService } from "./prediction-engine.service";
+import { HomeMemoryService } from "./home-memory.service";
+
+const DEFAULT_REVIEW_LIMIT = 6;
+const DEFAULT_READY_LIMIT = 6;
+const DEFAULT_UPCOMING_LIMIT_PER_WINDOW = 4;
+const DEFAULT_RECENT_LIMIT = 6;
+const DEFAULT_SYSTEM_DECISIONS_LIMIT = 6;
+
+type ControlTowerReviewItem = {
+  id: string;
+  itemType: "OBLIGATION" | "PREDICTION";
+  obligationId: string | null;
+  predictionId: string | null;
+  title: string;
+  description: string | null;
+  sourceLabel: string;
+  confidenceBand: "HIGH" | "MEDIUM" | "LOW";
+  confidenceScore: number;
+  reviewReasons: string[];
+  extractedFields: Record<string, unknown> | null;
+  predictedDate: string | null;
+  status: string;
+  why: TrustWhy;
+};
+
+type ControlTowerReadyItem = {
+  id: string;
+  obligationId: string;
+  autoFlowId: string | null;
+  title: string;
+  sourceLabel: string;
+  confidenceBand: "HIGH" | "MEDIUM" | "LOW";
+  confidenceScore: number;
+  priorityScore: number;
+  reason: string;
+  ctaLabel: string;
+  why: TrustWhy;
+};
+
+type ControlTowerUpcomingItem = {
+  id: string;
+  predictionId: string;
+  obligationId: string | null;
+  title: string;
+  description: string | null;
+  predictedDate: string | null;
+  confidenceBand: "HIGH" | "MEDIUM" | "LOW";
+  confidenceScore: number;
+  predictionType: PredictionType;
+  status: string;
+  rationaleSummary: string | null;
+  sourceLabel: string;
+  why: TrustWhy;
+};
+
+type ControlTowerRecentItem = {
+  id: string;
+  eventType: string;
+  obligationId: string | null;
+  title: string;
+  description: string;
+  createdAt: string;
+  outcomeLabel: string;
+  sourceLabel: string;
+};
+
+type ControlTowerSystemDecisionItem = {
+  id: string;
+  decisionType:
+    | "SUPPRESSION"
+    | "DUPLICATE"
+    | "AUTO_FLOW"
+    | "PREDICTION"
+    | "CONFIDENCE"
+    | "ROUTING";
+  title: string;
+  explanation: string;
+  sourceSignals: string[];
+  createdAt: string;
+  obligationId: string | null;
+  referenceId: string | null;
+};
+
+type ControlTowerUpcomingSection = {
+  windows: Array<{
+    windowDays: number;
+    start: string;
+    end: string;
+    items: ControlTowerUpcomingItem[];
+  }>;
+  items: ControlTowerUpcomingItem[];
+};
+
+export class ControlTowerService {
+  private readonly obligationService = new ObligationService();
+  private readonly obligationRepository = new ObligationRepository();
+  private readonly autoFlowService = new AutoFlowService();
+  private readonly predictionEngineService = new PredictionEngineService();
+  private readonly homeMemoryService = new HomeMemoryService();
+
+  async getControlTower(userId: string, options?: {
+    reviewLimit?: number;
+    readyLimit?: number;
+    upcomingLimitPerWindow?: number;
+    recentLimit?: number;
+    systemDecisionsLimit?: number;
+  }) {
+    const reviewLimit = options?.reviewLimit ?? DEFAULT_REVIEW_LIMIT;
+    const readyLimit = options?.readyLimit ?? DEFAULT_READY_LIMIT;
+    const upcomingLimitPerWindow =
+      options?.upcomingLimitPerWindow ?? DEFAULT_UPCOMING_LIMIT_PER_WINDOW;
+    const recentLimit = options?.recentLimit ?? DEFAULT_RECENT_LIMIT;
+    const systemDecisionsLimit =
+      options?.systemDecisionsLimit ?? DEFAULT_SYSTEM_DECISIONS_LIMIT;
+
+    const [reviewRaw, readyRaw, upcomingRaw, recent, systemDecisions] = await Promise.all([
+      this.getReview(userId, reviewLimit * 2),
+      this.getReady(userId, readyLimit * 2),
+      this.getUpcoming(userId, upcomingLimitPerWindow),
+      this.getRecent(userId, recentLimit),
+      this.getSystemDecisions(userId, systemDecisionsLimit)
+    ]);
+
+    const review = reviewRaw.items.slice(0, reviewLimit);
+    const reviewObligationIds = new Set(
+      review
+        .map((item) => item.obligationId)
+        .filter((item): item is string => Boolean(item))
+    );
+    const reviewPredictionIds = new Set(
+      review
+        .map((item) => item.predictionId)
+        .filter((item): item is string => Boolean(item))
+    );
+
+    const ready = readyRaw.items
+      .filter((item) => !reviewObligationIds.has(item.obligationId))
+      .slice(0, readyLimit);
+    const readyObligationIds = new Set(ready.map((item) => item.obligationId));
+
+    const filteredUpcomingWindows = upcomingRaw.windows.map((window) => ({
+      ...window,
+      items: window.items
+        .filter((item) => {
+          if (reviewPredictionIds.has(item.predictionId)) return false;
+          if (item.obligationId && reviewObligationIds.has(item.obligationId)) return false;
+          if (item.obligationId && readyObligationIds.has(item.obligationId)) return false;
+          return true;
+        })
+        .slice(0, upcomingLimitPerWindow)
+    }));
+    const upcomingItems = dedupeById(
+      filteredUpcomingWindows.flatMap((window) => window.items)
+    );
+
+    return {
+      generatedAt: new Date().toISOString(),
+      review,
+      ready,
+      upcoming: {
+        windows: filteredUpcomingWindows,
+        items: upcomingItems
+      },
+      recent: recent.items,
+      systemDecisions: systemDecisions.items,
+      summary: {
+        reviewCount: review.length,
+        readyCount: ready.length,
+        upcomingCount: upcomingItems.length,
+        recentCount: recent.items.length,
+        systemDecisionCount: systemDecisions.items.length
+      }
+    };
+  }
+
+  async getReview(userId: string, limit = DEFAULT_REVIEW_LIMIT) {
+    const [reviewQueue, predictionList] = await Promise.all([
+      this.obligationService.getReviewQueue(userId, { limit: Math.max(limit, 20) }),
+      this.predictionEngineService.list(userId, {
+        status: ["ACTIVE"],
+        limit: Math.max(limit * 2, 20)
+      })
+    ]);
+
+    const obligationItems = reviewQueue.items.map<ControlTowerReviewItem>((item) => {
+      const reasons = item.reviewReasons.length > 0 ? item.reviewReasons : ["Needs confirmation"];
+      return {
+        id: `obl:${item.id}`,
+        itemType: "OBLIGATION",
+        obligationId: item.id,
+        predictionId: null,
+        title: item.title,
+        description: item.description,
+        sourceLabel: item.sourceMetadata?.provenanceLabel ?? sourceLabelFromType(item.sourceType),
+        confidenceBand: item.confidenceBand,
+        confidenceScore: item.confidenceScore,
+        reviewReasons: reasons,
+        extractedFields: item.extractedFields,
+        predictedDate: item.dueDate,
+        status: item.status,
+        why: {
+          primaryReason: reasons[0] ?? "Needs confirmation",
+          signals: deriveReviewSignals(item),
+          confidence: toWhyConfidence(item.confidenceScore),
+          personalizationReason: null
+        }
+      };
+    });
+
+    const predictionItems = predictionList.items
+      .filter((item) => item.needsConfirmation || item.predictionType === "MISSING_EXPECTED_OBLIGATION")
+      .map<ControlTowerReviewItem>((item) => {
+        const reasons = [
+          item.confidenceBand === "LOW"
+            ? "Low confidence prediction"
+            : "Prediction review suggested"
+        ];
+        return {
+          id: `pred:${item.id}`,
+          itemType: "PREDICTION",
+          obligationId: item.promotedObligationId,
+          predictionId: item.id,
+          title: item.title,
+          description: item.description,
+          sourceLabel: predictionSourceLabel(item.referenceType),
+          confidenceBand: item.confidenceBand,
+          confidenceScore: item.confidenceScore,
+          reviewReasons: reasons,
+          extractedFields: asRecord(item.rationale),
+          predictedDate: item.predictedDate,
+          status: item.status,
+          why: {
+            primaryReason: item.rationaleSummary ?? "Pattern requires confirmation",
+            signals: ["due soon", "recent activity"],
+            confidence: toWhyConfidence(item.confidenceScore),
+            personalizationReason: null
+          }
+        };
+      });
+
+    const merged = [...obligationItems, ...predictionItems]
+      .sort((a, b) => reviewPriorityScore(b) - reviewPriorityScore(a))
+      .slice(0, limit);
+
+    return {
+      items: merged
+    };
+  }
+
+  async getReady(userId: string, limit = DEFAULT_READY_LIMIT) {
+    const [autoFlow, activeObligations] = await Promise.all([
+      this.autoFlowService.list(userId, { limit: Math.max(30, limit * 2) }),
+      this.obligationRepository.findActiveForFeed(userId)
+    ]);
+
+    const readyFromAutoFlow = autoFlow.items.map<ControlTowerReadyItem>((item) => ({
+      id: `ready:auto:${item.id}`,
+      obligationId: item.obligationId,
+      autoFlowId: item.id,
+      title: item.obligation.title,
+      sourceLabel: sourceLabelFromType(item.obligation.sourceType),
+      confidenceBand: item.obligation.confidenceBand,
+      confidenceScore: item.obligation.confidenceScore,
+      priorityScore: item.priorityScore,
+      reason: item.reason ?? "Ready now",
+      ctaLabel: item.cta.label,
+      why: item.why
+    }));
+
+    const existingObligationIds = new Set(readyFromAutoFlow.map((item) => item.obligationId));
+
+    const fallback = activeObligations
+      .map((item) => mapObligation(item))
+      .filter((item) => {
+        if (existingObligationIds.has(item.id)) return false;
+        if (item.needsReview) return false;
+        if (item.status !== ObligationStatus.ACTIVE && item.status !== ObligationStatus.POSTPONED) {
+          return false;
+        }
+
+        const quickWin =
+          item.effortLevel === "LOW" &&
+          (item.impactLevel === "MEDIUM" || item.impactLevel === "HIGH") &&
+          item.importanceScore >= 50;
+        const urgent = item.urgencyScore >= 85 || isDueWithinHours(item.dueDate, 48);
+        const important = item.importanceScore >= 82;
+
+        return item.confidenceBand === "HIGH" && (quickWin || urgent || important);
+      })
+      .sort((a, b) => computeReadyPriority(b) - computeReadyPriority(a))
+      .map<ControlTowerReadyItem>((item) => {
+        const reason = resolveReadyReason(item);
+        return {
+          id: `ready:obl:${item.id}`,
+          obligationId: item.id,
+          autoFlowId: null,
+          title: item.title,
+          sourceLabel: sourceLabelFromType(item.sourceType),
+          confidenceBand: item.confidenceBand,
+          confidenceScore: item.confidenceScore,
+          priorityScore: computeReadyPriority(item),
+          reason,
+          ctaLabel: "Start",
+          why: {
+            primaryReason: reason,
+            signals: deriveReadySignals(item),
+            confidence: toWhyConfidence(item.confidenceScore),
+            personalizationReason: null
+          }
+        };
+      });
+
+    const merged = dedupeByObligationId([...readyFromAutoFlow, ...fallback]).slice(0, limit);
+
+    return {
+      items: merged
+    };
+  }
+
+  async getUpcoming(userId: string, limitPerWindow = DEFAULT_UPCOMING_LIMIT_PER_WINDOW) {
+    const upcoming = await this.predictionEngineService.listUpcoming(userId);
+
+    const windows = upcoming.windows.map((window) => ({
+      windowDays: window.windowDays,
+      start: window.start,
+      end: window.end,
+      items: window.items
+        .filter((item) => item.status === "ACTIVE" || item.status === "CONFIRMED")
+        .slice(0, limitPerWindow)
+        .map((item) => this.mapUpcomingPrediction(item))
+    }));
+
+    const items = dedupeById(windows.flatMap((window) => window.items));
+
+    return {
+      windows,
+      items
+    } satisfies ControlTowerUpcomingSection;
+  }
+
+  async getRecent(userId: string, limit = DEFAULT_RECENT_LIMIT) {
+    const events = await prisma.auditEvent.findMany({
+      where: {
+        userId,
+        eventType: {
+          in: [
+            "obligation_marked_done",
+            "obligation_postponed",
+            "obligation_dismissed",
+            "ingestion_candidate_confirmed",
+            "ingestion_candidate_rejected",
+            "auto_flow_accepted",
+            "focus_session_completed",
+            "focus_session_item_completed",
+            "guided_journey_completed",
+            "prediction_confirmed",
+            "prediction_promoted_to_obligation"
+          ]
+        }
+      },
+      orderBy: {
+        createdAt: "desc"
+      },
+      take: Math.max(limit * 3, 30)
+    });
+
+    const items = events
+      .map<ControlTowerRecentItem>((event) => {
+        const metadata = asRecord(event.metadata);
+        const { title, description, outcomeLabel } = toRecentDescription(event.eventType, metadata);
+        return {
+          id: event.id,
+          eventType: event.eventType,
+          obligationId: event.obligationId,
+          title,
+          description,
+          createdAt: event.createdAt.toISOString(),
+          outcomeLabel,
+          sourceLabel: sourceLabelFromRecentEvent(event.eventType)
+        };
+      })
+      .slice(0, limit);
+
+    return {
+      items
+    };
+  }
+
+  async getSystemDecisions(userId: string, limit = DEFAULT_SYSTEM_DECISIONS_LIMIT) {
+    const [auditEvents, suppressedPatterns, memoryEvents] = await Promise.all([
+      prisma.auditEvent.findMany({
+        where: {
+          userId,
+          eventType: {
+            in: [
+              "ingestion_duplicate_detected",
+              "ingestion_structured_duplicate_detected",
+              "ingestion_candidate_skipped",
+              "auto_flow_triggered",
+              "prediction_rebuilt",
+              "prediction_resolved_by_ingestion",
+              "prediction_dismissed",
+              "daily_pulse_item_reconciled"
+            ]
+          }
+        },
+        orderBy: {
+          createdAt: "desc"
+        },
+        take: Math.max(limit * 3, 30)
+      }),
+      this.homeMemoryService
+        .listPatterns(userId, { includeSuppressed: true, limit: Math.max(limit, 20) })
+        .then((result) => result.items.filter((item) => item.isSuppressed))
+        .catch(() => []),
+      prisma.memoryEvent.findMany({
+        where: {
+          userId,
+          eventType: {
+            in: ["prediction_pattern_dismissed", "prediction_pattern_confirmed"]
+          }
+        },
+        orderBy: {
+          createdAt: "desc"
+        },
+        take: Math.max(limit, 20)
+      })
+    ]);
+
+    const auditItems = auditEvents.map((event) => {
+      const metadata = asRecord(event.metadata);
+      return toSystemDecisionFromAudit(event, metadata);
+    });
+
+    const suppressedItems: ControlTowerSystemDecisionItem[] = suppressedPatterns.map((pattern) => ({
+      id: `suppressed:${pattern.id}`,
+      decisionType: "SUPPRESSION",
+      title: "Pattern suppressed",
+      explanation: "Suppressed after repeated low-value outcomes.",
+      sourceSignals: [
+        `pattern:${pattern.patternType.toLowerCase()}`,
+        `confidence:${Math.round(pattern.confidence * 100)}`
+      ],
+      createdAt: pattern.updatedAt,
+      obligationId: null,
+      referenceId: pattern.referenceId
+    }));
+
+    const memoryItems: ControlTowerSystemDecisionItem[] = memoryEvents.map((event) => {
+      const metadata = asRecord(event.metadata);
+      const confidenceBefore = asNumber(metadata?.confidenceBefore);
+      const confidenceAfter = asNumber(metadata?.confidenceAfter);
+      const explainedDelta =
+        confidenceBefore !== null && confidenceAfter !== null
+          ? `Confidence adjusted from ${Math.round(confidenceBefore * 100)}% to ${Math.round(confidenceAfter * 100)}%.`
+          : "Prediction confidence updated from outcome feedback.";
+
+      return {
+        id: `memory:${event.id}`,
+        decisionType: "CONFIDENCE",
+        title:
+          event.eventType === "prediction_pattern_dismissed"
+            ? "Confidence downgraded"
+            : "Confidence reinforced",
+        explanation: explainedDelta,
+        sourceSignals: [event.eventType],
+        createdAt: event.createdAt.toISOString(),
+        obligationId: null,
+        referenceId: event.referenceId
+      };
+    });
+
+    const items = [...auditItems, ...suppressedItems, ...memoryItems]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, limit);
+
+    return {
+      items
+    };
+  }
+
+  private mapUpcomingPrediction(item: {
+    id: string;
+    predictionType: PredictionType;
+    referenceType: "MEMORY_PATTERN" | "MEMORY_ENTITY" | "OBLIGATION" | "VENDOR";
+    referenceId: string;
+    title: string;
+    description: string | null;
+    predictedDate: string | null;
+    confidenceScore: number;
+    confidenceBand: "HIGH" | "MEDIUM" | "LOW";
+    status: "ACTIVE" | "CONFIRMED" | "DISMISSED" | "EXPIRED" | "PROMOTED_TO_OBLIGATION";
+    rationaleSummary: string | null;
+    promotedObligationId: string | null;
+  }): ControlTowerUpcomingItem {
+    const sourceSignals = [item.predictionType.toLowerCase()];
+    const primaryReason =
+      item.rationaleSummary ??
+      (item.predictionType === "WORKLOAD_WINDOW"
+        ? "Upcoming workload signal"
+        : "Pattern suggests this is coming soon");
+
+    return {
+      id: `upcoming:${item.id}`,
+      predictionId: item.id,
+      obligationId:
+        item.referenceType === "OBLIGATION"
+          ? item.referenceId
+          : item.promotedObligationId,
+      title: item.title,
+      description: item.description,
+      predictedDate: item.predictedDate,
+      confidenceBand: item.confidenceBand,
+      confidenceScore: item.confidenceScore,
+      predictionType: item.predictionType,
+      status: item.status,
+      rationaleSummary: item.rationaleSummary,
+      sourceLabel: predictionSourceLabel(item.referenceType),
+      why: {
+        primaryReason,
+        signals: sourceSignals,
+        confidence: toWhyConfidence(item.confidenceScore),
+        personalizationReason: null
+      }
+    };
+  }
+}
+
+function predictionSourceLabel(referenceType: string) {
+  if (referenceType === "OBLIGATION") return "Predicted from obligation history";
+  if (referenceType === "MEMORY_PATTERN") return "Predicted from memory pattern";
+  if (referenceType === "MEMORY_ENTITY") return "Predicted from system context";
+  return "Predicted from vendor pattern";
+}
+
+function reviewPriorityScore(item: ControlTowerReviewItem) {
+  let score = item.confidenceBand === "LOW" ? 50 : item.confidenceBand === "MEDIUM" ? 35 : 15;
+  if (item.reviewReasons.some((reason) => reason.toLowerCase().includes("conflict"))) score += 20;
+  if (item.reviewReasons.some((reason) => reason.toLowerCase().includes("duplicate"))) score += 15;
+  if (item.itemType === "PREDICTION") score += 8;
+  return score;
+}
+
+function deriveReviewSignals(item: {
+  confidenceBand: "HIGH" | "MEDIUM" | "LOW";
+  conflictDetected?: boolean;
+  duplicateCandidate?: boolean;
+  extractionStatus?: string | null;
+}) {
+  const signals: string[] = [];
+  if (item.confidenceBand !== "HIGH") signals.push("high importance");
+  if (item.conflictDetected) signals.push("recent activity");
+  if (item.duplicateCandidate) signals.push("recent activity");
+  if (item.extractionStatus === "PARTIAL" || item.extractionStatus === "FAILED") {
+    signals.push("quick win");
+  }
+  if (signals.length === 0) {
+    signals.push("high importance");
+  }
+  return Array.from(new Set(signals));
+}
+
+function computeReadyPriority(item: {
+  urgencyScore: number;
+  importanceScore: number;
+  confidenceScore: number;
+  effortLevel: "LOW" | "MEDIUM" | "HIGH";
+  impactLevel: "LOW" | "MEDIUM" | "HIGH";
+  dueDate: string | null;
+}) {
+  let score = item.urgencyScore * 0.4 + item.importanceScore * 0.35 + item.confidenceScore * 100 * 0.25;
+
+  if (isDueWithinHours(item.dueDate, 48)) score += 10;
+  if (item.effortLevel === "LOW" && (item.impactLevel === "MEDIUM" || item.impactLevel === "HIGH")) {
+    score += 8;
+  }
+
+  return Math.round(score);
+}
+
+function resolveReadyReason(item: {
+  urgencyScore: number;
+  dueDate: string | null;
+  effortLevel: "LOW" | "MEDIUM" | "HIGH";
+  impactLevel: "LOW" | "MEDIUM" | "HIGH";
+  amount: number | null;
+}) {
+  if (item.urgencyScore >= 85 || isDueWithinHours(item.dueDate, 48)) {
+    return "Needs attention soon";
+  }
+
+  if (item.effortLevel === "LOW" && (item.impactLevel === "MEDIUM" || item.impactLevel === "HIGH")) {
+    return "Quick win with strong impact";
+  }
+
+  if ((item.amount ?? 0) > 0) {
+    return "Money exposure worth handling now";
+  }
+
+  return "Ready to act";
+}
+
+function deriveReadySignals(item: {
+  urgencyScore: number;
+  dueDate: string | null;
+  effortLevel: "LOW" | "MEDIUM" | "HIGH";
+  impactLevel: "LOW" | "MEDIUM" | "HIGH";
+  amount: number | null;
+}) {
+  const signals: string[] = [];
+  if (item.urgencyScore >= 85 || isDueWithinHours(item.dueDate, 48)) {
+    signals.push("due soon");
+  }
+  if (item.effortLevel === "LOW" && (item.impactLevel === "MEDIUM" || item.impactLevel === "HIGH")) {
+    signals.push("quick win");
+  }
+  if ((item.amount ?? 0) > 0) {
+    signals.push("money exposure");
+  }
+  if (signals.length === 0) {
+    signals.push("high importance");
+  }
+  return signals;
+}
+
+function toRecentDescription(eventType: string, metadata: Record<string, unknown> | null) {
+  switch (eventType) {
+    case "obligation_marked_done":
+      return {
+        title: "Obligation completed",
+        description: "Marked complete and removed from active queue.",
+        outcomeLabel: "Completed"
+      };
+    case "obligation_postponed":
+      return {
+        title: "Obligation postponed",
+        description: "Deferred intentionally with updated timing.",
+        outcomeLabel: "Postponed"
+      };
+    case "obligation_dismissed":
+      return {
+        title: "Obligation dismissed",
+        description: "Removed from active recommendations.",
+        outcomeLabel: "Dismissed"
+      };
+    case "auto_flow_accepted":
+      return {
+        title: "Ready-now flow accepted",
+        description: "A prepared action flow was opened from system recommendations.",
+        outcomeLabel: "Accepted"
+      };
+    case "guided_journey_completed":
+      return {
+        title: "Guided flow completed",
+        description: "A guided journey was completed end-to-end.",
+        outcomeLabel: "Completed"
+      };
+    case "prediction_promoted_to_obligation":
+      return {
+        title: "Prediction promoted",
+        description: "A predicted item was promoted into an obligation.",
+        outcomeLabel: "Promoted"
+      };
+    case "prediction_confirmed":
+      return {
+        title: "Prediction confirmed",
+        description: "A future signal was confirmed and retained.",
+        outcomeLabel: "Confirmed"
+      };
+    case "ingestion_candidate_confirmed":
+      return {
+        title: "Imported item confirmed",
+        description: "A captured ingestion candidate was confirmed by user action.",
+        outcomeLabel: "Confirmed"
+      };
+    case "ingestion_candidate_rejected":
+      return {
+        title: "Imported item rejected",
+        description: "A captured ingestion candidate was rejected.",
+        outcomeLabel: "Rejected"
+      };
+    default:
+      return {
+        title: normalizeEventLabel(eventType),
+        description:
+          (typeof metadata?.reason === "string" && metadata.reason.length > 0
+            ? metadata.reason
+            : "Recent system or user action recorded.") ?? "Recent action recorded.",
+        outcomeLabel: "Recorded"
+      };
+  }
+}
+
+function sourceLabelFromRecentEvent(eventType: string) {
+  if (eventType.startsWith("prediction_")) return "Prediction Engine";
+  if (eventType.startsWith("auto_flow_")) return "Auto-Flow";
+  if (eventType.startsWith("ingestion_")) return "Ingestion";
+  if (eventType.startsWith("guided_journey_")) return "Guided Mode";
+  if (eventType.startsWith("focus_")) return "Focus Mode";
+  return "System";
+}
+
+function toSystemDecisionFromAudit(
+  event: {
+    id: string;
+    eventType: string;
+    obligationId: string | null;
+    createdAt: Date;
+  },
+  metadata: Record<string, unknown> | null
+): ControlTowerSystemDecisionItem {
+  if (
+    event.eventType === "ingestion_duplicate_detected" ||
+    event.eventType === "ingestion_structured_duplicate_detected"
+  ) {
+    return {
+      id: event.id,
+      decisionType: "DUPLICATE",
+      title: "Duplicate detected and suppressed",
+      explanation: "A similar capture already exists, so this item was suppressed.",
+      sourceSignals: [
+        event.eventType,
+        typeof metadata?.duplicateOfObligationId === "string"
+          ? `match:${metadata.duplicateOfObligationId}`
+          : "match:existing"
+      ],
+      createdAt: event.createdAt.toISOString(),
+      obligationId: event.obligationId,
+      referenceId:
+        typeof metadata?.importSourceId === "string" ? metadata.importSourceId : null
+    };
+  }
+
+  if (event.eventType === "ingestion_candidate_skipped") {
+    return {
+      id: event.id,
+      decisionType: "ROUTING",
+      title: "Moved to review",
+      explanation:
+        typeof metadata?.reason === "string" && metadata.reason === "conflict_detected"
+          ? "Conflicting signals were detected, so this item was routed to review."
+          : "Confidence was insufficient for activation, so this item was routed to review.",
+      sourceSignals: [event.eventType, typeof metadata?.reason === "string" ? metadata.reason : "low_confidence"],
+      createdAt: event.createdAt.toISOString(),
+      obligationId: event.obligationId,
+      referenceId: typeof metadata?.importSourceId === "string" ? metadata.importSourceId : null
+    };
+  }
+
+  if (event.eventType === "auto_flow_triggered") {
+    return {
+      id: event.id,
+      decisionType: "AUTO_FLOW",
+      title: "Auto-flow triggered",
+      explanation: "A ready/suggested flow was created based on urgency and confidence.",
+      sourceSignals: [
+        event.eventType,
+        typeof metadata?.triggerType === "string" ? metadata.triggerType : "pattern_trigger"
+      ],
+      createdAt: event.createdAt.toISOString(),
+      obligationId: event.obligationId,
+      referenceId:
+        typeof metadata?.autoFlowStateId === "string" ? metadata.autoFlowStateId : null
+    };
+  }
+
+  if (event.eventType === "prediction_rebuilt" || event.eventType === "prediction_resolved_by_ingestion") {
+    return {
+      id: event.id,
+      decisionType: "PREDICTION",
+      title:
+        event.eventType === "prediction_rebuilt"
+          ? "Predictions rebuilt"
+          : "Prediction resolved by real capture",
+      explanation:
+        event.eventType === "prediction_rebuilt"
+          ? "Future signals were recalculated from updated memory and obligations."
+          : "A predicted item was matched to a newly captured obligation.",
+      sourceSignals: [event.eventType],
+      createdAt: event.createdAt.toISOString(),
+      obligationId: event.obligationId,
+      referenceId:
+        typeof metadata?.predictionId === "string" ? metadata.predictionId : null
+    };
+  }
+
+  if (event.eventType === "prediction_dismissed") {
+    return {
+      id: event.id,
+      decisionType: "CONFIDENCE",
+      title: "Prediction confidence reduced",
+      explanation: "Dismissed predictions lower confidence for similar future predictions.",
+      sourceSignals: [event.eventType],
+      createdAt: event.createdAt.toISOString(),
+      obligationId: event.obligationId,
+      referenceId:
+        typeof metadata?.predictionId === "string" ? metadata.predictionId : null
+    };
+  }
+
+  return {
+    id: event.id,
+    decisionType: "ROUTING",
+    title: normalizeEventLabel(event.eventType),
+    explanation: "System decision captured for auditability.",
+    sourceSignals: [event.eventType],
+    createdAt: event.createdAt.toISOString(),
+    obligationId: event.obligationId,
+    referenceId: null
+  };
+}
+
+function isDueWithinHours(value: string | null, hours: number) {
+  if (!value) return false;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return false;
+  return parsed.getTime() <= Date.now() + hours * 60 * 60 * 1000;
+}
+
+function dedupeByObligationId(items: ControlTowerReadyItem[]) {
+  const seen = new Set<string>();
+  const deduped: ControlTowerReadyItem[] = [];
+  for (const item of items) {
+    if (seen.has(item.obligationId)) continue;
+    seen.add(item.obligationId);
+    deduped.push(item);
+  }
+  return deduped;
+}
+
+function dedupeById<T extends { id: string }>(items: T[]) {
+  const seen = new Set<string>();
+  const deduped: T[] = [];
+  for (const item of items) {
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    deduped.push(item);
+  }
+  return deduped;
+}
+
+function normalizeEventLabel(eventType: string) {
+  return eventType
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function asRecord(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function asNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}

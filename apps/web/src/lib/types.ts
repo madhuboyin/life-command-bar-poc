@@ -603,6 +603,101 @@ export interface PredictionUpcomingResponse {
   items: PredictionItem[];
 }
 
+export interface ControlTowerReviewItem {
+  id: string;
+  itemType: "OBLIGATION" | "PREDICTION";
+  obligationId: string | null;
+  predictionId: string | null;
+  title: string;
+  description: string | null;
+  sourceLabel: string;
+  confidenceBand: ConfidenceBand;
+  confidenceScore: number;
+  reviewReasons: string[];
+  extractedFields: Record<string, unknown> | null;
+  predictedDate: string | null;
+  status: string;
+  why: WhyExplanation;
+}
+
+export interface ControlTowerReadyItem {
+  id: string;
+  obligationId: string;
+  autoFlowId: string | null;
+  title: string;
+  sourceLabel: string;
+  confidenceBand: ConfidenceBand;
+  confidenceScore: number;
+  priorityScore: number;
+  reason: string;
+  ctaLabel: string;
+  why: WhyExplanation;
+}
+
+export interface ControlTowerUpcomingItem {
+  id: string;
+  predictionId: string;
+  obligationId: string | null;
+  title: string;
+  description: string | null;
+  predictedDate: string | null;
+  confidenceBand: ConfidenceBand;
+  confidenceScore: number;
+  predictionType: PredictionType;
+  status: PredictionStatus;
+  rationaleSummary: string | null;
+  sourceLabel: string;
+  why: WhyExplanation;
+}
+
+export interface ControlTowerRecentItem {
+  id: string;
+  eventType: string;
+  obligationId: string | null;
+  title: string;
+  description: string;
+  createdAt: string;
+  outcomeLabel: string;
+  sourceLabel: string;
+}
+
+export interface ControlTowerSystemDecisionItem {
+  id: string;
+  decisionType: "SUPPRESSION" | "DUPLICATE" | "AUTO_FLOW" | "PREDICTION" | "CONFIDENCE" | "ROUTING";
+  title: string;
+  explanation: string;
+  sourceSignals: string[];
+  createdAt: string;
+  obligationId: string | null;
+  referenceId: string | null;
+}
+
+export interface ControlTowerUpcomingSection {
+  windows: Array<{
+    windowDays: number;
+    start: string;
+    end: string;
+    items: ControlTowerUpcomingItem[];
+  }>;
+  items: ControlTowerUpcomingItem[];
+}
+
+export interface ControlTowerResponse {
+  generatedAt: string;
+  review: ControlTowerReviewItem[];
+  ready: ControlTowerReadyItem[];
+  upcoming: ControlTowerUpcomingSection;
+  recent: ControlTowerRecentItem[];
+  systemDecisions: ControlTowerSystemDecisionItem[];
+  summary: {
+    reviewCount: number;
+    readyCount: number;
+    upcomingCount: number;
+    recentCount: number;
+    systemDecisionCount: number;
+  };
+}
+
 export interface ObligationHistory {
   auditEvents: Array<{
     id: string;

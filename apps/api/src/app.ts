@@ -20,6 +20,7 @@ import { autoFlowRouter } from "./routes/auto-flow.routes";
 import { focusModeRouter } from "./routes/focus-mode.routes";
 import { memoryRouter } from "./routes/memory.routes";
 import { predictionRouter } from "./routes/prediction.routes";
+import { controlTowerRouter } from "./routes/control-tower.routes";
 
 export function createApp() {
   const app = express();
@@ -46,6 +47,7 @@ export function createApp() {
   app.use("/api/personalization", personalizationRouter);
   app.use("/api/memory", memoryRouter);
   app.use("/api/predictions", predictionRouter);
+  app.use("/api/control-tower", controlTowerRouter);
   app.use("/api", resolutionRouter);
 
   return app;
