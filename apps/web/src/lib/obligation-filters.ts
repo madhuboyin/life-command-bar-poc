@@ -89,6 +89,38 @@ export const obligationViewMeta: Record<ObligationView, FilterMeta> = {
     emptyDescription: "No open commitments right now.",
     defaultSort: "due_date",
     defaultDirection: "asc"
+  },
+  assigned_to_me: {
+    key: "assigned_to_me",
+    label: "Assigned To Me",
+    description: "Household items explicitly assigned to you.",
+    emptyDescription: "No household items are assigned to you right now.",
+    defaultSort: "due_date",
+    defaultDirection: "asc"
+  },
+  unassigned: {
+    key: "unassigned",
+    label: "Unassigned Shared",
+    description: "Household items that anyone can claim.",
+    emptyDescription: "No unassigned household items right now.",
+    defaultSort: "urgency",
+    defaultDirection: "desc"
+  },
+  household: {
+    key: "household",
+    label: "Household",
+    description: "All shared household obligations.",
+    emptyDescription: "No household obligations right now.",
+    defaultSort: "due_date",
+    defaultDirection: "asc"
+  },
+  personal: {
+    key: "personal",
+    label: "Personal",
+    description: "Your personal obligations only.",
+    emptyDescription: "No personal obligations right now.",
+    defaultSort: "due_date",
+    defaultDirection: "asc"
   }
 };
 

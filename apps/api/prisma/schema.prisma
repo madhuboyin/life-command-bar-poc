@@ -277,6 +277,29 @@ enum ZeroInputApprovalStatus {
   UNDONE
 }
 
+enum ScopeType {
+  PERSONAL
+  HOUSEHOLD
+}
+
+enum HouseholdMemberRole {
+  OWNER
+  MEMBER
+}
+
+enum HouseholdMemberStatus {
+  ACTIVE
+  INVITED
+  REMOVED
+}
+
+enum HouseholdInviteStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
 model User {
   id       String  @id @default(cuid())
   email    String  @unique
@@ -284,7 +307,10 @@ model User {
   timezone String  @default("America/New_York")
   locale   String?
 
-  obligations         Obligation[]
+  obligations         Obligation[] @relation("ObligationOwner")
+  assignedObligations Obligation[] @relation("ObligationAssignedTo")
+  createdObligations  Obligation[] @relation("ObligationCreatedBy")
+  lastHandledObligations Obligation[] @relation("ObligationLastHandledBy")
   reminders           Reminder[]
   feedbackEvents      FeedbackEvent[]
   auditEvents         AuditEvent[]
@@ -307,6 +333,9 @@ model User {
   predictions         Prediction[]
   zeroInputPolicy     ZeroInputPolicy?
   autonomyDecisions   AutonomyDecision[]
+  householdsCreated   Household[]      @relation("HouseholdCreatedBy")
+  householdMemberships HouseholdMember[]
+  householdInvitesSent HouseholdInvite[] @relation("HouseholdInviteSentBy")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -314,11 +343,94 @@ model User {
   @@map("users")
 }
 
+model Household {
+  id String @id @default(cuid())
+
+  name String
+  slug String? @unique
+
+  createdByUserId String @map("created_by_user_id")
+  createdByUser   User   @relation("HouseholdCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  members           HouseholdMember[]
+  invites           HouseholdInvite[]
+  obligations       Obligation[]
+  predictions       Prediction[]
+  reminders         Reminder[]
+  autonomyDecisions AutonomyDecision[]
+  auditEvents       AuditEvent[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([createdByUserId], map: "idx_households_created_by_user_id")
+  @@map("households")
+}
+
+model HouseholdMember {
+  id String @id @default(cuid())
+
+  householdId String    @map("household_id")
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  role   HouseholdMemberRole   @default(MEMBER)
+  status HouseholdMemberStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([householdId, userId], map: "uniq_household_members_household_user")
+  @@index([userId, status], map: "idx_household_members_user_status")
+  @@index([householdId, status], map: "idx_household_members_household_status")
+  @@map("household_members")
+}
+
+model HouseholdInvite {
+  id String @id @default(cuid())
+
+  householdId String    @map("household_id")
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  invitedEmail String @map("invited_email")
+
+  invitedByUserId String @map("invited_by_user_id")
+  invitedByUser   User   @relation("HouseholdInviteSentBy", fields: [invitedByUserId], references: [id], onDelete: Restrict)
+
+  role   HouseholdMemberRole @default(MEMBER)
+  token  String              @unique
+  status HouseholdInviteStatus @default(PENDING)
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  expiresAt DateTime? @map("expires_at")
+  acceptedAt DateTime? @map("accepted_at")
+
+  @@index([householdId, status], map: "idx_household_invites_household_status")
+  @@index([invitedEmail, status], map: "idx_household_invites_email_status")
+  @@map("household_invites")
+}
+
 model Obligation {
   id String @id @default(cuid())
 
   userId String @map("user_id")
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User   @relation("ObligationOwner", fields: [userId], references: [id], onDelete: Cascade)
+
+  scopeType ScopeType @default(PERSONAL) @map("scope_type")
+  householdId String? @map("household_id")
+  household Household? @relation(fields: [householdId], references: [id], onDelete: SetNull)
+
+  assignedToUserId String? @map("assigned_to_user_id")
+  assignedToUser   User?   @relation("ObligationAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+
+  createdByUserId String? @map("created_by_user_id")
+  createdByUser   User?   @relation("ObligationCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  lastHandledByUserId String? @map("last_handled_by_user_id")
+  lastHandledByUser   User?   @relation("ObligationLastHandledBy", fields: [lastHandledByUserId], references: [id], onDelete: SetNull)
 
   type        ObligationType
   title       String
@@ -369,6 +481,11 @@ model Obligation {
   @@index([userId, type], map: "idx_obligations_user_id_type")
   @@index([userId, lastShownAt], map: "idx_obligations_user_id_last_shown_at")
   @@index([userId, vendor], map: "idx_obligations_user_id_vendor")
+  @@index([scopeType], map: "idx_obligations_scope_type")
+  @@index([householdId, status], map: "idx_obligations_household_id_status")
+  @@index([assignedToUserId, status], map: "idx_obligations_assigned_to_user_id_status")
+  @@index([createdByUserId], map: "idx_obligations_created_by_user_id")
+  @@index([lastHandledByUserId], map: "idx_obligations_last_handled_by_user_id")
   @@index([importSourceId], map: "idx_obligations_import_source_id")
   @@map("obligations")
 }
@@ -602,6 +719,10 @@ model Prediction {
   userId String @map("user_id")
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  scopeType ScopeType @default(PERSONAL) @map("scope_type")
+  householdId String? @map("household_id")
+  household Household? @relation(fields: [householdId], references: [id], onDelete: SetNull)
+
   predictionType PredictionType @map("prediction_type")
   referenceType  PredictionReferenceType @map("reference_type")
   referenceId    String @map("reference_id")
@@ -629,6 +750,8 @@ model Prediction {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([userId, predictionType, referenceType, referenceId], map: "uniq_predictions_user_type_reference")
+  @@index([scopeType], map: "idx_predictions_scope_type")
+  @@index([householdId, status, predictedDate], map: "idx_predictions_household_status_predicted_date")
   @@index([userId, status, predictedDate], map: "idx_predictions_user_status_predicted_date")
   @@index([userId, predictionWindowStart, predictionWindowEnd], map: "idx_predictions_user_window")
   @@index([userId, confidenceBand], map: "idx_predictions_user_confidence_band")
@@ -756,6 +879,10 @@ model AutonomyDecision {
   userId String @map("user_id")
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  scopeType ScopeType @default(PERSONAL) @map("scope_type")
+  householdId String? @map("household_id")
+  household Household? @relation(fields: [householdId], references: [id], onDelete: SetNull)
+
   obligationId String?     @map("obligation_id")
   obligation   Obligation? @relation(fields: [obligationId], references: [id], onDelete: SetNull)
 
@@ -792,6 +919,8 @@ model AutonomyDecision {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([userId, createdAt], map: "idx_autonomy_decisions_user_created_at")
+  @@index([scopeType], map: "idx_autonomy_decisions_scope_type")
+  @@index([householdId, decision, approvalStatus], map: "idx_autonomy_decisions_household_decision_approval")
   @@index([userId, decision, approvalStatus], map: "idx_autonomy_decisions_user_decision_approval")
   @@index([obligationId], map: "idx_autonomy_decisions_obligation_id")
   @@index([predictionId], map: "idx_autonomy_decisions_prediction_id")
@@ -864,6 +993,10 @@ model Reminder {
   userId String @map("user_id")
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  scopeType ScopeType @default(PERSONAL) @map("scope_type")
+  householdId String? @map("household_id")
+  household Household? @relation(fields: [householdId], references: [id], onDelete: SetNull)
+
   obligationId String?     @map("obligation_id")
   obligation   Obligation? @relation(fields: [obligationId], references: [id], onDelete: SetNull)
 
@@ -877,6 +1010,8 @@ model Reminder {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([userId, scheduledFor], map: "idx_reminders_user_id_scheduled_for")
+  @@index([scopeType], map: "idx_reminders_scope_type")
+  @@index([householdId, scheduledFor], map: "idx_reminders_household_id_scheduled_for")
   @@index([status], map: "idx_reminders_status")
   @@index([obligationId], map: "idx_reminders_obligation_id")
   @@map("reminders")
@@ -910,6 +1045,9 @@ model AuditEvent {
   userId String @map("user_id")
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  householdId String? @map("household_id")
+  household Household? @relation(fields: [householdId], references: [id], onDelete: SetNull)
+
   obligationId String?     @map("obligation_id")
   obligation   Obligation? @relation(fields: [obligationId], references: [id], onDelete: SetNull)
 
@@ -919,6 +1057,7 @@ model AuditEvent {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@index([userId, createdAt], map: "idx_audit_events_user_id_created_at")
+  @@index([householdId, createdAt], map: "idx_audit_events_household_id_created_at")
   @@index([obligationId], map: "idx_audit_events_obligation_id")
   @@index([eventType], map: "idx_audit_events_event_type")
   @@map("audit_events")

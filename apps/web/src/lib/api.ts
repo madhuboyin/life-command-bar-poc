@@ -14,6 +14,11 @@ import type {
   FlowSourceContext,
   FlowSourceType,
   GuidedJourney,
+  HouseholdControlTowerResponse,
+  HouseholdInvite,
+  HouseholdMember,
+  HouseholdPulseResponse,
+  HouseholdSummary,
   IngestionResult,
   MemoryContext,
   MemoryEntity,
@@ -131,6 +136,22 @@ type MemoryPatternsResponse = {
 
 type PredictionByIdResponse = {
   prediction: PredictionItem;
+};
+
+type HouseholdsListResponse = {
+  households: HouseholdSummary[];
+};
+
+type HouseholdResponse = {
+  household: HouseholdSummary;
+};
+
+type HouseholdMembersResponse = {
+  members: HouseholdMember[];
+};
+
+type HouseholdInviteResponse = {
+  invite: HouseholdInvite;
 };
 
 function isAbsoluteHttpUrl(value: string) {
@@ -585,6 +606,8 @@ export async function getObligations(params?: {
   status?: Obligation["status"];
   type?: Obligation["type"];
   view?: ObligationView;
+  householdId?: string;
+  scopeType?: "PERSONAL" | "HOUSEHOLD";
   sort?: ObligationSort;
   direction?: SortDirection;
   limit?: number;
@@ -595,6 +618,8 @@ export async function getObligations(params?: {
   if (params?.status) query.set("status", params.status);
   if (params?.type) query.set("type", params.type);
   if (params?.view) query.set("view", params.view);
+  if (params?.householdId) query.set("householdId", params.householdId);
+  if (params?.scopeType) query.set("scopeType", params.scopeType);
   if (params?.sort) query.set("sort", params.sort);
   if (params?.direction) query.set("direction", params.direction);
   if (typeof params?.limit === "number") query.set("limit", String(params.limit));
@@ -607,6 +632,198 @@ export async function getObligations(params?: {
   });
 
   return handleResponse<ObligationsListResponse>(res);
+}
+
+export async function getHouseholds(): Promise<HouseholdsListResponse> {
+  const res = await apiFetch("/households", {
+    cache: "no-store"
+  });
+  return handleResponse<HouseholdsListResponse>(res);
+}
+
+export async function createHousehold(input: {
+  name: string;
+  slug?: string;
+}): Promise<HouseholdResponse> {
+  const res = await apiFetch("/households", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  return handleResponse<HouseholdResponse>(res);
+}
+
+export async function getHousehold(householdId: string): Promise<HouseholdResponse> {
+  const res = await apiFetch(`/households/${householdId}`, {
+    cache: "no-store"
+  });
+  return handleResponse<HouseholdResponse>(res);
+}
+
+export async function updateHousehold(
+  householdId: string,
+  input: {
+    name?: string;
+    slug?: string | null;
+  }
+): Promise<HouseholdResponse> {
+  const res = await apiFetch(`/households/${householdId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  return handleResponse<HouseholdResponse>(res);
+}
+
+export async function getHouseholdMembers(
+  householdId: string
+): Promise<HouseholdMembersResponse> {
+  const res = await apiFetch(`/households/${householdId}/members`, {
+    cache: "no-store"
+  });
+  return handleResponse<HouseholdMembersResponse>(res);
+}
+
+export async function inviteHouseholdMember(
+  householdId: string,
+  input: {
+    invitedEmail: string;
+    role?: "OWNER" | "MEMBER";
+    expiresInDays?: number;
+  }
+): Promise<HouseholdInviteResponse> {
+  const res = await apiFetch(`/households/${householdId}/invites`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  return handleResponse<HouseholdInviteResponse>(res);
+}
+
+export async function acceptHouseholdInvite(token: string): Promise<HouseholdResponse> {
+  const res = await apiFetch(`/household-invites/${token}/accept`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
+  return handleResponse<HouseholdResponse>(res);
+}
+
+export async function revokeHouseholdInvite(inviteId: string): Promise<HouseholdInviteResponse> {
+  const res = await apiFetch(`/household-invites/${inviteId}/revoke`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
+  return handleResponse<HouseholdInviteResponse>(res);
+}
+
+export async function removeHouseholdMember(
+  householdId: string,
+  memberId: string
+): Promise<{ member: HouseholdMember; unassignedObligationCount: number }> {
+  const res = await apiFetch(`/households/${householdId}/members/${memberId}`, {
+    method: "DELETE"
+  });
+  return handleResponse<{ member: HouseholdMember; unassignedObligationCount: number }>(res);
+}
+
+export async function getHouseholdObligations(
+  householdId: string,
+  params?: {
+    view?: ObligationView;
+    sort?: ObligationSort;
+    direction?: SortDirection;
+    limit?: number;
+    offset?: number;
+  }
+): Promise<ObligationsListResponse> {
+  const query = new URLSearchParams();
+  if (params?.view) query.set("view", params.view);
+  if (params?.sort) query.set("sort", params.sort);
+  if (params?.direction) query.set("direction", params.direction);
+  if (typeof params?.limit === "number") query.set("limit", String(params.limit));
+  if (typeof params?.offset === "number") query.set("offset", String(params.offset));
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+
+  const res = await apiFetch(`/households/${householdId}/obligations${suffix}`, {
+    cache: "no-store"
+  });
+  return handleResponse<ObligationsListResponse>(res);
+}
+
+export async function createHouseholdObligation(
+  householdId: string,
+  input: {
+    type: "BILL" | "SUBSCRIPTION" | "RENEWAL" | "COMMITMENT";
+    title: string;
+    description?: string;
+    vendor?: string;
+    amount?: number;
+    currency?: string;
+    dueDate?: string;
+    recurrence?: string;
+    source?: "MANUAL" | "EMAIL" | "DOCUMENT" | "INFERRED";
+    confidenceScore?: number;
+    urgencyScore?: number;
+    importanceScore?: number;
+    effortLevel?: "LOW" | "MEDIUM" | "HIGH";
+    impactLevel?: "LOW" | "MEDIUM" | "HIGH";
+    status?: "DRAFT" | "ACTIVE" | "POSTPONED" | "RESOLVED" | "IGNORED";
+    assignedToUserId?: string;
+  }
+): Promise<ObligationResponse> {
+  const res = await apiFetch(`/households/${householdId}/obligations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  return handleResponse<ObligationResponse>(res);
+}
+
+export async function getHouseholdPulse(
+  householdId: string
+): Promise<HouseholdPulseResponse> {
+  const res = await apiFetch(`/households/${householdId}/pulse`, {
+    cache: "no-store"
+  });
+  return handleResponse<HouseholdPulseResponse>(res);
+}
+
+export async function getHouseholdControlTower(
+  householdId: string
+): Promise<HouseholdControlTowerResponse> {
+  const res = await apiFetch(`/households/${householdId}/control-tower`, {
+    cache: "no-store"
+  });
+  return handleResponse<HouseholdControlTowerResponse>(res);
+}
+
+export async function getHouseholdUpcoming(
+  householdId: string
+): Promise<{ items: HouseholdControlTowerResponse["upcoming"] }> {
+  const res = await apiFetch(`/households/${householdId}/upcoming`, {
+    cache: "no-store"
+  });
+  return handleResponse<{ items: HouseholdControlTowerResponse["upcoming"] }>(res);
+}
+
+export async function getHouseholdReady(
+  householdId: string
+): Promise<{ items: HouseholdControlTowerResponse["ready"] }> {
+  const res = await apiFetch(`/households/${householdId}/ready`, {
+    cache: "no-store"
+  });
+  return handleResponse<{ items: HouseholdControlTowerResponse["ready"] }>(res);
+}
+
+export async function getHouseholdRecent(
+  householdId: string
+): Promise<{ items: HouseholdControlTowerResponse["recent"] }> {
+  const res = await apiFetch(`/households/${householdId}/recent`, {
+    cache: "no-store"
+  });
+  return handleResponse<{ items: HouseholdControlTowerResponse["recent"] }>(res);
 }
 
 export async function getObligationById(obligationId: string): Promise<ObligationResponse> {
@@ -623,6 +840,68 @@ export async function getObligationHistory(obligationId: string): Promise<Obliga
   });
 
   return handleResponse<ObligationHistory>(res);
+}
+
+export async function assignObligation(
+  obligationId: string,
+  assignedToUserId: string
+): Promise<ObligationResponse> {
+  const res = await apiFetch(`/obligations/${obligationId}/assign`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ assignedToUserId })
+  });
+
+  return handleResponse<ObligationResponse>(res);
+}
+
+export async function unassignObligation(obligationId: string): Promise<ObligationResponse> {
+  const res = await apiFetch(`/obligations/${obligationId}/unassign`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
+
+  return handleResponse<ObligationResponse>(res);
+}
+
+export async function claimObligation(obligationId: string): Promise<ObligationResponse> {
+  const res = await apiFetch(`/obligations/${obligationId}/claim`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
+
+  return handleResponse<ObligationResponse>(res);
+}
+
+export async function handOffObligation(
+  obligationId: string,
+  toUserId: string
+): Promise<ObligationResponse> {
+  const res = await apiFetch(`/obligations/${obligationId}/hand-off`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ toUserId })
+  });
+
+  return handleResponse<ObligationResponse>(res);
+}
+
+export async function patchObligationScope(
+  obligationId: string,
+  input: {
+    scopeType: "PERSONAL" | "HOUSEHOLD";
+    householdId?: string | null;
+  }
+): Promise<ObligationResponse> {
+  const res = await apiFetch(`/obligations/${obligationId}/scope`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+
+  return handleResponse<ObligationResponse>(res);
 }
 
 export async function updateObligation(
@@ -1010,6 +1289,10 @@ export async function rebuildPredictions() {
 }
 
 export async function createObligation(input: {
+  scopeType?: "PERSONAL" | "HOUSEHOLD";
+  householdId?: string;
+  assignedToUserId?: string;
+  createdByUserId?: string;
   type: "BILL" | "SUBSCRIPTION" | "RENEWAL" | "COMMITMENT";
   title: string;
   description?: string;

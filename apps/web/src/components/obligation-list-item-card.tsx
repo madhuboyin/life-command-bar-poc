@@ -11,6 +11,9 @@ import { useFlowSession } from "./flow-session-provider";
 import { useToast } from "./ui/toast-provider";
 import SourceBadge from "./source-badge";
 import ConfidenceBadge from "./confidence-badge";
+import AssigneeBadge from "./assignee-badge";
+import AssignmentMenu from "./assignment-menu";
+import ClaimItemButton from "./claim-item-button";
 
 type Props = {
   item: Obligation;
@@ -73,6 +76,7 @@ export default function ObligationListItemCard({
             confidenceBand={item.confidenceBand}
             needsReview={item.needsReview}
           />
+          <AssigneeBadge obligation={item} compact />
         </div>
       </div>
 
@@ -86,6 +90,12 @@ export default function ObligationListItemCard({
         <button onClick={handleGuideMe} disabled={startingGuide} style={buttonStyles.secondary}>
           {startingGuide ? "Starting..." : "Guide me"}
         </button>
+        {item.scopeType === "HOUSEHOLD" ? (
+          <AssignmentMenu obligation={item} />
+        ) : null}
+        {item.scopeType === "HOUSEHOLD" && !item.assignedToUserId ? (
+          <ClaimItemButton obligationId={item.id} />
+        ) : null}
         {item.status === "DRAFT" && item.source !== "MANUAL" ? (
           <Link href={`/obligations/${item.id}/review`} style={buttonStyles.link}>
             Review draft

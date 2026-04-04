@@ -1,4 +1,4 @@
-import { ObligationStatus, ObligationType, Prisma } from "@prisma/client";
+import { ObligationStatus, ObligationType, Prisma, ScopeType } from "@prisma/client";
 import { prisma } from "../clients/prisma.client";
 import {
   CreateObligationInput,
@@ -8,13 +8,15 @@ import {
   SortDirection,
   UpdateObligationInput
 } from "../types/obligation.types";
+import { listActiveHouseholdIdsForUser } from "../utils/household-access";
 
 export class ObligationRepository {
   async findMany(query: ObligationListQuery & { userId: string }) {
     const limit = query.limit ?? 20;
     const offset = query.offset ?? 0;
+    const accessibleHouseholdIds = await listActiveHouseholdIdsForUser(query.userId);
 
-    const where = buildListWhere(query);
+    const where = buildListWhere(query, accessibleHouseholdIds);
     const orderBy = buildOrderBy({
       view: query.view,
       sort: query.sort,
@@ -41,14 +43,25 @@ export class ObligationRepository {
     };
   }
 
-  async findActiveForFeed(userId: string) {
-    return prisma.obligation.findMany({
-      where: {
-        userId,
-        status: {
-          in: [ObligationStatus.ACTIVE, ObligationStatus.POSTPONED]
+  async findActiveForFeed(userId: string, options?: { householdId?: string }) {
+    const where: Prisma.ObligationWhereInput = options?.householdId
+      ? {
+          scopeType: ScopeType.HOUSEHOLD,
+          householdId: options.householdId,
+          status: {
+            in: [ObligationStatus.ACTIVE, ObligationStatus.POSTPONED]
+          }
         }
-      },
+      : {
+          userId,
+          scopeType: ScopeType.PERSONAL,
+          status: {
+            in: [ObligationStatus.ACTIVE, ObligationStatus.POSTPONED]
+          }
+        };
+
+    return prisma.obligation.findMany({
+      where,
       include: obligationTrustInclude,
       orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
       take: 100
@@ -59,16 +72,50 @@ export class ObligationRepository {
     return prisma.obligation.findFirst({
       where: {
         id,
-        userId
+        OR: [
+          {
+            userId,
+            scopeType: ScopeType.PERSONAL
+          },
+          {
+            scopeType: ScopeType.HOUSEHOLD,
+            household: {
+              members: {
+                some: {
+                  userId,
+                  status: "ACTIVE"
+                }
+              }
+            }
+          }
+        ]
+      },
+      include: obligationTrustInclude
+    });
+  }
+
+  async findByIdInHousehold(id: string, householdId: string) {
+    return prisma.obligation.findFirst({
+      where: {
+        id,
+        scopeType: ScopeType.HOUSEHOLD,
+        householdId
       },
       include: obligationTrustInclude
     });
   }
 
   async create(input: CreateObligationInput) {
+    const scopeType = input.scopeType ?? (input.householdId ? "HOUSEHOLD" : "PERSONAL");
+
     const obligation = await prisma.obligation.create({
       data: {
         userId: input.userId,
+        scopeType,
+        householdId: scopeType === "HOUSEHOLD" ? input.householdId ?? null : null,
+        assignedToUserId: scopeType === "HOUSEHOLD" ? input.assignedToUserId ?? null : null,
+        createdByUserId: input.createdByUserId ?? input.userId,
+        lastHandledByUserId: input.lastHandledByUserId ?? null,
         type: input.type,
         title: input.title,
         description: input.description,
@@ -91,11 +138,14 @@ export class ObligationRepository {
     await prisma.auditEvent.create({
       data: {
         userId: input.userId,
+        householdId: obligation.householdId,
         obligationId: obligation.id,
         eventType: "obligation_created",
         metadata: {
           title: input.title,
-          type: input.type
+          type: input.type,
+          scopeType,
+          assignedToUserId: obligation.assignedToUserId
         }
       }
     });
@@ -107,9 +157,27 @@ export class ObligationRepository {
     const existing = await this.findById(id, userId);
     if (!existing) return null;
 
+    const scopeType = input.scopeType ?? existing.scopeType;
+    const nextHouseholdId =
+      scopeType === ScopeType.HOUSEHOLD
+        ? input.householdId === undefined
+          ? existing.householdId
+          : input.householdId
+        : null;
+
     const obligation = await prisma.obligation.update({
       where: { id },
       data: {
+        scopeType,
+        householdId: nextHouseholdId,
+        assignedToUserId:
+          scopeType === ScopeType.HOUSEHOLD
+            ? input.assignedToUserId === undefined
+              ? existing.assignedToUserId
+              : input.assignedToUserId
+            : null,
+        createdByUserId: input.createdByUserId,
+        lastHandledByUserId: input.lastHandledByUserId,
         type: input.type,
         title: input.title,
         description: input.description,
@@ -132,6 +200,7 @@ export class ObligationRepository {
     await prisma.auditEvent.create({
       data: {
         userId,
+        householdId: obligation.householdId,
         obligationId: id,
         eventType: "obligation_updated",
         metadata: toAuditMetadata(input)
@@ -154,81 +223,119 @@ export class ObligationRepository {
     });
   }
 
-  async markDone(id: string, userId: string, note?: string) {
-    const obligation = await prisma.obligation.updateMany({
-      where: {
-        id,
-        userId
-      },
+  async setAssignment(
+    id: string,
+    actorUserId: string,
+    assignedToUserId: string | null,
+    auditEventType = "obligation_assignment_changed"
+  ) {
+    const existing = await this.findById(id, actorUserId);
+    if (!existing) return null;
+
+    const obligation = await prisma.obligation.update({
+      where: { id },
       data: {
-        status: ObligationStatus.RESOLVED,
-        lastActedAt: new Date()
+        assignedToUserId
+      },
+      include: obligationTrustInclude
+    });
+
+    await prisma.auditEvent.create({
+      data: {
+        userId: actorUserId,
+        householdId: obligation.householdId,
+        obligationId: id,
+        eventType: auditEventType,
+        metadata: {
+          previousAssignedToUserId: existing.assignedToUserId,
+          assignedToUserId
+        }
       }
     });
 
-    if (obligation.count === 0) return null;
+    return obligation;
+  }
+
+  async markDone(id: string, userId: string, note?: string) {
+    const existing = await this.findById(id, userId);
+    if (!existing) return null;
+
+    const obligation = await prisma.obligation.update({
+      where: { id },
+      data: {
+        status: ObligationStatus.RESOLVED,
+        lastActedAt: new Date(),
+        lastHandledByUserId: userId
+      },
+      include: obligationTrustInclude
+    });
 
     await prisma.auditEvent.create({
       data: {
         userId,
+        householdId: obligation.householdId,
         obligationId: id,
         eventType: "obligation_marked_done",
         metadata: { note: note ?? null }
       }
     });
 
-    return this.findById(id, userId);
+    return obligation;
   }
 
   async dismiss(id: string, userId: string, reason?: string) {
-    const obligation = await prisma.obligation.updateMany({
-      where: {
-        id,
-        userId
-      },
+    const existing = await this.findById(id, userId);
+    if (!existing) return null;
+
+    const obligation = await prisma.obligation.update({
+      where: { id },
       data: {
         status: ObligationStatus.IGNORED,
-        lastActedAt: new Date()
-      }
+        lastActedAt: new Date(),
+        lastHandledByUserId: userId
+      },
+      include: obligationTrustInclude
     });
-
-    if (obligation.count === 0) return null;
 
     await prisma.auditEvent.create({
       data: {
         userId,
+        householdId: obligation.householdId,
         obligationId: id,
         eventType: "obligation_dismissed",
         metadata: { reason: reason ?? null }
       }
     });
 
-    return this.findById(id, userId);
+    return obligation;
   }
 
   async postpone(id: string, userId: string, until?: string, reason?: string) {
-    const data: Prisma.ObligationUpdateManyMutationInput = {
+    const existing = await this.findById(id, userId);
+    if (!existing) return null;
+
+    const data: Prisma.ObligationUncheckedUpdateInput = {
       status: ObligationStatus.POSTPONED,
-      lastActedAt: new Date()
+      lastActedAt: new Date(),
+      lastHandledByUserId: userId
     };
 
     if (until) {
       data.dueDate = new Date(until);
     }
 
-    const result = await prisma.obligation.updateMany({
+    const obligation = await prisma.obligation.update({
       where: {
-        id,
-        userId
+        id
       },
-      data
+      data,
+      include: obligationTrustInclude
     });
-
-    if (result.count === 0) return null;
 
     await prisma.auditEvent.create({
       data: {
         userId,
+        householdId: obligation.householdId,
         obligationId: id,
         eventType: "obligation_postponed",
         metadata: {
@@ -238,33 +345,47 @@ export class ObligationRepository {
       }
     });
 
-    return this.findById(id, userId);
+    return obligation;
   }
 
   async getHistory(id: string, userId: string) {
-    const [auditEvents, feedbackEvents, resolutionRuns, reminders, guidedJourneyEvents, guidedJourneys, outcomeFeedbackEvents, autonomyDecisions] = await Promise.all([
+    const obligation = await this.findById(id, userId);
+    if (!obligation) {
+      return null;
+    }
+
+    const [
+      auditEvents,
+      feedbackEvents,
+      resolutionRuns,
+      reminders,
+      guidedJourneyEvents,
+      guidedJourneys,
+      outcomeFeedbackEvents,
+      autonomyDecisions
+    ] = await Promise.all([
       prisma.auditEvent.findMany({
-        where: { obligationId: id, userId },
+        where: { obligationId: id },
         orderBy: { createdAt: "desc" }
       }),
       prisma.feedbackEvent.findMany({
-        where: { obligationId: id, userId },
+        where: { obligationId: id },
         orderBy: { createdAt: "desc" }
       }),
       prisma.resolutionRun.findMany({
-        where: { obligationId: id, userId },
+        where: { obligationId: id },
         orderBy: { createdAt: "desc" }
       }),
       prisma.reminder.findMany({
-        where: { obligationId: id, userId },
+        where: { obligationId: id },
         orderBy: { createdAt: "desc" }
       }),
       prisma.guidedJourneyEvent.findMany({
-        where: { obligationId: id, userId },
+        where: { obligationId: id },
         orderBy: { createdAt: "desc" }
       }),
       prisma.guidedJourney.findMany({
-        where: { obligationId: id, userId },
+        where: { obligationId: id },
         include: {
           steps: {
             orderBy: { position: "asc" },
@@ -279,11 +400,11 @@ export class ObligationRepository {
         orderBy: { createdAt: "desc" }
       }),
       prisma.outcomeFeedback.findMany({
-        where: { obligationId: id, userId },
+        where: { obligationId: id },
         orderBy: { createdAt: "desc" }
       }),
       prisma.autonomyDecision.findMany({
-        where: { obligationId: id, userId },
+        where: { obligationId: id },
         orderBy: { createdAt: "desc" }
       })
     ]);
@@ -300,10 +421,20 @@ export class ObligationRepository {
     };
   }
 
-  async findReviewQueueCandidates(userId: string, limit = 100) {
+  async findReviewQueueCandidates(userId: string, limit = 100, householdId?: string) {
+    const whereBase: Prisma.ObligationWhereInput = householdId
+      ? {
+          scopeType: ScopeType.HOUSEHOLD,
+          householdId
+        }
+      : {
+          userId,
+          scopeType: ScopeType.PERSONAL
+        };
+
     return prisma.obligation.findMany({
       where: {
-        userId,
+        ...whereBase,
         importSourceId: {
           not: null
         },
@@ -350,6 +481,27 @@ const obligationTrustInclude = {
       rawData: true,
       createdAt: true
     }
+  },
+  assignedToUser: {
+    select: {
+      id: true,
+      email: true,
+      name: true
+    }
+  },
+  createdByUser: {
+    select: {
+      id: true,
+      email: true,
+      name: true
+    }
+  },
+  lastHandledByUser: {
+    select: {
+      id: true,
+      email: true,
+      name: true
+    }
   }
 } satisfies Prisma.ObligationInclude;
 
@@ -365,9 +517,12 @@ const URGENT_DUE_WINDOW_HOURS = 48;
 const RECENT_ACTIVITY_DAYS = 7;
 
 function buildListWhere(
-  query: ObligationListQuery & { userId: string }
+  query: ObligationListQuery & { userId: string },
+  accessibleHouseholdIds: string[]
 ): Prisma.ObligationWhereInput {
-  const conditions: Prisma.ObligationWhereInput[] = [{ userId: query.userId }];
+  const conditions: Prisma.ObligationWhereInput[] = [
+    buildVisibilityWhere(query, accessibleHouseholdIds)
+  ];
 
   if (query.status) {
     conditions.push({
@@ -387,6 +542,100 @@ function buildListWhere(
   }
 
   return conditions.length === 1 ? conditions[0] : { AND: conditions };
+}
+
+function buildVisibilityWhere(
+  query: ObligationListQuery & { userId: string },
+  accessibleHouseholdIds: string[]
+): Prisma.ObligationWhereInput {
+  if (query.householdId) {
+    if (!accessibleHouseholdIds.includes(query.householdId)) {
+      return {
+        id: "__forbidden_household__"
+      };
+    }
+
+    return {
+      scopeType: ScopeType.HOUSEHOLD,
+      householdId: query.householdId
+    };
+  }
+
+  if (query.scopeType === "HOUSEHOLD") {
+    if (accessibleHouseholdIds.length === 0) {
+      return {
+        id: "__no_households__"
+      };
+    }
+
+    return {
+      scopeType: ScopeType.HOUSEHOLD,
+      householdId: {
+        in: accessibleHouseholdIds
+      }
+    };
+  }
+
+  if (query.scopeType === "PERSONAL") {
+    return {
+      scopeType: ScopeType.PERSONAL,
+      userId: query.userId
+    };
+  }
+
+  switch (query.view) {
+    case "assigned_to_me":
+      if (accessibleHouseholdIds.length === 0) {
+        return {
+          id: "__no_assigned_households__"
+        };
+      }
+
+      return {
+        scopeType: ScopeType.HOUSEHOLD,
+        householdId: {
+          in: accessibleHouseholdIds
+        },
+        assignedToUserId: query.userId
+      };
+    case "unassigned":
+      if (accessibleHouseholdIds.length === 0) {
+        return {
+          id: "__no_unassigned_households__"
+        };
+      }
+
+      return {
+        scopeType: ScopeType.HOUSEHOLD,
+        householdId: {
+          in: accessibleHouseholdIds
+        },
+        assignedToUserId: null
+      };
+    case "household":
+      if (accessibleHouseholdIds.length === 0) {
+        return {
+          id: "__no_household_view__"
+        };
+      }
+
+      return {
+        scopeType: ScopeType.HOUSEHOLD,
+        householdId: {
+          in: accessibleHouseholdIds
+        }
+      };
+    case "personal":
+      return {
+        scopeType: ScopeType.PERSONAL,
+        userId: query.userId
+      };
+    default:
+      return {
+        scopeType: ScopeType.PERSONAL,
+        userId: query.userId
+      };
+  }
 }
 
 function buildViewCondition(view?: ObligationView): Prisma.ObligationWhereInput | null {
@@ -533,6 +782,10 @@ function buildViewCondition(view?: ObligationView): Prisma.ObligationWhereInput 
         },
         type: "COMMITMENT"
       };
+    case "assigned_to_me":
+    case "unassigned":
+    case "household":
+    case "personal":
     default:
       return null;
   }
@@ -575,6 +828,11 @@ function defaultOrderByForView(
       return [{ lastActedAt: "desc" }, { updatedAt: "desc" }, { createdAt: "desc" }];
     case "postponed_recently":
       return [{ lastActedAt: "desc" }, { dueDate: "asc" }, { createdAt: "desc" }];
+    case "assigned_to_me":
+    case "unassigned":
+      return [{ dueDate: "asc" }, { urgencyScore: "desc" }, { createdAt: "desc" }];
+    case "household":
+    case "personal":
     case "renewals":
     case "subscriptions":
     case "bills":

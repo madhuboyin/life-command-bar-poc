@@ -3,6 +3,7 @@ import { AutoFlowTriggerType } from "@prisma/client";
 import { prisma } from "../clients/prisma.client";
 import { AppError } from "../utils/app-error";
 import { AutoFlowService } from "./auto-flow.service";
+import { ObligationRepository } from "../repositories/obligation.repository";
 
 const createReminderSchema = z.object({
   userId: z.string().min(1),
@@ -13,20 +14,21 @@ const createReminderSchema = z.object({
 
 export class ReminderService {
   private readonly autoFlowService = new AutoFlowService();
+  private readonly obligationRepository = new ObligationRepository();
 
   async create(payload: unknown) {
     const input = createReminderSchema.parse(payload);
+    let linkedObligation: Awaited<
+      ReturnType<ObligationRepository["findById"]>
+    > | null = null;
 
     if (input.obligationId) {
-      const obligation = await prisma.obligation.findFirst({
-        where: {
-          id: input.obligationId,
-          userId: input.userId
-        },
-        select: { id: true }
-      });
+      linkedObligation = await this.obligationRepository.findById(
+        input.obligationId,
+        input.userId
+      );
 
-      if (!obligation) {
+      if (!linkedObligation) {
         throw new AppError("NOT_FOUND", "Obligation not found", 404);
       }
     }
@@ -34,6 +36,8 @@ export class ReminderService {
     const reminder = await prisma.reminder.create({
       data: {
         userId: input.userId,
+        scopeType: linkedObligation?.scopeType ?? "PERSONAL",
+        householdId: linkedObligation?.householdId ?? null,
         obligationId: input.obligationId,
         title: input.title,
         scheduledFor: new Date(input.scheduledFor),
@@ -44,6 +48,7 @@ export class ReminderService {
     await prisma.auditEvent.create({
       data: {
         userId: input.userId,
+        householdId: linkedObligation?.householdId ?? null,
         obligationId: input.obligationId,
         eventType: "reminder_created",
         metadata: {

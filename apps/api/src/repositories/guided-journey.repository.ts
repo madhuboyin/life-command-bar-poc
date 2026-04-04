@@ -33,7 +33,23 @@ export class GuidedJourneyRepository {
     return prisma.obligation.findFirst({
       where: {
         id: obligationId,
-        userId
+        OR: [
+          {
+            userId,
+            scopeType: "PERSONAL"
+          },
+          {
+            scopeType: "HOUSEHOLD",
+            household: {
+              members: {
+                some: {
+                  userId,
+                  status: "ACTIVE"
+                }
+              }
+            }
+          }
+        ]
       }
     });
   }

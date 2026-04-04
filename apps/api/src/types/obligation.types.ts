@@ -8,7 +8,11 @@ export type ObligationView =
   | "postponed_recently"
   | "resolved_recently"
   | "active_now"
-  | "commitments";
+  | "commitments"
+  | "assigned_to_me"
+  | "unassigned"
+  | "household"
+  | "personal";
 
 export type ObligationSort = "due_date" | "importance" | "urgency" | "created_at" | "amount";
 export type SortDirection = "asc" | "desc";
@@ -17,6 +21,8 @@ export interface ObligationListQuery {
   status?: string;
   type?: string;
   view?: ObligationView;
+  householdId?: string;
+  scopeType?: "PERSONAL" | "HOUSEHOLD";
   sort?: ObligationSort;
   direction?: SortDirection;
   limit?: number;
@@ -25,6 +31,11 @@ export interface ObligationListQuery {
 
 export interface CreateObligationInput {
   userId: string;
+  scopeType?: "PERSONAL" | "HOUSEHOLD";
+  householdId?: string | null;
+  assignedToUserId?: string | null;
+  createdByUserId?: string | null;
+  lastHandledByUserId?: string | null;
   type: "BILL" | "SUBSCRIPTION" | "RENEWAL" | "COMMITMENT";
   title: string;
   description?: string;
@@ -43,6 +54,11 @@ export interface CreateObligationInput {
 }
 
 export interface UpdateObligationInput {
+  scopeType?: "PERSONAL" | "HOUSEHOLD";
+  householdId?: string | null;
+  assignedToUserId?: string | null;
+  createdByUserId?: string | null;
+  lastHandledByUserId?: string | null;
   type?: "BILL" | "SUBSCRIPTION" | "RENEWAL" | "COMMITMENT";
   title?: string;
   description?: string | null;

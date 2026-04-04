@@ -22,6 +22,8 @@ import { memoryRouter } from "./routes/memory.routes";
 import { predictionRouter } from "./routes/prediction.routes";
 import { controlTowerRouter } from "./routes/control-tower.routes";
 import { zeroInputRouter } from "./routes/zero-input.routes";
+import { householdRouter } from "./routes/household.routes";
+import { householdInviteRouter } from "./routes/household-invite.routes";
 
 export function createApp() {
   const app = express();
@@ -50,6 +52,8 @@ export function createApp() {
   app.use("/api/predictions", predictionRouter);
   app.use("/api/control-tower", controlTowerRouter);
   app.use("/api/zero-input", zeroInputRouter);
+  app.use("/api/households", householdRouter);
+  app.use("/api/household-invites", householdInviteRouter);
   app.use("/api", resolutionRouter);
 
   return app;

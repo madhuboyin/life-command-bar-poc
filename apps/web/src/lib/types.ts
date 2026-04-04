@@ -1,6 +1,26 @@
 export interface Obligation {
   id: string;
   userId: string;
+  scopeType: "PERSONAL" | "HOUSEHOLD";
+  householdId?: string | null;
+  assignedToUserId?: string | null;
+  createdByUserId?: string | null;
+  lastHandledByUserId?: string | null;
+  assignee?: {
+    id: string;
+    email: string;
+    name: string | null;
+  } | null;
+  createdBy?: {
+    id: string;
+    email: string;
+    name: string | null;
+  } | null;
+  lastHandledBy?: {
+    id: string;
+    email: string;
+    name: string | null;
+  } | null;
   type: "BILL" | "SUBSCRIPTION" | "RENEWAL" | "COMMITMENT";
   title: string;
   description?: string | null;
@@ -222,7 +242,11 @@ export type ObligationView =
   | "postponed_recently"
   | "resolved_recently"
   | "active_now"
-  | "commitments";
+  | "commitments"
+  | "assigned_to_me"
+  | "unassigned"
+  | "household"
+  | "personal";
 
 export type ObligationSort = "due_date" | "importance" | "urgency" | "created_at" | "amount";
 export type SortDirection = "asc" | "desc";
@@ -721,6 +745,117 @@ export interface ControlTowerResponse {
     upcomingCount: number;
     recentCount: number;
     systemDecisionCount: number;
+  };
+}
+
+export interface HouseholdSummary {
+  id: string;
+  name: string;
+  slug: string | null;
+  createdByUserId: string;
+  createdBy: {
+    id: string;
+    email: string;
+    name: string | null;
+  };
+  memberCount: number;
+  myRole: "OWNER" | "MEMBER" | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface HouseholdMember {
+  id: string;
+  householdId: string;
+  userId: string;
+  role: "OWNER" | "MEMBER";
+  status: "ACTIVE" | "INVITED" | "REMOVED";
+  user: {
+    id: string;
+    email: string;
+    name: string | null;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface HouseholdInvite {
+  id: string;
+  householdId: string;
+  invitedEmail: string;
+  invitedByUserId: string;
+  role: "OWNER" | "MEMBER";
+  token: string;
+  status: "PENDING" | "ACCEPTED" | "EXPIRED" | "REVOKED";
+  createdAt: string;
+  updatedAt: string;
+  expiresAt: string | null;
+  acceptedAt: string | null;
+}
+
+export interface HouseholdPulseItem {
+  obligationId: string;
+  title: string;
+  dueDate: string | null;
+  status: string;
+  priorityScore: number;
+  scopeType: "HOUSEHOLD";
+  assignment: {
+    state: "MINE" | "ASSIGNED" | "UNASSIGNED";
+    assignedToUserId: string | null;
+    assignedToName: string | null;
+  };
+  whyShown: string;
+  sourceType: string;
+  confidenceBand: ConfidenceBand;
+  needsReview: boolean;
+}
+
+export interface HouseholdPulseResponse {
+  generatedAt: string;
+  householdId: string;
+  items: HouseholdPulseItem[];
+  summary: {
+    totalOpen: number;
+    assignedToMeCount: number;
+    unassignedCount: number;
+    urgentCount: number;
+  };
+}
+
+export interface HouseholdControlTowerResponse {
+  generatedAt: string;
+  householdId: string;
+  review: HouseholdPulseItem[];
+  ready: HouseholdPulseItem[];
+  approvals: Array<{
+    id: string;
+    title: string;
+    candidateAction: string;
+    confidenceScore: number;
+    status: string;
+    createdAt: string;
+  }>;
+  upcoming: Array<{
+    id: string;
+    title: string;
+    predictedDate: string | null;
+    confidenceBand: ConfidenceBand;
+    rationaleSummary: string | null;
+  }>;
+  recent: Array<{
+    id: string;
+    eventType: string;
+    createdAt: string;
+    obligationId: string | null;
+    actorUserId: string;
+  }>;
+  summary: {
+    reviewCount: number;
+    readyCount: number;
+    approvalCount: number;
+    upcomingCount: number;
+    recentCount: number;
   };
 }
 

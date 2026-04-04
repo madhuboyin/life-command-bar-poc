@@ -1,16 +1,25 @@
-import { AutoFlowTriggerType, ObligationStatus } from "@prisma/client";
+import { AutoFlowTriggerType, ObligationStatus, ScopeType } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../clients/prisma.client";
 import { ObligationRepository } from "../repositories/obligation.repository";
 import { ObligationSort, ObligationView, SortDirection } from "../types/obligation.types";
 import { mapObligation } from "../utils/obligation.mapper";
 import { AppError } from "../utils/app-error";
+import {
+  ensureAssigneeIsActiveMember,
+  requireHouseholdMember
+} from "../utils/household-access";
 import { AutoFlowService } from "./auto-flow.service";
 import { HomeMemoryService } from "./home-memory.service";
 import { PredictionEngineService } from "./prediction-engine.service";
 
 const createObligationSchema = z.object({
   userId: z.string().min(1),
+  scopeType: z.enum(["PERSONAL", "HOUSEHOLD"]).optional(),
+  householdId: z.string().nullable().optional(),
+  assignedToUserId: z.string().nullable().optional(),
+  createdByUserId: z.string().nullable().optional(),
+  lastHandledByUserId: z.string().nullable().optional(),
   type: z.enum(["BILL", "SUBSCRIPTION", "RENEWAL", "COMMITMENT"]),
   title: z.string().min(1),
   description: z.string().optional(),
@@ -29,6 +38,11 @@ const createObligationSchema = z.object({
 });
 
 const updateObligationSchema = z.object({
+  scopeType: z.enum(["PERSONAL", "HOUSEHOLD"]).optional(),
+  householdId: z.string().nullable().optional(),
+  assignedToUserId: z.string().nullable().optional(),
+  createdByUserId: z.string().nullable().optional(),
+  lastHandledByUserId: z.string().nullable().optional(),
   type: z.enum(["BILL", "SUBSCRIPTION", "RENEWAL", "COMMITMENT"]).optional(),
   title: z.string().min(1).optional(),
   description: z.string().nullable().optional(),
@@ -64,6 +78,19 @@ const correctionSchema = z.object({
   dontShowSimilar: z.boolean().optional()
 });
 
+const assignSchema = z.object({
+  assignedToUserId: z.string().min(1)
+});
+
+const handOffSchema = z.object({
+  toUserId: z.string().min(1)
+});
+
+const patchScopeSchema = z.object({
+  scopeType: z.enum(["PERSONAL", "HOUSEHOLD"]),
+  householdId: z.string().nullable().optional()
+});
+
 export class ObligationService {
   private readonly repository = new ObligationRepository();
   private readonly autoFlowService = new AutoFlowService();
@@ -76,12 +103,23 @@ export class ObligationService {
     const view = parseEnumQuery<ObligationView>(query.view, supportedViews);
     const sort = parseEnumQuery<ObligationSort>(query.sort, supportedSorts);
     const direction = parseEnumQuery<SortDirection>(query.direction, supportedDirections);
+    const scopeType = parseEnumQuery<"PERSONAL" | "HOUSEHOLD">(
+      query.scopeType,
+      ["PERSONAL", "HOUSEHOLD"]
+    );
+    const householdId = typeof query.householdId === "string" ? query.householdId : undefined;
+
+    if (householdId) {
+      await requireHouseholdMember(householdId, userId);
+    }
 
     const result = await this.repository.findMany({
       userId,
       status: typeof query.status === "string" ? query.status : undefined,
       type: typeof query.type === "string" ? query.type : undefined,
       view,
+      scopeType,
+      householdId,
       sort,
       direction,
       limit,
@@ -107,6 +145,19 @@ export class ObligationService {
 
   async create(payload: unknown) {
     const input = createObligationSchema.parse(payload);
+    const scopeType = input.scopeType ?? (input.householdId ? "HOUSEHOLD" : "PERSONAL");
+
+    if (scopeType === "HOUSEHOLD") {
+      const householdId = input.householdId;
+      if (!householdId) {
+        throw new AppError("VALIDATION_ERROR", "householdId is required for household scope", 400);
+      }
+      await requireHouseholdMember(householdId, input.userId);
+      if (input.assignedToUserId) {
+        await ensureAssigneeIsActiveMember(householdId, input.assignedToUserId);
+      }
+    }
+
     const obligation = await this.repository.create(input);
     const mapped = mapObligation(obligation);
 
@@ -139,6 +190,33 @@ export class ObligationService {
 
   async update(userId: string, id: string, payload: unknown) {
     const input = updateObligationSchema.parse(payload);
+    const existing = await this.repository.findById(id, userId);
+    if (!existing) return null;
+
+    const nextScopeType = input.scopeType ?? existing.scopeType;
+    const nextHouseholdId =
+      nextScopeType === ScopeType.HOUSEHOLD
+        ? input.householdId === undefined
+          ? existing.householdId
+          : input.householdId
+        : null;
+
+    if (nextScopeType === ScopeType.HOUSEHOLD) {
+      if (!nextHouseholdId) {
+        throw new AppError(
+          "VALIDATION_ERROR",
+          "householdId is required when scope is HOUSEHOLD",
+          400
+        );
+      }
+      await requireHouseholdMember(nextHouseholdId, userId);
+      const nextAssignee =
+        input.assignedToUserId === undefined ? existing.assignedToUserId : input.assignedToUserId;
+      if (nextAssignee) {
+        await ensureAssigneeIsActiveMember(nextHouseholdId, nextAssignee);
+      }
+    }
+
     const obligation = await this.repository.update(id, userId, input);
     if (!obligation) return null;
 
@@ -190,6 +268,7 @@ export class ObligationService {
     if (!obligation) return null;
 
     const history = await this.repository.getHistory(id, userId);
+    if (!history) return null;
 
     return {
       auditEvents: history.auditEvents.map((item) => ({
@@ -304,6 +383,7 @@ export class ObligationService {
     await prisma.auditEvent.create({
       data: {
         userId,
+        householdId: corrected.householdId,
         obligationId: id,
         eventType: "obligation_corrected",
         metadata: {
@@ -373,9 +453,141 @@ export class ObligationService {
     return mapped;
   }
 
+  async assign(userId: string, obligationId: string, payload: unknown) {
+    const input = assignSchema.parse(payload ?? {});
+    const existing = await this.repository.findById(obligationId, userId);
+    if (!existing) return null;
+    if (existing.scopeType !== ScopeType.HOUSEHOLD || !existing.householdId) {
+      throw new AppError("VALIDATION_ERROR", "Only household obligations can be assigned", 400);
+    }
+
+    await requireHouseholdMember(existing.householdId, userId);
+    await ensureAssigneeIsActiveMember(existing.householdId, input.assignedToUserId);
+
+    const updated = await this.repository.setAssignment(
+      obligationId,
+      userId,
+      input.assignedToUserId,
+      "obligation_assigned"
+    );
+    return updated ? mapObligation(updated) : null;
+  }
+
+  async unassign(userId: string, obligationId: string) {
+    const existing = await this.repository.findById(obligationId, userId);
+    if (!existing) return null;
+    if (existing.scopeType !== ScopeType.HOUSEHOLD || !existing.householdId) {
+      throw new AppError("VALIDATION_ERROR", "Only household obligations can be unassigned", 400);
+    }
+
+    await requireHouseholdMember(existing.householdId, userId);
+    const updated = await this.repository.setAssignment(
+      obligationId,
+      userId,
+      null,
+      "obligation_unassigned"
+    );
+    return updated ? mapObligation(updated) : null;
+  }
+
+  async claim(userId: string, obligationId: string) {
+    const existing = await this.repository.findById(obligationId, userId);
+    if (!existing) return null;
+    if (existing.scopeType !== ScopeType.HOUSEHOLD || !existing.householdId) {
+      throw new AppError("VALIDATION_ERROR", "Only household obligations can be claimed", 400);
+    }
+
+    await requireHouseholdMember(existing.householdId, userId);
+    const updated = await this.repository.setAssignment(
+      obligationId,
+      userId,
+      userId,
+      "obligation_claimed"
+    );
+    return updated ? mapObligation(updated) : null;
+  }
+
+  async handOff(userId: string, obligationId: string, payload: unknown) {
+    const input = handOffSchema.parse(payload ?? {});
+    const existing = await this.repository.findById(obligationId, userId);
+    if (!existing) return null;
+    if (existing.scopeType !== ScopeType.HOUSEHOLD || !existing.householdId) {
+      throw new AppError("VALIDATION_ERROR", "Only household obligations can be handed off", 400);
+    }
+
+    await requireHouseholdMember(existing.householdId, userId);
+    await ensureAssigneeIsActiveMember(existing.householdId, input.toUserId);
+
+    const updated = await this.repository.setAssignment(
+      obligationId,
+      userId,
+      input.toUserId,
+      "obligation_handed_off"
+    );
+    return updated ? mapObligation(updated) : null;
+  }
+
+  async patchScope(userId: string, obligationId: string, payload: unknown) {
+    const input = patchScopeSchema.parse(payload ?? {});
+    const existing = await this.repository.findById(obligationId, userId);
+    if (!existing) return null;
+
+    if (input.scopeType === ScopeType.HOUSEHOLD) {
+      if (!input.householdId) {
+        throw new AppError("VALIDATION_ERROR", "householdId is required for HOUSEHOLD scope", 400);
+      }
+      await requireHouseholdMember(input.householdId, userId);
+    }
+
+    const updated = await this.repository.update(obligationId, userId, {
+      scopeType: input.scopeType,
+      householdId: input.scopeType === ScopeType.HOUSEHOLD ? input.householdId ?? null : null,
+      assignedToUserId:
+        input.scopeType === ScopeType.HOUSEHOLD ? existing.assignedToUserId : null
+    });
+
+    return updated ? mapObligation(updated) : null;
+  }
+
+  async listForHousehold(
+    userId: string,
+    householdId: string,
+    query: Record<string, unknown>
+  ) {
+    await requireHouseholdMember(householdId, userId);
+    return this.list(userId, {
+      ...query,
+      householdId,
+      scopeType: "HOUSEHOLD"
+    });
+  }
+
+  async createForHousehold(
+    userId: string,
+    householdId: string,
+    payload: unknown
+  ) {
+    await requireHouseholdMember(householdId, userId);
+    const body = (payload ?? {}) as Record<string, unknown>;
+
+    return this.create({
+      ...body,
+      userId,
+      scopeType: "HOUSEHOLD",
+      householdId,
+      createdByUserId: userId
+    });
+  }
+
   async getReviewQueue(userId: string, query: Record<string, unknown>) {
     const limit = parseIntegerQuery(query.limit, 50, 1, 200);
-    const items = await this.repository.findReviewQueueCandidates(userId, limit);
+    const householdId = typeof query.householdId === "string" ? query.householdId : undefined;
+
+    if (householdId) {
+      await requireHouseholdMember(householdId, userId);
+    }
+
+    const items = await this.repository.findReviewQueueCandidates(userId, limit, householdId);
     const mapped = items.map((item) => mapObligation(item));
 
     const reviewItems = mapped
@@ -423,7 +635,11 @@ const supportedViews: ObligationView[] = [
   "postponed_recently",
   "resolved_recently",
   "active_now",
-  "commitments"
+  "commitments",
+  "assigned_to_me",
+  "unassigned",
+  "household",
+  "personal"
 ];
 
 const supportedSorts: ObligationSort[] = [

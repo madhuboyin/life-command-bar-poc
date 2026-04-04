@@ -20,6 +20,22 @@ export async function listObligations(req: Request, res: Response) {
   }
 }
 
+export async function listHouseholdObligations(req: Request, res: Response) {
+  try {
+    const userId = getRequiredUserId(req, res);
+    if (!userId) return;
+
+    const data = await service.listForHousehold(
+      userId,
+      req.params.householdId as string,
+      req.query
+    );
+    return ok(res, data);
+  } catch (error) {
+    return handleControllerError(res, error, "Could not fetch household obligations");
+  }
+}
+
 export async function getObligationReviewQueue(req: Request, res: Response) {
   try {
     const userId = getRequiredUserId(req, res);
@@ -65,6 +81,23 @@ export async function createObligation(req: Request, res: Response) {
   }
 }
 
+export async function createHouseholdObligation(req: Request, res: Response) {
+  try {
+    const userId = getRequiredUserId(req, res);
+    if (!userId) return;
+
+    const data = await service.createForHousehold(
+      userId,
+      req.params.householdId as string,
+      req.body
+    );
+
+    return ok(res, { obligation: data }, 201);
+  } catch (error) {
+    return handleControllerError(res, error, "Could not create household obligation");
+  }
+}
+
 export async function updateObligation(req: Request, res: Response) {
   try {
     const userId = getRequiredUserId(req, res);
@@ -79,6 +112,91 @@ export async function updateObligation(req: Request, res: Response) {
     return ok(res, { obligation: data });
   } catch (error) {
     return handleControllerError(res, error, "Could not update obligation");
+  }
+}
+
+export async function assignObligation(req: Request, res: Response) {
+  try {
+    const userId = getRequiredUserId(req, res);
+    if (!userId) return;
+
+    const data = await service.assign(userId, req.params.id as string, req.body ?? {});
+
+    if (!data) {
+      return fail(res, "NOT_FOUND", "Obligation not found", 404);
+    }
+
+    return ok(res, { obligation: data });
+  } catch (error) {
+    return handleControllerError(res, error, "Could not assign obligation");
+  }
+}
+
+export async function unassignObligation(req: Request, res: Response) {
+  try {
+    const userId = getRequiredUserId(req, res);
+    if (!userId) return;
+
+    const data = await service.unassign(userId, req.params.id as string);
+
+    if (!data) {
+      return fail(res, "NOT_FOUND", "Obligation not found", 404);
+    }
+
+    return ok(res, { obligation: data });
+  } catch (error) {
+    return handleControllerError(res, error, "Could not unassign obligation");
+  }
+}
+
+export async function claimObligation(req: Request, res: Response) {
+  try {
+    const userId = getRequiredUserId(req, res);
+    if (!userId) return;
+
+    const data = await service.claim(userId, req.params.id as string);
+
+    if (!data) {
+      return fail(res, "NOT_FOUND", "Obligation not found", 404);
+    }
+
+    return ok(res, { obligation: data });
+  } catch (error) {
+    return handleControllerError(res, error, "Could not claim obligation");
+  }
+}
+
+export async function handOffObligation(req: Request, res: Response) {
+  try {
+    const userId = getRequiredUserId(req, res);
+    if (!userId) return;
+
+    const data = await service.handOff(userId, req.params.id as string, req.body ?? {});
+
+    if (!data) {
+      return fail(res, "NOT_FOUND", "Obligation not found", 404);
+    }
+
+    return ok(res, { obligation: data });
+  } catch (error) {
+    return handleControllerError(res, error, "Could not hand off obligation");
+  }
+}
+
+export async function patchObligationScope(req: Request, res: Response) {
+  try {
+    const userId = getRequiredUserId(req, res);
+    if (!userId) return;
+
+    const data = await service.patchScope(userId, req.params.id as string, req.body ?? {});
+
+    if (!data) {
+      return fail(res, "NOT_FOUND", "Obligation not found", 404);
+    }
+
+    return ok(res, { obligation: data });
+  } catch (error) {
+    return handleControllerError(res, error, "Could not update obligation scope");
   }
 }
 

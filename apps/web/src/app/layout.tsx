@@ -3,6 +3,7 @@ import Link from "next/link";
 import { colors, spacing } from "../lib/ui";
 import { ToastProvider } from "../components/ui/toast-provider";
 import { FlowSessionProvider } from "../components/flow-session-provider";
+import HouseholdSwitcher from "../components/household-switcher";
 
 export const metadata = {
   title: "Life Command Bar POC",
@@ -42,8 +43,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/" style={{ textDecoration: "none", color: colors.text, fontWeight: 700 }}>
                 Life Command Bar
               </Link>
+              <HouseholdSwitcher />
               <Link href="/obligations" style={{ textDecoration: "none", color: colors.textMuted }}>
                 Obligations
+              </Link>
+              <Link href="/households" style={{ textDecoration: "none", color: colors.textMuted }}>
+                Households
               </Link>
               <Link href="/focus" style={{ textDecoration: "none", color: colors.textMuted }}>
                 Focus Mode

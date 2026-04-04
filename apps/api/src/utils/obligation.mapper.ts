@@ -26,6 +26,21 @@ type ObligationImportSource = {
 
 type ObligationWithRelations = Obligation & {
   importSource?: ObligationImportSource | null;
+  assignedToUser?: {
+    id: string;
+    email: string;
+    name: string | null;
+  } | null;
+  createdByUser?: {
+    id: string;
+    email: string;
+    name: string | null;
+  } | null;
+  lastHandledByUser?: {
+    id: string;
+    email: string;
+    name: string | null;
+  } | null;
 };
 
 function decimalToNumber(value: Prisma.Decimal | null): number | null {
@@ -61,6 +76,32 @@ export function mapObligation(obligation: ObligationWithRelations) {
   return {
     id: obligation.id,
     userId: obligation.userId,
+    scopeType: obligation.scopeType,
+    householdId: obligation.householdId,
+    assignedToUserId: obligation.assignedToUserId,
+    createdByUserId: obligation.createdByUserId,
+    lastHandledByUserId: obligation.lastHandledByUserId,
+    assignee: obligation.assignedToUser
+      ? {
+          id: obligation.assignedToUser.id,
+          email: obligation.assignedToUser.email,
+          name: obligation.assignedToUser.name
+        }
+      : null,
+    createdBy: obligation.createdByUser
+      ? {
+          id: obligation.createdByUser.id,
+          email: obligation.createdByUser.email,
+          name: obligation.createdByUser.name
+        }
+      : null,
+    lastHandledBy: obligation.lastHandledByUser
+      ? {
+          id: obligation.lastHandledByUser.id,
+          email: obligation.lastHandledByUser.email,
+          name: obligation.lastHandledByUser.name
+        }
+      : null,
     type: obligation.type,
     title: obligation.title,
     description: obligation.description,

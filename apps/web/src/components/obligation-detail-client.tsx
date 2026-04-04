@@ -43,6 +43,9 @@ import SourceBadge from "./source-badge";
 import ConfidenceBadge from "./confidence-badge";
 import CorrectionPanel from "./correction-panel";
 import MemoryPatternsPanel from "./memory-patterns-panel";
+import AssigneeBadge from "./assignee-badge";
+import AssignmentMenu from "./assignment-menu";
+import ClaimItemButton from "./claim-item-button";
 
 type Props = {
   obligation: Obligation;
@@ -248,12 +251,22 @@ export default function ObligationDetailClient({ obligation }: Props) {
             confidenceBand={current.confidenceBand}
             needsReview={current.needsReview}
           />
+          <AssigneeBadge obligation={current} />
         </div>
+        {current.scopeType === "HOUSEHOLD" ? (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+            <AssignmentMenu obligation={current} onUpdated={() => router.refresh()} />
+            {!current.assignedToUserId ? (
+              <ClaimItemButton obligationId={current.id} onClaimed={() => router.refresh()} />
+            ) : null}
+          </div>
+        ) : null}
         <div><strong>Vendor:</strong> {current.vendor ?? "—"}</div>
         <div><strong>Description:</strong> {current.description ?? "—"}</div>
         <div><strong>Due Date:</strong> {formatDateTime(current.dueDate)}</div>
         <div><strong>Amount:</strong> {current.amount ?? "—"} {current.currency ?? ""}</div>
         <div><strong>Source:</strong> {current.sourceType}</div>
+        <div><strong>Scope:</strong> {current.scopeType === "HOUSEHOLD" ? "Household" : "Personal"}</div>
         {sourceDetails ? (
           <div>
             <strong>Provenance:</strong> {sourceDetails.provenanceLabel}
