@@ -12,12 +12,14 @@ import type { PersonalizationSignals } from "../types/personalization.types";
 import type { DecisionTrace, TrustWhy } from "../utils/trust-layer";
 import { toWhyConfidence } from "../utils/trust-layer";
 import { AutoFlowService, type AutoFlowSurfaceItem } from "./auto-flow.service";
+import { HomeMemoryService } from "./home-memory.service";
 
 type FeedCandidate = {
   obligation: Awaited<ReturnType<ObligationRepository["findActiveForFeed"]>>[number];
   candidateScore: number;
   hookType: "urgent" | "money" | "quick_win" | "none";
   personalizationReasons: string[];
+  memoryReasons: string[];
   autoFlow: AutoFlowSurfaceItem | null;
 };
 
@@ -26,13 +28,23 @@ export class TodayFeedService {
   private readonly feedbackRepository = new FeedbackRepository();
   private readonly personalizationService = new PersonalizationService();
   private readonly autoFlowService = new AutoFlowService();
+  private readonly homeMemoryService = new HomeMemoryService();
 
   async getTodayFeed(userId: string, options?: { includeTrace?: boolean }) {
     const includeTrace = options?.includeTrace ?? false;
-    const [items, feedbackMap, personalizationSummary] = await Promise.all([
+    const [items, feedbackMap, personalizationSummary, memorySignals] = await Promise.all([
       this.obligationRepository.findActiveForFeed(userId),
       this.feedbackRepository.getRecentFeedbackMap(userId),
-      this.personalizationService.getSummary(userId).catch(() => null)
+      this.personalizationService.getSummary(userId).catch(() => null),
+      this.homeMemoryService.getDecisionSignals(userId).catch(() => ({
+        currentFocus: null,
+        cognitiveLoadScore: 0,
+        activeCategories: [],
+        behaviorLabels: [],
+        recurringVendors: [],
+        recurringVendorKeys: [],
+        recurringVendorTypeKeys: []
+      }))
     ]);
     const signals = personalizationSummary?.signals ?? getDefaultSignals();
 
@@ -94,6 +106,10 @@ export class TodayFeedService {
         importanceScore: importance,
         urgencyScore: urgency
       });
+      const memory = getMemoryScoreAdjustment({
+        obligation,
+        memorySignals
+      });
 
       let hookType: FeedCandidate["hookType"] = "none";
       if (urgency >= 85) hookType = "urgent";
@@ -103,9 +119,10 @@ export class TodayFeedService {
 
       return {
         obligation,
-        candidateScore: score + adjustment.delta,
+        candidateScore: score + adjustment.delta + memory.delta,
         hookType,
         personalizationReasons: adjustment.reasons,
+        memoryReasons: memory.reasons,
         autoFlow
       };
     });
@@ -138,13 +155,17 @@ export class TodayFeedService {
         obligation: mappedObligation,
         hookType: item.hookType,
         whyItMatters: flow.whyItMatters,
-        personalizationReason: item.personalizationReasons[0] ?? null,
+        personalizationReason:
+          item.memoryReasons[0] ??
+          item.personalizationReasons[0] ??
+          null,
         candidateScore: item.candidateScore
       });
       const decisionTrace = buildFeedDecisionTrace({
         obligation: mappedObligation,
         hookType: item.hookType,
-        candidateScore: item.candidateScore
+        candidateScore: item.candidateScore,
+        memoryReasons: item.memoryReasons
       });
 
       return {
@@ -271,6 +292,7 @@ function buildFeedDecisionTrace(input: {
   obligation: ReturnType<typeof mapObligation>;
   hookType: FeedCandidate["hookType"];
   candidateScore: number;
+  memoryReasons: string[];
 }): DecisionTrace {
   const sourceSignals = [
     `source_type:${input.obligation.sourceType.toLowerCase()}`,
@@ -295,6 +317,9 @@ function buildFeedDecisionTrace(input: {
     `confidence_band:${input.obligation.confidenceBand.toLowerCase()}`,
     `hook_type:${input.hookType}`
   ];
+  if (input.memoryReasons.length > 0) {
+    confidenceDrivers.push(`memory:${normalizeMemoryReason(input.memoryReasons[0] as string)}`);
+  }
 
   return {
     sourceSignals,
@@ -304,12 +329,65 @@ function buildFeedDecisionTrace(input: {
   };
 }
 
+function getMemoryScoreAdjustment(input: {
+  obligation: FeedCandidate["obligation"];
+  memorySignals: Awaited<ReturnType<HomeMemoryService["getDecisionSignals"]>>;
+}) {
+  const reasons: string[] = [];
+  let delta = 0;
+
+  const vendorKey = input.obligation.vendor ? normalizeKey(input.obligation.vendor) : null;
+  if (vendorKey && input.memorySignals.recurringVendorKeys.includes(vendorKey)) {
+    delta += 6;
+    reasons.push("You usually handle this monthly");
+  }
+
+  if (
+    vendorKey &&
+    input.memorySignals.recurringVendorTypeKeys.includes(`${vendorKey}:${input.obligation.type}`)
+  ) {
+    delta += 4;
+    reasons.push("Recurring pattern matches your history");
+  }
+
+  if (input.memorySignals.currentFocus === input.obligation.type) {
+    delta += 3;
+    reasons.push("Matches your current focus area");
+  }
+
+  if (
+    input.memorySignals.behaviorLabels.includes("postpone-heavy") &&
+    input.obligation.urgencyScore &&
+    Number(input.obligation.urgencyScore) >= 82
+  ) {
+    delta += 4;
+    reasons.push("Prioritized to reduce repeat postponement");
+  }
+
+  return {
+    delta,
+    reasons
+  };
+}
+
 function normalizeCandidateScore(value: number) {
   if (!Number.isFinite(value)) return 0.5;
   const normalized = value / 100;
   if (normalized < 0) return 0;
   if (normalized > 1) return 1;
   return normalized;
+}
+
+function normalizeKey(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function normalizeMemoryReason(value: string) {
+  return value.toLowerCase().replace(/\s+/g, "_");
 }
 
 function getDefaultSignals(): PersonalizationSignals {

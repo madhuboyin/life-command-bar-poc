@@ -3,6 +3,7 @@ import { AutoFlowTriggerType } from "@prisma/client";
 import { ObligationRepository } from "../repositories/obligation.repository";
 import { mapObligation } from "../utils/obligation.mapper";
 import { AutoFlowService } from "./auto-flow.service";
+import { HomeMemoryService } from "./home-memory.service";
 
 const postponeSchema = z.object({
   until: z.string().datetime().optional(),
@@ -20,6 +21,7 @@ const markDoneSchema = z.object({
 export class ObligationActionsService {
   private readonly repository = new ObligationRepository();
   private readonly autoFlowService = new AutoFlowService();
+  private readonly homeMemoryService = new HomeMemoryService();
 
   async markDone(userId: string, obligationId: string, payload: unknown) {
     const input = markDoneSchema.parse(payload);
@@ -33,6 +35,7 @@ export class ObligationActionsService {
       completedObligationId: obligationId,
       completedObligationType: mapped.type
     });
+    await this.captureMemorySignal(userId, obligationId, "obligation_marked_done");
 
     return mapped;
   }
@@ -44,6 +47,7 @@ export class ObligationActionsService {
 
     const mapped = mapObligation(obligation);
     await this.autoFlowService.handleObligationStatusChange(userId, obligationId, mapped.status);
+    await this.captureMemorySignal(userId, obligationId, "obligation_dismissed");
     return mapped;
   }
 
@@ -66,6 +70,19 @@ export class ObligationActionsService {
       source: "postpone_action",
       reasonHint: "Postponed item may need follow-up"
     });
+    await this.captureMemorySignal(userId, obligationId, "obligation_postponed");
     return mapped;
+  }
+
+  private async captureMemorySignal(userId: string, obligationId: string, eventType: string) {
+    await this.homeMemoryService
+      .captureSignal({
+        userId,
+        sourceType: "OBLIGATION_ACTION",
+        referenceId: obligationId,
+        eventType,
+        rebuild: true
+      })
+      .catch(() => null);
   }
 }

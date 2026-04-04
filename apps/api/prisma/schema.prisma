@@ -154,6 +154,28 @@ enum FocusSessionItemStatus {
   SKIPPED
 }
 
+enum MemoryEntityType {
+  VENDOR
+  SUBSCRIPTION
+  CATEGORY
+  OBLIGATION_TEMPLATE
+}
+
+enum MemoryPatternType {
+  RECURRING_OBLIGATION
+  USER_BEHAVIOR
+  TIMING_PATTERN
+}
+
+enum MemoryEventSourceType {
+  INGESTION
+  OBLIGATION_ACTION
+  GUIDED_JOURNEY
+  FEEDBACK
+  FOCUS_MODE
+  SYSTEM_REBUILD
+}
+
 enum DailyPulseItemStatus {
   PENDING
   OPENED_GUIDED
@@ -219,6 +241,10 @@ model User {
   autoFlowStates      AutoFlowState[]
   focusSessions       FocusSession[]
   focusSessionItems   FocusSessionItem[]
+  memoryEntities      MemoryEntity[]
+  memoryPatterns      MemoryPattern[]
+  memoryContext       MemoryContext?
+  memoryEvents        MemoryEvent[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -476,6 +502,87 @@ model FocusSessionItem {
   @@index([userId, status], map: "idx_focus_session_items_user_status")
   @@index([obligationId], map: "idx_focus_session_items_obligation_id")
   @@map("focus_session_items")
+}
+
+model MemoryEntity {
+  id String @id @default(cuid())
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type MemoryEntityType
+  name String
+  normalizedKey String @map("normalized_key")
+  metadata Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, type, normalizedKey], map: "uniq_memory_entities_user_type_key")
+  @@index([userId, type], map: "idx_memory_entities_user_type")
+  @@index([userId, updatedAt], map: "idx_memory_entities_user_updated_at")
+  @@map("memory_entities")
+}
+
+model MemoryPattern {
+  id String @id @default(cuid())
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  patternType MemoryPatternType @map("pattern_type")
+  referenceId String @map("reference_id")
+  patternData Json @map("pattern_data")
+  confidence Decimal @default(0.0) @db.Decimal(5, 4)
+  frequency Int @default(0)
+  lastObservedAt DateTime? @map("last_observed_at")
+  isUserLocked Boolean @default(false) @map("is_user_locked")
+  isSuppressed Boolean @default(false) @map("is_suppressed")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, patternType, referenceId], map: "uniq_memory_patterns_user_type_ref")
+  @@index([userId, patternType], map: "idx_memory_patterns_user_type")
+  @@index([userId, updatedAt], map: "idx_memory_patterns_user_updated_at")
+  @@map("memory_patterns")
+}
+
+model MemoryContext {
+  id String @id @default(cuid())
+
+  userId String @unique @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  currentFocus String? @map("current_focus")
+  recentActions Json? @map("recent_actions")
+  activeCategories Json? @map("active_categories")
+  cognitiveLoadScore Decimal @default(0.0) @map("cognitive_load_score") @db.Decimal(7, 4)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, updatedAt], map: "idx_memory_context_user_updated_at")
+  @@map("memory_context")
+}
+
+model MemoryEvent {
+  id String @id @default(cuid())
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  sourceType MemoryEventSourceType @map("source_type")
+  referenceId String? @map("reference_id")
+  eventType String @map("event_type")
+  metadata Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt], map: "idx_memory_events_user_created_at")
+  @@index([sourceType], map: "idx_memory_events_source_type")
+  @@index([eventType], map: "idx_memory_events_event_type")
+  @@map("memory_events")
 }
 
 model AutoFlowState {

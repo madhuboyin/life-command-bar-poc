@@ -6,6 +6,7 @@ import { ObligationSort, ObligationView, SortDirection } from "../types/obligati
 import { mapObligation } from "../utils/obligation.mapper";
 import { AppError } from "../utils/app-error";
 import { AutoFlowService } from "./auto-flow.service";
+import { HomeMemoryService } from "./home-memory.service";
 
 const createObligationSchema = z.object({
   userId: z.string().min(1),
@@ -65,6 +66,7 @@ const correctionSchema = z.object({
 export class ObligationService {
   private readonly repository = new ObligationRepository();
   private readonly autoFlowService = new AutoFlowService();
+  private readonly homeMemoryService = new HomeMemoryService();
 
   async list(userId: string, query: Record<string, unknown>) {
     const limit = parseIntegerQuery(query.limit, 20, 1, 100);
@@ -114,6 +116,12 @@ export class ObligationService {
       reasonHint: "New obligation may be ready to act"
     });
 
+    await this.captureMemorySignal({
+      userId: mapped.userId,
+      referenceId: mapped.id,
+      eventType: "obligation_created"
+    });
+
     return mapped;
   }
 
@@ -142,6 +150,15 @@ export class ObligationService {
         await this.autoFlowService.handleObligationStatusChange(userId, mapped.id, mapped.status);
       }
     }
+
+    await this.captureMemorySignal({
+      userId,
+      referenceId: mapped.id,
+      eventType: "obligation_updated",
+      metadata: {
+        updatedFields: Object.keys(input)
+      }
+    });
 
     return mapped;
   }
@@ -295,6 +312,17 @@ export class ObligationService {
       await this.autoFlowService.handleObligationStatusChange(userId, mapped.id, mapped.status);
     }
 
+    await this.captureMemorySignal({
+      userId,
+      referenceId: mapped.id,
+      eventType: "obligation_corrected",
+      metadata: {
+        correctedFields: Object.keys(updatePayload),
+        dontShowSimilar: Boolean(input.dontShowSimilar),
+        dismissPermanently: Boolean(input.dismissPermanently)
+      }
+    });
+
     return mapped;
   }
 
@@ -317,6 +345,24 @@ export class ObligationService {
         total: reviewItems.length
       }
     };
+  }
+
+  private async captureMemorySignal(input: {
+    userId: string;
+    referenceId?: string | null;
+    eventType: string;
+    metadata?: Record<string, unknown>;
+  }) {
+    await this.homeMemoryService
+      .captureSignal({
+        userId: input.userId,
+        sourceType: "OBLIGATION_ACTION",
+        referenceId: input.referenceId ?? null,
+        eventType: input.eventType,
+        metadata: input.metadata,
+        rebuild: true
+      })
+      .catch(() => null);
   }
 }
 

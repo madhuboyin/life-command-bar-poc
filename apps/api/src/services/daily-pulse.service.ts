@@ -15,6 +15,7 @@ import { DailyPulseRepository } from "../repositories/daily-pulse.repository";
 import { AppError } from "../utils/app-error";
 import type { DecisionTrace, TrustWhy } from "../utils/trust-layer";
 import { toWhyConfidence } from "../utils/trust-layer";
+import { HomeMemoryService } from "./home-memory.service";
 
 type PulseHookType = "urgent" | "quick_win" | "money" | "postponed" | "important";
 type PulseTrend = "up" | "down" | "flat";
@@ -91,6 +92,7 @@ export class DailyPulseService {
   private readonly obligationRepository = new ObligationRepository();
   private readonly personalizationService = new PersonalizationService();
   private readonly repository = new DailyPulseRepository();
+  private readonly homeMemoryService = new HomeMemoryService();
 
   async getPulse(
     userId: string,
@@ -101,13 +103,29 @@ export class DailyPulseService {
     const includeTrace = options?.includeTrace ?? false;
     const todayKey = getDateKeyUTC(new Date());
 
-    const [insights, todayFeed, activeObligations, recentlyPostponedIds, personalizationSummary] =
+    const [
+      insights,
+      todayFeed,
+      activeObligations,
+      recentlyPostponedIds,
+      personalizationSummary,
+      memorySignals
+    ] =
       await Promise.all([
         this.dashboardInsightsService.getInsights(userId, { includeTrace }),
         this.todayFeedService.getTodayFeed(userId, { includeTrace }),
         this.obligationRepository.findActiveForFeed(userId),
         this.getRecentlyPostponedIds(userId),
-        this.personalizationService.getSummary(userId).catch(() => null)
+        this.personalizationService.getSummary(userId).catch(() => null),
+        this.homeMemoryService.getDecisionSignals(userId).catch(() => ({
+          currentFocus: null,
+          cognitiveLoadScore: 0,
+          activeCategories: [],
+          behaviorLabels: [],
+          recurringVendors: [],
+          recurringVendorKeys: [],
+          recurringVendorTypeKeys: []
+        }))
       ]);
     const signals = personalizationSummary?.signals ?? getDefaultSignals();
 
@@ -135,6 +153,10 @@ export class DailyPulseService {
         importanceScore: obligation.importanceScore,
         urgencyScore: obligation.urgencyScore
       });
+      const memory = getPulseMemoryAdjustment({
+        obligation,
+        memorySignals
+      });
 
       return {
         obligationId: obligation.id,
@@ -151,7 +173,7 @@ export class DailyPulseService {
         confidenceBand: obligation.confidenceBand,
         sourceType: obligation.sourceType,
         needsReview: obligation.needsReview,
-        priorityScore: basePriorityScore + personalization.delta + autoFlowBoost,
+        priorityScore: basePriorityScore + personalization.delta + autoFlowBoost + memory.delta,
         isUrgent,
         isQuickWin,
         isMoney,
@@ -1061,6 +1083,33 @@ function computePriorityScore(item: {
   return Math.round(raw + effortBonus + impactBonus + moneyBonus + postponedBonus + dueSoonBonus);
 }
 
+function getPulseMemoryAdjustment(input: {
+  obligation: ReturnType<typeof mapObligation>;
+  memorySignals: Awaited<ReturnType<HomeMemoryService["getDecisionSignals"]>>;
+}) {
+  let delta = 0;
+
+  const vendorKey = input.obligation.vendor ? normalizeKey(input.obligation.vendor) : null;
+  if (vendorKey && input.memorySignals.recurringVendorKeys.includes(vendorKey)) {
+    delta += 5;
+  }
+
+  if (input.memorySignals.currentFocus === input.obligation.type) {
+    delta += 4;
+  }
+
+  if (
+    input.memorySignals.behaviorLabels.includes("postpone-heavy") &&
+    input.obligation.urgencyScore >= 82
+  ) {
+    delta += 3;
+  }
+
+  return {
+    delta
+  };
+}
+
 function computeIsUrgent(item: {
   dueDate: string | null;
   urgencyScore: number;
@@ -1197,6 +1246,14 @@ function pluralize(word: string, count: number) {
 
 function getDateKeyUTC(date: Date) {
   return date.toISOString().slice(0, 10);
+}
+
+function normalizeKey(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 function daysAgo(date: Date, days: number) {

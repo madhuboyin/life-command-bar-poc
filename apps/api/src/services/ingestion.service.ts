@@ -35,6 +35,7 @@ import {
   type NormalizedIngestionInput
 } from "./ingestion-normalizers";
 import { AutoFlowService } from "./auto-flow.service";
+import { HomeMemoryService } from "./home-memory.service";
 
 const PARSER_VERSION = "ingestion-v1-rule-2026-04-04";
 
@@ -111,6 +112,7 @@ export type IngestionResult = {
 export class IngestionService {
   private readonly repository = new IngestionRepository();
   private readonly autoFlowService = new AutoFlowService();
+  private readonly homeMemoryService = new HomeMemoryService();
 
   async ingestEmailForward(payload: unknown): Promise<IngestionResult> {
     const input = emailForwardSchema.parse(payload);
@@ -228,6 +230,17 @@ export class IngestionService {
       }
     });
 
+    await this.captureMemorySignal({
+      userId,
+      sourceType: "INGESTION",
+      referenceId: obligationId,
+      eventType: "ingestion_candidate_confirmed",
+      metadata: {
+        status: updated.status,
+        confidenceScore: Number(updated.confidenceScore)
+      }
+    });
+
     return mapObligation(updated as Obligation);
   }
 
@@ -265,6 +278,16 @@ export class IngestionService {
     await this.repository.createAuditEvent({
       userId,
       obligationId,
+      eventType: "ingestion_candidate_rejected",
+      metadata: {
+        reason: input.reason ?? null
+      }
+    });
+
+    await this.captureMemorySignal({
+      userId,
+      sourceType: "INGESTION",
+      referenceId: obligationId,
       eventType: "ingestion_candidate_rejected",
       metadata: {
         reason: input.reason ?? null
@@ -309,6 +332,17 @@ export class IngestionService {
       }
     });
 
+    await this.captureMemorySignal({
+      userId: normalized.userId,
+      sourceType: "INGESTION",
+      referenceId: importSource.id,
+      eventType: "ingestion_input_received",
+      metadata: {
+        channel: normalized.channel,
+        subtype: normalized.importSubtype
+      }
+    });
+
     if (duplicate?.obligations[0]) {
       const existing = duplicate.obligations[0];
 
@@ -329,6 +363,17 @@ export class IngestionService {
         metadata: {
           importSourceId: importSource.id,
           duplicateOfImportSourceId: duplicate.id
+        }
+      });
+
+      await this.captureMemorySignal({
+        userId: normalized.userId,
+        sourceType: "INGESTION",
+        referenceId: existing.id,
+        eventType: "ingestion_duplicate_detected",
+        metadata: {
+          importSourceId: importSource.id,
+          duplicateOfObligationId: existing.id
         }
       });
 
@@ -435,6 +480,17 @@ export class IngestionService {
         }
       });
 
+      await this.captureMemorySignal({
+        userId: normalized.userId,
+        sourceType: "INGESTION",
+        referenceId: structuredDuplicate.id,
+        eventType: "ingestion_structured_duplicate_detected",
+        metadata: {
+          importSourceId: importSource.id,
+          duplicateOfObligationId: structuredDuplicate.id
+        }
+      });
+
       return {
         importSourceId: importSource.id,
         candidateId: structuredDuplicate.id,
@@ -520,6 +576,17 @@ export class IngestionService {
         }
       });
 
+      await this.captureMemorySignal({
+        userId: normalized.userId,
+        sourceType: "INGESTION",
+        referenceId: importSource.id,
+        eventType: "ingestion_candidate_skipped",
+        metadata: {
+          conflictDetected,
+          reason: conflictDetected ? "conflict_detected" : "insufficient_confidence"
+        }
+      });
+
       return {
         importSourceId: importSource.id,
         candidateId: null,
@@ -570,6 +637,22 @@ export class IngestionService {
       }
     });
 
+    const obligationStatus =
+      obligation.status === ObligationStatus.ACTIVE ? "ACTIVE" : "DRAFT";
+
+    await this.captureMemorySignal({
+      userId: normalized.userId,
+      sourceType: "INGESTION",
+      referenceId: obligation.id,
+      eventType: "ingestion_candidate_created",
+      metadata: {
+        importSourceId: importSource.id,
+        obligationStatus,
+        confidenceBand: guardedConfidence.band,
+        needsConfirmation: guardedConfidence.needsConfirmation
+      }
+    });
+
     await this.repository.createAuditEvent({
       userId: normalized.userId,
       obligationId: obligation.id,
@@ -583,9 +666,6 @@ export class IngestionService {
         conflictWithObligationId: conflictMatch?.obligationId ?? null
       }
     });
-
-    const obligationStatus =
-      obligation.status === ObligationStatus.ACTIVE ? "ACTIVE" : "DRAFT";
 
     await this.autoFlowService.triggerForEvent({
       userId: normalized.userId,
@@ -624,6 +704,21 @@ export class IngestionService {
         description: obligation.description
       }
     };
+  }
+
+  private async captureMemorySignal(payload: {
+    userId: string;
+    sourceType: "INGESTION";
+    referenceId?: string | null;
+    eventType: string;
+    metadata?: Record<string, unknown>;
+  }) {
+    await this.homeMemoryService
+      .captureSignal({
+        ...payload,
+        rebuild: true
+      })
+      .catch(() => null);
   }
 
   private buildObligationPayload(input: {

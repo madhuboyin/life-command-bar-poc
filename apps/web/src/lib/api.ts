@@ -14,6 +14,10 @@ import type {
   FlowSourceType,
   GuidedJourney,
   IngestionResult,
+  MemoryContext,
+  MemoryEntity,
+  MemoryPattern,
+  MemorySummary,
   Obligation,
   ObligationSourceDetails,
   ObligationHistory,
@@ -109,6 +113,14 @@ type UploadIngestionApiResponse = {
     note: string | null;
   };
   ingestion: IngestionResult;
+};
+
+type MemoryEntitiesResponse = {
+  items: MemoryEntity[];
+};
+
+type MemoryPatternsResponse = {
+  items: MemoryPattern[];
 };
 
 function isAbsoluteHttpUrl(value: string) {
@@ -621,6 +633,88 @@ export async function getPersonalizationDebug(): Promise<PersonalizationDebugApi
   });
 
   return handleResponse<PersonalizationDebugApiResponse>(res);
+}
+
+export async function getMemoryEntities(params?: {
+  type?: "VENDOR" | "SUBSCRIPTION" | "CATEGORY" | "OBLIGATION_TEMPLATE";
+  limit?: number;
+}): Promise<MemoryEntitiesResponse> {
+  const query = new URLSearchParams();
+  if (params?.type) query.set("type", params.type);
+  if (typeof params?.limit === "number") query.set("limit", String(params.limit));
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+
+  const res = await apiFetch(`/memory/entities${suffix}`, {
+    cache: "no-store"
+  });
+  return handleResponse<MemoryEntitiesResponse>(res);
+}
+
+export async function getMemoryPatterns(params?: {
+  patternType?: "RECURRING_OBLIGATION" | "USER_BEHAVIOR" | "TIMING_PATTERN";
+  referenceId?: string;
+  includeSuppressed?: boolean;
+  limit?: number;
+}): Promise<MemoryPatternsResponse> {
+  const query = new URLSearchParams();
+  if (params?.patternType) query.set("patternType", params.patternType);
+  if (params?.referenceId) query.set("referenceId", params.referenceId);
+  if (params?.includeSuppressed) query.set("includeSuppressed", "true");
+  if (typeof params?.limit === "number") query.set("limit", String(params.limit));
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+
+  const res = await apiFetch(`/memory/patterns${suffix}`, {
+    cache: "no-store"
+  });
+  return handleResponse<MemoryPatternsResponse>(res);
+}
+
+export async function getMemoryContext(): Promise<MemoryContext> {
+  const res = await apiFetch("/memory/context", {
+    cache: "no-store"
+  });
+  return handleResponse<MemoryContext>(res);
+}
+
+export async function getMemorySummary(): Promise<MemorySummary> {
+  const res = await apiFetch("/memory/summary", {
+    cache: "no-store"
+  });
+  return handleResponse<MemorySummary>(res);
+}
+
+export async function rebuildMemory() {
+  const res = await apiFetch("/memory/rebuild", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
+  return handleResponse<{ rebuiltAt: string; summary: Record<string, unknown> }>(res);
+}
+
+export async function updateMemoryPattern(
+  patternId: string,
+  input: {
+    patternData?: Record<string, unknown>;
+    confidence?: number;
+    frequency?: number;
+    isSuppressed?: boolean;
+    isUserLocked?: boolean;
+  }
+) {
+  const res = await apiFetch(`/memory/pattern/${patternId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  return handleResponse<{ pattern: MemoryPattern }>(res);
+}
+
+export async function deleteMemoryPattern(patternId: string) {
+  const res = await apiFetch(`/memory/pattern/${patternId}`, {
+    method: "DELETE"
+  });
+  return handleResponse<{ deleted: boolean }>(res);
 }
 
 export async function createObligation(input: {

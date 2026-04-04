@@ -490,6 +490,52 @@ export interface PersonalizationDebug extends PersonalizationSummary {
   }>;
 }
 
+export type MemoryEntityType = "VENDOR" | "SUBSCRIPTION" | "CATEGORY" | "OBLIGATION_TEMPLATE";
+export type MemoryPatternType = "RECURRING_OBLIGATION" | "USER_BEHAVIOR" | "TIMING_PATTERN";
+
+export interface MemoryEntity {
+  id: string;
+  type: MemoryEntityType;
+  name: string;
+  normalizedKey: string;
+  metadata?: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MemoryPattern {
+  id: string;
+  patternType: MemoryPatternType;
+  referenceId: string;
+  patternData: Record<string, unknown> | null;
+  confidence: number;
+  frequency: number;
+  lastObservedAt: string | null;
+  isUserLocked: boolean;
+  isSuppressed: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MemoryContext {
+  currentFocus: string | null;
+  recentActions: Array<Record<string, unknown>>;
+  activeCategories: Array<Record<string, unknown>>;
+  cognitiveLoadScore: number;
+  updatedAt: string | null;
+}
+
+export interface MemorySummary {
+  recurringPatterns: MemoryPattern[];
+  behaviorProfile: {
+    labels: string[];
+    confidence: number;
+    frequency: number;
+  };
+  currentContext: MemoryContext;
+  topVendors: string[];
+}
+
 export interface ObligationHistory {
   auditEvents: Array<{
     id: string;

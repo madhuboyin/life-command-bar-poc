@@ -25,6 +25,7 @@ import DashboardInsightsSection from "./dashboard-insights-section";
 import DailyPulseEntryBanner from "./daily-pulse-entry-banner";
 import ReadyToActBanner from "./ready-to-act-banner";
 import AutoFlowCard from "./auto-flow-card";
+import MemoryContextCard from "./memory-context-card";
 
 type Props = {
   initialData: TodayFeedResponse;
@@ -134,6 +135,7 @@ export default function HomeShell({
         </Link>
       </div>
       <ReadyToActBanner autoFlow={autoFlow} />
+      <MemoryContextCard />
       <section
         style={{
           border: "1px solid #e5e7eb",

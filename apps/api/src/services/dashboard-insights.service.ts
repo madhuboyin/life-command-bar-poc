@@ -12,6 +12,7 @@ import type { PersonalizationSignals } from "../types/personalization.types";
 import type { DecisionTrace, TrustWhy } from "../utils/trust-layer";
 import { toWhyConfidence } from "../utils/trust-layer";
 import { AutoFlowService } from "./auto-flow.service";
+import { HomeMemoryService } from "./home-memory.service";
 
 const LOOKBACK_DAYS = 7;
 const QUICK_WIN_CONFIDENCE_THRESHOLD = 0.85;
@@ -146,6 +147,7 @@ type TopInsightInput = {
 export class DashboardInsightsService {
   private readonly personalizationService = new PersonalizationService();
   private readonly autoFlowService = new AutoFlowService();
+  private readonly homeMemoryService = new HomeMemoryService();
 
   async getInsights(
     userId: string,
@@ -164,7 +166,8 @@ export class DashboardInsightsService {
       resolutionRunsThisWeek,
       remindersDueSoon,
       personalizationSummary,
-      autoFlowSummary
+      autoFlowSummary,
+      memorySummary
     ] = await Promise.all([
       prisma.obligation.findMany({
         where: {
@@ -259,7 +262,8 @@ export class DashboardInsightsService {
           readyCount: 0,
           suggestedCount: 0
         }
-      }))
+      })),
+      this.homeMemoryService.getSummary(userId).catch(() => null)
     ]);
     const signals = personalizationSummary?.signals ?? getDefaultSignals();
 
@@ -338,14 +342,35 @@ export class DashboardInsightsService {
       postponedStats,
       remindersDueSoon
     }).map((card) => attachCardWhy(card, summary, includeTrace));
+    if (memorySummary?.recurringPatterns?.length) {
+      const recurringCount = memorySummary.recurringPatterns.length;
+      const topVendor = memorySummary.topVendors[0] ?? "your key vendors";
+      const openCategoryIndex = cards.findIndex((card) => card.key === "open_category");
+      if (openCategoryIndex >= 0) {
+        const baseCard = cards[openCategoryIndex];
+        cards[openCategoryIndex] = {
+          ...baseCard,
+          title: "Recurring Patterns",
+          value: String(recurringCount),
+          supportingText: `${topVendor} appears repeatedly based on your past obligations.`
+        };
+      }
+    }
 
     const baseWithAutoFlow =
       autoFlowSummary.summary.readyCount > 0
         ? buildAutoFlowTopInsight(autoFlowSummary.summary.readyCount)
         : topInsightBase;
+    const memoryAwareTopInsight =
+      shouldUseMemoryTopInsight({
+        overdueOrUrgent,
+        recurringCount: memorySummary?.recurringPatterns?.length ?? 0
+      }) && memorySummary
+        ? buildMemoryTopInsight(memorySummary)
+        : baseWithAutoFlow;
 
     const topInsight = attachTopInsightWhy(
-      baseWithAutoFlow,
+      memoryAwareTopInsight,
       summary,
       signals,
       includeTrace
@@ -907,6 +932,30 @@ function deriveSignalsFromCardKey(key: DashboardCardBase["key"]) {
   return ["high importance"];
 }
 
+function shouldUseMemoryTopInsight(input: {
+  overdueOrUrgent: number;
+  recurringCount: number;
+}) {
+  return input.recurringCount > 0 && input.overdueOrUrgent <= 1;
+}
+
+function buildMemoryTopInsight(memorySummary: {
+  recurringPatterns: Array<{ patternData: unknown }>;
+  topVendors: string[];
+}): TopInsightBase {
+  const firstPattern = memorySummary.recurringPatterns[0];
+  const firstPatternData = asRecord(firstPattern?.patternData);
+  const vendor = toStringOrNull(firstPatternData?.vendor) ?? memorySummary.topVendors[0] ?? "Key vendors";
+  const recurrenceType = toStringOrNull(firstPatternData?.recurrenceType)?.toLowerCase() ?? "recurring";
+
+  return {
+    title: "Recurring items are predictable now",
+    description: `${vendor} shows a ${recurrenceType} pattern based on your history.`,
+    tone: "neutral",
+    targetView: "subscriptions"
+  };
+}
+
 function toCategoryLabel(value: ObligationType) {
   switch (value) {
     case ObligationType.BILL:
@@ -975,4 +1024,13 @@ function getDefaultSignals(): PersonalizationSignals {
     journeyCompletionStyle: "mixed",
     reminderReliance: "low"
   };
+}
+
+function asRecord(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function toStringOrNull(value: unknown) {
+  return typeof value === "string" ? value : null;
 }

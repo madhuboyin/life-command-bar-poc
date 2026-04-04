@@ -42,6 +42,7 @@ import { useFlowSession } from "./flow-session-provider";
 import SourceBadge from "./source-badge";
 import ConfidenceBadge from "./confidence-badge";
 import CorrectionPanel from "./correction-panel";
+import MemoryPatternsPanel from "./memory-patterns-panel";
 
 type Props = {
   obligation: Obligation;
@@ -274,6 +275,7 @@ export default function ObligationDetailClient({ obligation }: Props) {
       </section>
 
       <CorrectionPanel obligation={current} onCorrected={setCurrent} />
+      <MemoryPatternsPanel obligation={current} />
 
       <section style={cardStyles.bordered}>
         <div style={text.label}>Timestamps</div>

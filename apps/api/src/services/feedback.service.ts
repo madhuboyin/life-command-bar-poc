@@ -2,6 +2,7 @@ import { z } from "zod";
 import { FeedbackRepository } from "../repositories/feedback.repository";
 import { prisma } from "../clients/prisma.client";
 import { AppError } from "../utils/app-error";
+import { HomeMemoryService } from "./home-memory.service";
 
 const feedbackSchema = z.object({
   userId: z.string().min(1),
@@ -23,6 +24,7 @@ const feedbackSchema = z.object({
 
 export class FeedbackService {
   private readonly repository = new FeedbackRepository();
+  private readonly homeMemoryService = new HomeMemoryService();
 
   async create(payload: unknown) {
     const input = feedbackSchema.parse(payload);
@@ -41,6 +43,22 @@ export class FeedbackService {
       }
     }
 
-    return this.repository.create(input);
+    const created = await this.repository.create(input);
+
+    await this.homeMemoryService
+      .captureSignal({
+        userId: input.userId,
+        sourceType: "FEEDBACK",
+        referenceId: input.obligationId ?? null,
+        eventType: "feedback_event_created",
+        metadata: {
+          type: input.type,
+          feedItemId: input.feedItemId ?? null
+        },
+        rebuild: true
+      })
+      .catch(() => null);
+
+    return created;
   }
 }

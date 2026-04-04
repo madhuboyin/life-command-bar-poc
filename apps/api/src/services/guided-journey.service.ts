@@ -28,6 +28,7 @@ import type {
   GuidedJourneyStepPayload
 } from "../types/guided-journey.types";
 import { toWhyConfidence } from "../utils/trust-layer";
+import { HomeMemoryService } from "./home-memory.service";
 
 const selectOptionSchema = z.object({
   optionKey: z.string().min(1)
@@ -42,6 +43,7 @@ export class GuidedJourneyService {
   private readonly personalizationService = new PersonalizationService();
   private readonly dailyPulseService = new DailyPulseService();
   private readonly obligationRepository = new ObligationRepository();
+  private readonly homeMemoryService = new HomeMemoryService();
 
   async createOrResume(userId: string, obligationId: string) {
     const obligation = await this.repository.findObligationById(userId, obligationId);
@@ -82,6 +84,15 @@ export class GuidedJourneyService {
         throw new AppError("NOT_FOUND", "Guided journey not found", 404);
       }
 
+      await this.captureMemorySignal({
+        userId,
+        referenceId: refreshed.obligationId,
+        eventType: "guided_journey_resumed",
+        metadata: {
+          journeyId: refreshed.id
+        }
+      });
+
       return {
         journey: this.toJourneyPayload(refreshed),
         resumed: true
@@ -92,6 +103,15 @@ export class GuidedJourneyService {
       .getSummary(userId)
       .catch(() => null);
     const signals = personalizationSummary?.signals ?? getDefaultSignals();
+    const memorySignals = await this.homeMemoryService.getDecisionSignals(userId).catch(() => ({
+      currentFocus: null,
+      cognitiveLoadScore: 0,
+      activeCategories: [],
+      behaviorLabels: [],
+      recurringVendors: [],
+      recurringVendorKeys: [],
+      recurringVendorTypeKeys: []
+    }));
 
     const baseTemplate = buildGuidedJourneyTemplate(mapObligation(obligation));
     const personalizedTemplate = this.personalizationService.personalizeGuidedTemplate(
@@ -104,6 +124,7 @@ export class GuidedJourneyService {
     );
     const template = personalizedTemplate.template;
     template.steps = normalizeTemplateSteps(template.steps);
+    this.applyMemoryTemplateTuning(template, memorySignals);
 
     const created = await this.repository.runInTransaction(async (tx) => {
       const journey = await this.repository.createJourneyFromTemplate(
@@ -144,6 +165,16 @@ export class GuidedJourneyService {
       );
 
       return journey;
+    });
+
+    await this.captureMemorySignal({
+      userId,
+      referenceId: created.obligationId,
+      eventType: "guided_journey_created",
+      metadata: {
+        journeyId: created.id,
+        journeyType: created.journeyType
+      }
     });
 
     return {
@@ -251,6 +282,16 @@ export class GuidedJourneyService {
     });
 
     const updated = await this.requireJourney(userId, journeyId);
+    await this.captureMemorySignal({
+      userId,
+      referenceId: updated.obligationId,
+      eventType: "guided_journey_option_selected",
+      metadata: {
+        journeyId: updated.id,
+        stepKey: currentStep.stepKey,
+        optionKey: input.optionKey
+      }
+    });
     return {
       journey: this.toJourneyPayload(updated)
     };
@@ -374,9 +415,27 @@ export class GuidedJourneyService {
 
     if (isFinalStep) {
       await this.markObligationResolvedFromGuided(userId, journey.obligationId);
+      await this.captureMemorySignal({
+        userId,
+        referenceId: journey.obligationId,
+        eventType: "guided_journey_completed",
+        metadata: {
+          journeyId: journey.id,
+          completionSource: "advance_final_step"
+        }
+      });
     }
 
     const updated = await this.requireJourney(userId, journeyId);
+    await this.captureMemorySignal({
+      userId,
+      referenceId: updated.obligationId,
+      eventType: "guided_journey_completed",
+      metadata: {
+        journeyId: updated.id,
+        completionSource: "explicit_complete"
+      }
+    });
     return {
       journey: this.toJourneyPayload(updated)
     };
@@ -437,6 +496,14 @@ export class GuidedJourneyService {
     await this.markObligationResolvedFromGuided(userId, journey.obligationId);
 
     const updated = await this.requireJourney(userId, journeyId);
+    await this.captureMemorySignal({
+      userId,
+      referenceId: updated.obligationId,
+      eventType: "guided_journey_step_reversed",
+      metadata: {
+        journeyId: updated.id
+      }
+    });
     return {
       journey: this.toJourneyPayload(updated)
     };
@@ -690,6 +757,27 @@ export class GuidedJourneyService {
       .catch(() => null);
   }
 
+  private applyMemoryTemplateTuning(
+    template: ReturnType<typeof buildGuidedJourneyTemplate>,
+    memorySignals: Awaited<ReturnType<HomeMemoryService["getDecisionSignals"]>>
+  ) {
+    if (
+      memorySignals.behaviorLabels.includes("postpone-heavy") &&
+      (template.journeyType === "RENEWAL" || template.journeyType === "COMMITMENT")
+    ) {
+      setRecommendedOption(template, "finalize", "do_now");
+      template.recommendedPath =
+        "You often postpone this type. This path favors a concrete completion step now.";
+    }
+
+    if (
+      template.journeyType === "SUBSCRIPTION" &&
+      memorySignals.behaviorLabels.includes("noise-sensitive")
+    ) {
+      setRecommendedOption(template, "choose_decision", "cancel");
+    }
+  }
+
   private ensureJourneyEditable(
     status: GuidedJourneyStatus,
     obligationStatus: ObligationStatus
@@ -776,6 +864,24 @@ export class GuidedJourneyService {
       position: step.position
     };
   }
+
+  private async captureMemorySignal(input: {
+    userId: string;
+    referenceId?: string | null;
+    eventType: string;
+    metadata?: Record<string, unknown>;
+  }) {
+    await this.homeMemoryService
+      .captureSignal({
+        userId: input.userId,
+        sourceType: "GUIDED_JOURNEY",
+        referenceId: input.referenceId ?? null,
+        eventType: input.eventType,
+        metadata: input.metadata,
+        rebuild: true
+      })
+      .catch(() => null);
+  }
 }
 
 function buildJourneyWhy(journey: GuidedJourneyWithRelations) {
@@ -848,6 +954,16 @@ function parseStepOptions(value: Prisma.JsonValue | null): GuidedJourneyOption[]
   }
 
   return options;
+}
+
+function setRecommendedOption(
+  template: ReturnType<typeof buildGuidedJourneyTemplate>,
+  stepKey: string,
+  optionKey: string
+) {
+  const step = template.steps.find((item) => item.key === stepKey);
+  if (!step) return;
+  step.recommendedOption = optionKey;
 }
 
 function getDefaultSignals(): PersonalizationSignals {

@@ -19,6 +19,7 @@ import {
   type FocusDurationMinutes
 } from "./focus-mode.selector";
 import { PersonalizationService } from "./personalization.service";
+import { HomeMemoryService } from "./home-memory.service";
 
 const createFocusSessionSchema = z.object({
   userId: z.string().min(1),
@@ -86,6 +87,7 @@ export class FocusModeService {
   private readonly feedbackRepository = new FeedbackRepository();
   private readonly obligationRepository = new ObligationRepository();
   private readonly personalizationService = new PersonalizationService();
+  private readonly homeMemoryService = new HomeMemoryService();
 
   async createSession(payload: unknown) {
     const input = createFocusSessionSchema.parse(payload);
@@ -141,6 +143,16 @@ export class FocusModeService {
     if (!synced) {
       throw new AppError("NOT_FOUND", "Focus session not found", 404);
     }
+
+    await this.captureMemorySignal({
+      userId: input.userId,
+      referenceId: synced.id,
+      eventType: "focus_session_created",
+      metadata: {
+        durationMinutes: input.durationMinutes,
+        totalItems: synced.items.length
+      }
+    });
 
     return {
       resumedExisting: false,
@@ -221,6 +233,12 @@ export class FocusModeService {
     const synced = await this.syncSessionState(userId, sessionId);
     if (!synced) throw new AppError("NOT_FOUND", "Focus session not found", 404);
 
+    await this.captureMemorySignal({
+      userId,
+      referenceId: sessionId,
+      eventType: "focus_session_started"
+    });
+
     return {
       session: this.toPayload(synced)
     };
@@ -250,6 +268,12 @@ export class FocusModeService {
 
     const synced = await this.syncSessionState(userId, session.id);
     if (!synced) throw new AppError("NOT_FOUND", "Focus session not found", 404);
+
+    await this.captureMemorySignal({
+      userId,
+      referenceId: session.id,
+      eventType: "focus_session_moved_next"
+    });
 
     return {
       session: this.toPayload(synced)
@@ -292,6 +316,12 @@ export class FocusModeService {
 
     const synced = await this.syncSessionState(userId, session.id);
     if (!synced) throw new AppError("NOT_FOUND", "Focus session not found", 404);
+
+    await this.captureMemorySignal({
+      userId,
+      referenceId: synced.id,
+      eventType: "focus_session_completed"
+    });
 
     return {
       session: this.toPayload(synced)
@@ -498,16 +528,31 @@ export class FocusModeService {
       return next;
     });
 
+    await this.captureMemorySignal({
+      userId,
+      referenceId: updated.id,
+      eventType: "focus_session_abandoned"
+    });
+
     return {
       session: this.toPayload(updated)
     };
   }
 
   private async buildSelection(userId: string, durationMinutes: FocusDurationMinutes) {
-    const [rawItems, feedbackMap, personalizationSummary] = await Promise.all([
+    const [rawItems, feedbackMap, personalizationSummary, memorySignals] = await Promise.all([
       this.repository.listObligationsForPlanning(userId),
       this.feedbackRepository.getRecentFeedbackMap(userId),
-      this.personalizationService.getSummary(userId).catch(() => null)
+      this.personalizationService.getSummary(userId).catch(() => null),
+      this.homeMemoryService.getDecisionSignals(userId).catch(() => ({
+        currentFocus: null,
+        cognitiveLoadScore: 0,
+        activeCategories: [],
+        behaviorLabels: [],
+        recurringVendors: [],
+        recurringVendorKeys: [],
+        recurringVendorTypeKeys: []
+      }))
     ]);
     const signals = personalizationSummary?.signals ?? getDefaultSignals();
     const mappedItems = rawItems.map((item) => mapObligation(item));
@@ -529,8 +574,14 @@ export class FocusModeService {
       durationMinutes,
       obligations: filtered,
       estimateMinutes: (estimateInput) => estimateFocusMinutes(estimateInput),
-      getPersonalizationDelta: (scoreInput) =>
-        this.personalizationService.getTodayFeedScoreAdjustment(signals, scoreInput)
+      getPersonalizationDelta: (scoreInput) => {
+        const base = this.personalizationService.getTodayFeedScoreAdjustment(signals, scoreInput);
+        const memory = this.getMemorySelectionDelta(memorySignals, scoreInput);
+        return {
+          delta: base.delta + memory.delta,
+          reasons: [...base.reasons, ...memory.reasons]
+        };
+      }
     });
   }
 
@@ -614,6 +665,16 @@ export class FocusModeService {
         },
         tx
       );
+    });
+
+    await this.captureMemorySignal({
+      userId: input.userId,
+      referenceId: input.obligationId,
+      eventType: input.eventType,
+      metadata: {
+        focusSessionId: input.sessionId,
+        status: input.status
+      }
     });
   }
 
@@ -773,6 +834,59 @@ export class FocusModeService {
       },
       currentItem,
       items
+    };
+  }
+
+  private async captureMemorySignal(input: {
+    userId: string;
+    referenceId?: string | null;
+    eventType: string;
+    metadata?: Record<string, unknown>;
+  }) {
+    await this.homeMemoryService
+      .captureSignal({
+        userId: input.userId,
+        sourceType: "FOCUS_MODE",
+        referenceId: input.referenceId ?? null,
+        eventType: input.eventType,
+        metadata: input.metadata,
+        rebuild: true
+      })
+      .catch(() => null);
+  }
+
+  private getMemorySelectionDelta(
+    memorySignals: Awaited<ReturnType<HomeMemoryService["getDecisionSignals"]>>,
+    input: {
+      obligationType: "BILL" | "SUBSCRIPTION" | "RENEWAL" | "COMMITMENT";
+      isUrgent: boolean;
+      isQuickWin: boolean;
+      isMoney: boolean;
+      importanceScore: number;
+      urgencyScore: number;
+    }
+  ) {
+    let delta = 0;
+    const reasons: string[] = [];
+
+    if (memorySignals.currentFocus === input.obligationType) {
+      delta += 4;
+      reasons.push("matches current focus");
+    }
+
+    if (input.isUrgent && memorySignals.behaviorLabels.includes("postpone-heavy")) {
+      delta += 5;
+      reasons.push("reduces postpone loop");
+    }
+
+    if (input.isQuickWin && memorySignals.behaviorLabels.includes("quick-win friendly")) {
+      delta += 4;
+      reasons.push("aligns with quick-win pattern");
+    }
+
+    return {
+      delta,
+      reasons
     };
   }
 }

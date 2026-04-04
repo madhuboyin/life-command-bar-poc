@@ -18,6 +18,7 @@ import { personalizationRouter } from "./routes/personalization.routes";
 import { flowSessionRouter } from "./routes/flow-session.routes";
 import { autoFlowRouter } from "./routes/auto-flow.routes";
 import { focusModeRouter } from "./routes/focus-mode.routes";
+import { memoryRouter } from "./routes/memory.routes";
 
 export function createApp() {
   const app = express();
@@ -42,6 +43,7 @@ export function createApp() {
   app.use("/api/guided-journeys", guidedJourneyRouter);
   app.use("/api/outcome-feedback", outcomeFeedbackRouter);
   app.use("/api/personalization", personalizationRouter);
+  app.use("/api/memory", memoryRouter);
   app.use("/api", resolutionRouter);
 
   return app;

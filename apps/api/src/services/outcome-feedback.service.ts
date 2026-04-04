@@ -2,6 +2,7 @@ import { OutcomeSourceContext, OutcomeType, Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../clients/prisma.client";
 import { AppError } from "../utils/app-error";
+import { HomeMemoryService } from "./home-memory.service";
 
 const outcomeFeedbackSchema = z.object({
   userId: z.string().min(1),
@@ -17,6 +18,8 @@ const outcomeFeedbackSchema = z.object({
 });
 
 export class OutcomeFeedbackService {
+  private readonly homeMemoryService = new HomeMemoryService();
+
   async create(payload: unknown) {
     const input = outcomeFeedbackSchema.parse(payload);
 
@@ -97,6 +100,21 @@ export class OutcomeFeedbackService {
         }
       }
     });
+
+    await this.homeMemoryService
+      .captureSignal({
+        userId: input.userId,
+        sourceType: "FEEDBACK",
+        referenceId: obligationId,
+        eventType: "outcome_feedback_submitted",
+        metadata: {
+          sourceContext: input.sourceContext,
+          outcomeType: input.outcomeType,
+          selectedActionKey: input.selectedActionKey
+        },
+        rebuild: true
+      })
+      .catch(() => null);
 
     return outcomeFeedback;
   }
