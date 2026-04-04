@@ -188,6 +188,7 @@ function parseFlowSourceType(value: string | undefined): FlowSourceType | null {
   if (value === "TODAY_FEED") return "TODAY_FEED";
   if (value === "DASHBOARD") return "DASHBOARD";
   if (value === "OBLIGATION_DETAIL") return "OBLIGATION_DETAIL";
+  if (value === "AUTO_FLOW") return "AUTO_FLOW";
   return null;
 }
 

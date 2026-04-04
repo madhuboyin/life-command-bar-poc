@@ -11,6 +11,7 @@ import { PersonalizationService } from "./personalization.service";
 import type { PersonalizationSignals } from "../types/personalization.types";
 import type { DecisionTrace, TrustWhy } from "../utils/trust-layer";
 import { toWhyConfidence } from "../utils/trust-layer";
+import { AutoFlowService } from "./auto-flow.service";
 
 const LOOKBACK_DAYS = 7;
 const QUICK_WIN_CONFIDENCE_THRESHOLD = 0.85;
@@ -144,6 +145,7 @@ type TopInsightInput = {
 
 export class DashboardInsightsService {
   private readonly personalizationService = new PersonalizationService();
+  private readonly autoFlowService = new AutoFlowService();
 
   async getInsights(
     userId: string,
@@ -161,7 +163,8 @@ export class DashboardInsightsService {
       recentAuditEvents,
       resolutionRunsThisWeek,
       remindersDueSoon,
-      personalizationSummary
+      personalizationSummary,
+      autoFlowSummary
     ] = await Promise.all([
       prisma.obligation.findMany({
         where: {
@@ -248,6 +251,15 @@ export class DashboardInsightsService {
         }
       }),
       this.personalizationService.getSummary(userId).catch(() => null)
+      ,
+      this.autoFlowService.list(userId, { limit: 12 }).catch(() => ({
+        generatedAt: new Date().toISOString(),
+        items: [],
+        summary: {
+          readyCount: 0,
+          suggestedCount: 0
+        }
+      }))
     ]);
     const signals = personalizationSummary?.signals ?? getDefaultSignals();
 
@@ -327,8 +339,13 @@ export class DashboardInsightsService {
       remindersDueSoon
     }).map((card) => attachCardWhy(card, summary, includeTrace));
 
+    const baseWithAutoFlow =
+      autoFlowSummary.summary.readyCount > 0
+        ? buildAutoFlowTopInsight(autoFlowSummary.summary.readyCount)
+        : topInsightBase;
+
     const topInsight = attachTopInsightWhy(
-      topInsightBase,
+      baseWithAutoFlow,
       summary,
       signals,
       includeTrace
@@ -695,6 +712,18 @@ function chooseTopInsight(input: TopInsightInput): TopInsightBase {
     title: `You have ${input.activeNow} open ${pluralize("item", input.activeNow)}`,
     description: "Start with one quick win to reduce mental load.",
     tone: "neutral",
+    targetView: "active_now"
+  };
+}
+
+function buildAutoFlowTopInsight(readyCount: number): TopInsightBase {
+  return {
+    title: `${readyCount} item${readyCount === 1 ? "" : "s"} are ready now`,
+    description:
+      readyCount === 1
+        ? "The system prepared one ready-to-act flow you can confirm immediately."
+        : "The system prepared ready-to-act flows. Confirm one to move quickly.",
+    tone: "positive",
     targetView: "active_now"
   };
 }

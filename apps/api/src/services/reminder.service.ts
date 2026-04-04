@@ -1,6 +1,8 @@
 import { z } from "zod";
+import { AutoFlowTriggerType } from "@prisma/client";
 import { prisma } from "../clients/prisma.client";
 import { AppError } from "../utils/app-error";
+import { AutoFlowService } from "./auto-flow.service";
 
 const createReminderSchema = z.object({
   userId: z.string().min(1),
@@ -10,6 +12,8 @@ const createReminderSchema = z.object({
 });
 
 export class ReminderService {
+  private readonly autoFlowService = new AutoFlowService();
+
   async create(payload: unknown) {
     const input = createReminderSchema.parse(payload);
 
@@ -49,10 +53,26 @@ export class ReminderService {
       }
     });
 
+    const scheduledFor = new Date(input.scheduledFor);
+    if (
+      input.obligationId &&
+      scheduledFor.getTime() - Date.now() <= 60 * 60 * 1000
+    ) {
+      await this.autoFlowService.triggerForEvent({
+        userId: input.userId,
+        obligationId: input.obligationId,
+        triggerType: AutoFlowTriggerType.REMINDER_TRIGGER,
+        source: "reminder_created_near_due",
+        reasonHint: "Reminder is due soon"
+      });
+    }
+
     return reminder;
   }
 
   async list(userId: string) {
+    await this.autoFlowService.processDueReminderTriggers(userId);
+
     const items = await prisma.reminder.findMany({
       where: { userId },
       orderBy: { scheduledFor: "asc" }

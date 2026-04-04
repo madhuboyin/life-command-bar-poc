@@ -2,7 +2,8 @@ export type FlowSourceType =
   | "DAILY_PULSE"
   | "TODAY_FEED"
   | "DASHBOARD"
-  | "OBLIGATION_DETAIL";
+  | "OBLIGATION_DETAIL"
+  | "AUTO_FLOW";
 
 export type FlowSessionState = "ACTIVE" | "COMPLETED" | "ABANDONED";
 

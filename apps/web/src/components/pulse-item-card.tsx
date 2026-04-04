@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  acceptAutoFlow,
   completeDailyPulseItem,
   createFeedback,
   createOrResumeGuidedJourney,
@@ -23,6 +24,7 @@ import { useToast } from "./ui/toast-provider";
 import SourceBadge from "./source-badge";
 import ConfidenceBadge from "./confidence-badge";
 import WhyThisExplanation from "./why-this-explanation";
+import AutoFlowBadge from "./auto-flow-badge";
 
 type Props = {
   item: DailyPulseItem;
@@ -61,6 +63,9 @@ export default function PulseItemCard({ item, flowObligationIds, onItemUpdated }
   async function handleGuideMe() {
     try {
       setLoading("guide");
+      if (item.autoFlow) {
+        await acceptAutoFlow(item.autoFlow.id).catch(() => null);
+      }
       const pulseUpdate = await openGuidedDailyPulseItem(item.obligationId).catch(() => null);
       if (pulseUpdate) {
         onItemUpdated(pulseUpdate);
@@ -196,6 +201,7 @@ export default function PulseItemCard({ item, flowObligationIds, onItemUpdated }
           confidenceBand={item.confidenceBand}
           needsReview={item.needsReview}
         />
+        {item.autoFlow ? <AutoFlowBadge autoFlow={item.autoFlow} /> : null}
       </div>
       {item.status === "OPENED_GUIDED" ? (
         <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 6 }}>

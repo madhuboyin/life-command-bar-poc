@@ -11,18 +11,21 @@ import { PersonalizationService } from "./personalization.service";
 import type { PersonalizationSignals } from "../types/personalization.types";
 import type { DecisionTrace, TrustWhy } from "../utils/trust-layer";
 import { toWhyConfidence } from "../utils/trust-layer";
+import { AutoFlowService, type AutoFlowSurfaceItem } from "./auto-flow.service";
 
 type FeedCandidate = {
   obligation: Awaited<ReturnType<ObligationRepository["findActiveForFeed"]>>[number];
   candidateScore: number;
   hookType: "urgent" | "money" | "quick_win" | "none";
   personalizationReasons: string[];
+  autoFlow: AutoFlowSurfaceItem | null;
 };
 
 export class TodayFeedService {
   private readonly obligationRepository = new ObligationRepository();
   private readonly feedbackRepository = new FeedbackRepository();
   private readonly personalizationService = new PersonalizationService();
+  private readonly autoFlowService = new AutoFlowService();
 
   async getTodayFeed(userId: string, options?: { includeTrace?: boolean }) {
     const includeTrace = options?.includeTrace ?? false;
@@ -41,6 +44,10 @@ export class TodayFeedService {
       if (item.status === ObligationStatus.IGNORED) return false;
       return true;
     });
+    const autoFlowByObligation = await this.autoFlowService.getBoostMapByObligationIds(
+      userId,
+      eligible.map((item) => item.id)
+    );
 
     const candidates = eligible.map((obligation) => {
       const urgency = Number(obligation.urgencyScore);
@@ -66,6 +73,9 @@ export class TodayFeedService {
 
       const postponedPenalty =
         obligation.status === ObligationStatus.POSTPONED ? 5 : 0;
+      const autoFlow = autoFlowByObligation.get(obligation.id) ?? null;
+      const autoFlowBoost =
+        autoFlow?.state === "READY" ? 18 : autoFlow?.state === "SUGGESTED" ? 10 : 0;
 
       const score =
         urgency * 0.3 +
@@ -74,7 +84,8 @@ export class TodayFeedService {
         quickWin * 0.15 +
         moneyHook * 0.15 -
         effortPenalty * 0.03 -
-        postponedPenalty;
+        postponedPenalty +
+        autoFlowBoost;
       const adjustment = this.personalizationService.getTodayFeedScoreAdjustment(signals, {
         obligationType: obligation.type,
         isUrgent: urgency >= 85 || Boolean(obligation.dueDate && obligation.dueDate <= new Date(Date.now() + 48 * 60 * 60 * 1000)),
@@ -88,12 +99,14 @@ export class TodayFeedService {
       if (urgency >= 85) hookType = "urgent";
       else if (moneyHook > 0) hookType = "money";
       else if (quickWin > 0) hookType = "quick_win";
+      else if (autoFlow?.state === "READY") hookType = "urgent";
 
       return {
         obligation,
         candidateScore: score + adjustment.delta,
         hookType,
-        personalizationReasons: adjustment.reasons
+        personalizationReasons: adjustment.reasons,
+        autoFlow
       };
     });
 
@@ -154,6 +167,15 @@ export class TodayFeedService {
         })),
         rank: index + 1,
         hookType: item.hookType,
+        autoFlow: item.autoFlow
+          ? {
+              id: item.autoFlow.id,
+              triggerType: item.autoFlow.triggerType,
+              state: item.autoFlow.state,
+              priorityScore: item.autoFlow.priorityScore,
+              ctaLabel: item.autoFlow.cta.label
+            }
+          : null,
         confidenceBand: mappedObligation.confidenceBand,
         sourceType: mappedObligation.sourceType,
         needsReview: mappedObligation.needsReview,

@@ -105,6 +105,7 @@ export interface TodayFeedItem {
   secondaryActions: FeedAction[];
   rank: number;
   hookType: "urgent" | "money" | "quick_win" | "none";
+  autoFlow: AutoFlowItemSummary | null;
   confidenceBand: ConfidenceBand;
   sourceType: TrustSourceType;
   needsReview: boolean;
@@ -121,7 +122,8 @@ export type FlowSourceType =
   | "DAILY_PULSE"
   | "TODAY_FEED"
   | "DASHBOARD"
-  | "OBLIGATION_DETAIL";
+  | "OBLIGATION_DETAIL"
+  | "AUTO_FLOW";
 
 export type FlowSessionState = "ACTIVE" | "COMPLETED" | "ABANDONED";
 
@@ -216,6 +218,51 @@ export interface DashboardInsightsResponse {
   topInsight: DashboardTopInsight;
 }
 
+export interface AutoFlowItemSummary {
+  id: string;
+  triggerType:
+    | "INGESTION_TRIGGER"
+    | "URGENCY_TRIGGER"
+    | "PATTERN_TRIGGER"
+    | "REMINDER_TRIGGER";
+  state: "READY" | "SUGGESTED" | "ACCEPTED" | "DISMISSED";
+  priorityScore: number;
+  ctaLabel: string;
+}
+
+export interface AutoFlowItem {
+  id: string;
+  obligationId: string;
+  triggerType:
+    | "INGESTION_TRIGGER"
+    | "URGENCY_TRIGGER"
+    | "PATTERN_TRIGGER"
+    | "REMINDER_TRIGGER";
+  state: "READY" | "SUGGESTED" | "ACCEPTED" | "DISMISSED";
+  confidence: number;
+  urgencyScore: number;
+  priorityScore: number;
+  source: string | null;
+  reason: string | null;
+  timestamp: string;
+  obligation: Obligation;
+  why: WhyExplanation;
+  decisionTrace: DecisionTrace;
+  cta: {
+    label: string;
+    action: "OPEN_GUIDED";
+  };
+}
+
+export interface AutoFlowListResponse {
+  generatedAt: string;
+  items: AutoFlowItem[];
+  summary: {
+    readyCount: number;
+    suggestedCount: number;
+  };
+}
+
 export interface ResolutionRecommendation {
   flowKey: string;
   recommendation: string;
@@ -265,6 +312,7 @@ export interface DailyPulseItem {
   actionLabel: string;
   hookType: "urgent" | "quick_win" | "money" | "postponed" | "important";
   priorityScore: number;
+  autoFlow: AutoFlowItemSummary | null;
   status: "PENDING" | "OPENED_GUIDED";
   decisionTrace?: DecisionTrace;
 }

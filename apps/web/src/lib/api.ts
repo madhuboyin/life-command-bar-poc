@@ -1,4 +1,5 @@
 import type {
+  AutoFlowListResponse,
   CommandExecuteResponse,
   CommandParseResponse,
   DailyPulseItemUpdateResponse,
@@ -752,6 +753,60 @@ export async function createOrResumeFlowSession(input: {
   });
 
   return handleResponse<FlowSessionResponse>(res);
+}
+
+export async function getAutoFlow(params?: {
+  limit?: number;
+  includeAccepted?: boolean;
+}): Promise<AutoFlowListResponse> {
+  const query = new URLSearchParams();
+  if (typeof params?.limit === "number") {
+    query.set("limit", String(params.limit));
+  }
+  if (params?.includeAccepted) {
+    query.set("includeAccepted", "true");
+  }
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+
+  const res = await apiFetch(`/auto-flow${suffix}`, {
+    cache: "no-store"
+  });
+  return handleResponse<AutoFlowListResponse>(res);
+}
+
+export async function triggerAutoFlow(input: {
+  obligationId: string;
+  triggerType?:
+    | "INGESTION_TRIGGER"
+    | "URGENCY_TRIGGER"
+    | "PATTERN_TRIGGER"
+    | "REMINDER_TRIGGER";
+  source?: string;
+}) {
+  const res = await apiFetch("/auto-flow/trigger", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  return handleResponse<{ triggered: boolean; item?: unknown }>(res);
+}
+
+export async function acceptAutoFlow(autoFlowId: string) {
+  const res = await apiFetch(`/auto-flow/${autoFlowId}/accept`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
+  return handleResponse<{ item: unknown }>(res);
+}
+
+export async function dismissAutoFlow(autoFlowId: string, reason?: string) {
+  const res = await apiFetch(`/auto-flow/${autoFlowId}/dismiss`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reason })
+  });
+  return handleResponse<{ item: unknown }>(res);
 }
 
 export async function getFlowSessionById(sessionId: string): Promise<FlowSessionResponse> {

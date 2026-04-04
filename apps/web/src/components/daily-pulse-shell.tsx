@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { getDailyPulse } from "../lib/api";
+import { getAutoFlow, getDailyPulse } from "../lib/api";
 import type {
+  AutoFlowListResponse,
   DailyPulseItemUpdateResponse,
   DailyPulseResponse
 } from "../lib/types";
@@ -15,17 +16,22 @@ import PulseItemCard from "./pulse-item-card";
 import PulseCompletionCard from "./pulse-completion-card";
 import PulseMomentumCard from "./pulse-momentum-card";
 import WhyThisExplanation from "./why-this-explanation";
+import ReadyToActBanner from "./ready-to-act-banner";
+import AutoFlowCard from "./auto-flow-card";
 
 type Props = {
   initialPulse: DailyPulseResponse | null;
+  initialAutoFlow: AutoFlowListResponse;
   initialError?: string | null;
 };
 
 export default function DailyPulseShell({
   initialPulse,
+  initialAutoFlow,
   initialError = null
 }: Props) {
   const [pulse, setPulse] = useState<DailyPulseResponse | null>(initialPulse);
+  const [autoFlow, setAutoFlow] = useState<AutoFlowListResponse>(initialAutoFlow);
   const [error, setError] = useState<string | null>(initialError);
   const [loading, setLoading] = useState(false);
 
@@ -33,8 +39,12 @@ export default function DailyPulseShell({
     try {
       setLoading(true);
       setError(null);
-      const data = await getDailyPulse({ refresh: true, markOpened: true });
+      const [data, autoFlowData] = await Promise.all([
+        getDailyPulse({ refresh: true, markOpened: true }),
+        getAutoFlow({ limit: 5 })
+      ]);
       setPulse(data);
+      setAutoFlow(autoFlowData);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not refresh pulse");
     } finally {
@@ -43,12 +53,13 @@ export default function DailyPulseShell({
   }
 
   function handleItemUpdated(update: DailyPulseItemUpdateResponse) {
+    const shouldRemove =
+      update.status === "COMPLETED" ||
+      update.status === "POSTPONED" ||
+      update.status === "DISMISSED";
+
     setPulse((current) => {
       if (!current) return current;
-      const shouldRemove =
-        update.status === "COMPLETED" ||
-        update.status === "POSTPONED" ||
-        update.status === "DISMISSED";
 
       const nextItems = shouldRemove
         ? current.items.filter((item) => item.obligationId !== update.obligationId)
@@ -69,6 +80,10 @@ export default function DailyPulseShell({
         quickSummary: getQuickSummaryFromProgress(update.progress)
       };
     });
+
+    if (shouldRemove) {
+      void refreshPulse();
+    }
   }
 
   return (
@@ -118,6 +133,21 @@ export default function DailyPulseShell({
 
       {pulse ? (
         <div style={{ display: "grid", gap: 14 }}>
+          <ReadyToActBanner autoFlow={autoFlow} />
+
+          {autoFlow.items.length > 0 ? (
+            <section style={cardStyles.section}>
+              <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 10 }}>
+                Auto-Flow
+              </div>
+              <div style={{ display: "grid", gap: 10 }}>
+                {autoFlow.items.slice(0, 2).map((item) => (
+                  <AutoFlowCard key={item.id} item={item} onUpdated={refreshPulse} />
+                ))}
+              </div>
+            </section>
+          ) : null}
+
           <section style={cardStyles.section}>
             <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 6 }}>
               Top Insight

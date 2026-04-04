@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import {
+  acceptAutoFlow,
   createOrResumeGuidedJourney,
   createFeedback,
   createOutcomeFeedback,
@@ -29,6 +30,7 @@ import { useToast } from "./ui/toast-provider";
 import SourceBadge from "./source-badge";
 import ConfidenceBadge from "./confidence-badge";
 import WhyThisExplanation from "./why-this-explanation";
+import AutoFlowBadge from "./auto-flow-badge";
 
 type Props = {
   item: TodayFeedItem;
@@ -182,6 +184,9 @@ export default function TodayFeedCard({ item, flowObligationIds, onRefresh }: Pr
     try {
       setLoading("guide");
       setError(null);
+      if (item.autoFlow) {
+        await acceptAutoFlow(item.autoFlow.id).catch(() => null);
+      }
 
       const data = await createOrResumeGuidedJourney(item.obligationId);
       const session = await flow.startSession({
@@ -229,6 +234,7 @@ export default function TodayFeedCard({ item, flowObligationIds, onRefresh }: Pr
                 confidenceBand={item.confidenceBand}
                 needsReview={item.needsReview}
               />
+              {item.autoFlow ? <AutoFlowBadge autoFlow={item.autoFlow} /> : null}
             </div>
           </div>
 

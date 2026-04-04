@@ -1,9 +1,11 @@
+import { AutoFlowTriggerType, ObligationStatus } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../clients/prisma.client";
 import { ObligationRepository } from "../repositories/obligation.repository";
 import { ObligationSort, ObligationView, SortDirection } from "../types/obligation.types";
 import { mapObligation } from "../utils/obligation.mapper";
 import { AppError } from "../utils/app-error";
+import { AutoFlowService } from "./auto-flow.service";
 
 const createObligationSchema = z.object({
   userId: z.string().min(1),
@@ -62,6 +64,7 @@ const correctionSchema = z.object({
 
 export class ObligationService {
   private readonly repository = new ObligationRepository();
+  private readonly autoFlowService = new AutoFlowService();
 
   async list(userId: string, query: Record<string, unknown>) {
     const limit = parseIntegerQuery(query.limit, 20, 1, 100);
@@ -101,14 +104,46 @@ export class ObligationService {
   async create(payload: unknown) {
     const input = createObligationSchema.parse(payload);
     const obligation = await this.repository.create(input);
-    return mapObligation(obligation);
+    const mapped = mapObligation(obligation);
+
+    await this.autoFlowService.triggerForEvent({
+      userId: mapped.userId,
+      obligationId: mapped.id,
+      triggerType: AutoFlowTriggerType.URGENCY_TRIGGER,
+      source: "manual_create",
+      reasonHint: "New obligation may be ready to act"
+    });
+
+    return mapped;
   }
 
   async update(userId: string, id: string, payload: unknown) {
     const input = updateObligationSchema.parse(payload);
     const obligation = await this.repository.update(id, userId, input);
     if (!obligation) return null;
-    return mapObligation(obligation);
+
+    const mapped = mapObligation(obligation);
+    const changedUrgencySignal =
+      input.dueDate !== undefined ||
+      input.urgencyScore !== undefined ||
+      input.importanceScore !== undefined ||
+      input.status !== undefined;
+
+    if (changedUrgencySignal) {
+      if (mapped.status === ObligationStatus.ACTIVE || mapped.status === ObligationStatus.DRAFT) {
+        await this.autoFlowService.triggerForEvent({
+          userId,
+          obligationId: mapped.id,
+          triggerType: AutoFlowTriggerType.URGENCY_TRIGGER,
+          source: "obligation_update",
+          reasonHint: "Updated details changed urgency"
+        });
+      } else {
+        await this.autoFlowService.handleObligationStatusChange(userId, mapped.id, mapped.status);
+      }
+    }
+
+    return mapped;
   }
 
   async getHistory(userId: string, id: string) {
@@ -246,7 +281,21 @@ export class ObligationService {
       });
     }
 
-    return mapObligation(corrected);
+    const mapped = mapObligation(corrected);
+
+    if (mapped.status === ObligationStatus.ACTIVE || mapped.status === ObligationStatus.DRAFT) {
+      await this.autoFlowService.triggerForEvent({
+        userId,
+        obligationId: mapped.id,
+        triggerType: AutoFlowTriggerType.URGENCY_TRIGGER,
+        source: "correction_loop",
+        reasonHint: "Corrected details changed readiness"
+      });
+    } else {
+      await this.autoFlowService.handleObligationStatusChange(userId, mapped.id, mapped.status);
+    }
+
+    return mapped;
   }
 
   async getReviewQueue(userId: string, query: Record<string, unknown>) {

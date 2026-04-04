@@ -1,7 +1,11 @@
 import HomeShell from "../components/home-shell";
 import PageHeader from "../components/ui/page-header";
-import { getDashboardInsights, getTodayFeed } from "../lib/api";
-import type { DashboardInsightsResponse, TodayFeedResponse } from "../lib/types";
+import { getAutoFlow, getDashboardInsights, getTodayFeed } from "../lib/api";
+import type {
+  AutoFlowListResponse,
+  DashboardInsightsResponse,
+  TodayFeedResponse
+} from "../lib/types";
 import { pageStyles } from "../lib/ui";
 
 export default async function HomePage() {
@@ -10,12 +14,21 @@ export default async function HomePage() {
     items: []
   };
   let insights: DashboardInsightsResponse | null = null;
+  let autoFlow: AutoFlowListResponse = {
+    generatedAt: new Date().toISOString(),
+    items: [],
+    summary: {
+      readyCount: 0,
+      suggestedCount: 0
+    }
+  };
   let initialError: string | null = null;
   let initialInsightsError: string | null = null;
 
-  const [feedResult, insightsResult] = await Promise.allSettled([
+  const [feedResult, insightsResult, autoFlowResult] = await Promise.allSettled([
     getTodayFeed(),
-    getDashboardInsights()
+    getDashboardInsights(),
+    getAutoFlow({ limit: 5 })
   ]);
 
   if (feedResult.status === "fulfilled") {
@@ -36,6 +49,10 @@ export default async function HomePage() {
         : "Could not load dashboard insights right now.";
   }
 
+  if (autoFlowResult.status === "fulfilled") {
+    autoFlow = autoFlowResult.value;
+  }
+
   return (
     <main style={pageStyles.shell}>
       <PageHeader
@@ -48,6 +65,7 @@ export default async function HomePage() {
         initialError={initialError}
         initialInsights={insights}
         initialInsightsError={initialInsightsError}
+        initialAutoFlow={autoFlow}
       />
     </main>
   );

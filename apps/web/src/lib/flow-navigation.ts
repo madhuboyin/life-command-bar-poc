@@ -8,6 +8,8 @@ export function getSourceLabel(sourceType: FlowSourceType) {
       return "From Today Feed";
     case "DASHBOARD":
       return "From Dashboard";
+    case "AUTO_FLOW":
+      return "From Auto-Flow";
     default:
       return "From Obligation Detail";
   }

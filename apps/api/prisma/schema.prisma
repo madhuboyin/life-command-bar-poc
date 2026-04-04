@@ -129,6 +129,7 @@ enum FlowSourceType {
   TODAY_FEED
   DASHBOARD
   OBLIGATION_DETAIL
+  AUTO_FLOW
 }
 
 enum FlowSessionState {
@@ -165,6 +166,20 @@ enum OutcomeType {
   RECOMMENDATION_MISMATCH
 }
 
+enum AutoFlowTriggerType {
+  INGESTION_TRIGGER
+  URGENCY_TRIGGER
+  PATTERN_TRIGGER
+  REMINDER_TRIGGER
+}
+
+enum AutoFlowStateStatus {
+  READY
+  SUGGESTED
+  ACCEPTED
+  DISMISSED
+}
+
 model User {
   id       String  @id @default(cuid())
   email    String  @unique
@@ -185,6 +200,7 @@ model User {
   dailyPulseItemStates DailyPulseItemState[]
   flowSessions        FlowSession[]
   outcomeFeedback     OutcomeFeedback[]
+  autoFlowStates      AutoFlowState[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -234,6 +250,7 @@ model Obligation {
   dailyPulseItemStates DailyPulseItemState[]
   flowSessionsAsCurrent FlowSession[] @relation("FlowSessionCurrentObligation")
   outcomeFeedback     OutcomeFeedback[]
+  autoFlowStates      AutoFlowState[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -382,6 +399,39 @@ model FlowSession {
   @@index([currentObligationId], map: "idx_flow_sessions_current_obligation_id")
   @@index([currentJourneyId], map: "idx_flow_sessions_current_journey_id")
   @@map("flow_sessions")
+}
+
+model AutoFlowState {
+  id String @id @default(cuid())
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  obligationId String     @map("obligation_id")
+  obligation   Obligation @relation(fields: [obligationId], references: [id], onDelete: Cascade)
+
+  triggerType AutoFlowTriggerType @map("trigger_type")
+  state       AutoFlowStateStatus @default(SUGGESTED)
+
+  confidenceScore Decimal @default(0.0) @map("confidence_score") @db.Decimal(5, 4)
+  urgencyScore    Decimal @default(0.0) @map("urgency_score") @db.Decimal(7, 4)
+  priorityScore   Decimal @default(0.0) @map("priority_score") @db.Decimal(7, 4)
+
+  sourceType String? @map("source_type")
+  reason     String?
+  metadata   Json?
+
+  acceptedAt DateTime? @map("accepted_at")
+  dismissedAt DateTime? @map("dismissed_at")
+  dismissedCount Int @default(0) @map("dismissed_count")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, state, createdAt], map: "idx_auto_flow_state_user_state_created_at")
+  @@index([userId, obligationId, triggerType], map: "idx_auto_flow_state_user_obligation_trigger")
+  @@index([obligationId], map: "idx_auto_flow_state_obligation_id")
+  @@map("auto_flow_states")
 }
 
 model DailyPulseItemState {

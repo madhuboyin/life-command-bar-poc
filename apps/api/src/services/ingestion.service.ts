@@ -1,4 +1,5 @@
 import {
+  AutoFlowTriggerType,
   ImportParseStatus,
   Obligation,
   ObligationStatus,
@@ -33,6 +34,7 @@ import {
   normalizeUploadInput,
   type NormalizedIngestionInput
 } from "./ingestion-normalizers";
+import { AutoFlowService } from "./auto-flow.service";
 
 const PARSER_VERSION = "ingestion-v1-rule-2026-04-04";
 
@@ -108,6 +110,7 @@ export type IngestionResult = {
 
 export class IngestionService {
   private readonly repository = new IngestionRepository();
+  private readonly autoFlowService = new AutoFlowService();
 
   async ingestEmailForward(payload: unknown): Promise<IngestionResult> {
     const input = emailForwardSchema.parse(payload);
@@ -583,6 +586,17 @@ export class IngestionService {
 
     const obligationStatus =
       obligation.status === ObligationStatus.ACTIVE ? "ACTIVE" : "DRAFT";
+
+    await this.autoFlowService.triggerForEvent({
+      userId: normalized.userId,
+      obligationId: obligation.id,
+      triggerType: AutoFlowTriggerType.INGESTION_TRIGGER,
+      source: `ingestion:${normalized.channel.toLowerCase()}`,
+      reasonHint:
+        obligationStatus === "ACTIVE"
+          ? "Ready now from new capture"
+          : "New capture needs confirmation"
+    });
 
     return {
       importSourceId: importSource.id,

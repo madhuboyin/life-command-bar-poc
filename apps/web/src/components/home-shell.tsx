@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import type {
+  AutoFlowListResponse,
   DashboardInsightsResponse,
   TodayFeedItem,
   TodayFeedResponse
@@ -14,22 +15,31 @@ import UploadImportPanel from "./upload-import-panel";
 import RemindersPanel from "./reminders-panel";
 import DashboardTabs from "./dashboard-tabs";
 import DashboardSummaryStrip from "./dashboard-summary-strip";
-import { getDailyPulseState, getDashboardInsights, getTodayFeed } from "../lib/api";
+import {
+  getAutoFlow,
+  getDailyPulseState,
+  getDashboardInsights,
+  getTodayFeed
+} from "../lib/api";
 import DashboardInsightsSection from "./dashboard-insights-section";
 import DailyPulseEntryBanner from "./daily-pulse-entry-banner";
+import ReadyToActBanner from "./ready-to-act-banner";
+import AutoFlowCard from "./auto-flow-card";
 
 type Props = {
   initialData: TodayFeedResponse;
   initialError?: string | null;
   initialInsights: DashboardInsightsResponse | null;
   initialInsightsError?: string | null;
+  initialAutoFlow: AutoFlowListResponse;
 };
 
 export default function HomeShell({
   initialData,
   initialError,
   initialInsights,
-  initialInsightsError
+  initialInsightsError,
+  initialAutoFlow
 }: Props) {
   const [externalItems, setExternalItems] = useState<TodayFeedItem[] | null>(null);
   const [insights, setInsights] = useState<DashboardInsightsResponse | null>(initialInsights);
@@ -38,6 +48,7 @@ export default function HomeShell({
   );
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [showDailyPulseBanner, setShowDailyPulseBanner] = useState(false);
+  const [autoFlow, setAutoFlow] = useState<AutoFlowListResponse>(initialAutoFlow);
 
   useEffect(() => {
     let cancelled = false;
@@ -84,9 +95,10 @@ export default function HomeShell({
     try {
       setInsightsLoading(true);
       setInsightsError(null);
-      const [feedResult, insightsResult] = await Promise.allSettled([
+      const [feedResult, insightsResult, autoFlowResult] = await Promise.allSettled([
         getTodayFeed(),
-        getDashboardInsights()
+        getDashboardInsights(),
+        getAutoFlow({ limit: 5 })
       ]);
 
       if (feedResult.status === "fulfilled") {
@@ -105,6 +117,10 @@ export default function HomeShell({
             : "Could not refresh dashboard insights."
         );
       }
+
+      if (autoFlowResult.status === "fulfilled") {
+        setAutoFlow(autoFlowResult.value);
+      }
     } finally {
       setInsightsLoading(false);
     }
@@ -117,6 +133,19 @@ export default function HomeShell({
           Needs Review →
         </Link>
       </div>
+      <ReadyToActBanner autoFlow={autoFlow} />
+      {autoFlow.items.length > 0 ? (
+        <section style={{ display: "grid", gap: 10 }}>
+          {autoFlow.items.slice(0, 1).map((item) => (
+            <AutoFlowCard
+              key={item.id}
+              item={item}
+              onUpdated={refreshFromServer}
+              returnPath="/"
+            />
+          ))}
+        </section>
+      ) : null}
       {showDailyPulseBanner ? <DailyPulseEntryBanner /> : null}
       <DashboardInsightsSection
         data={insights}

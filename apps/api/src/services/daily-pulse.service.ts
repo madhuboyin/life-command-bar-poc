@@ -32,6 +32,13 @@ type PulseItem = {
   priorityScore: number;
   status: "PENDING" | "OPENED_GUIDED";
   decisionTrace?: DecisionTrace;
+  autoFlow: {
+    id: string;
+    triggerType: string;
+    state: string;
+    priorityScore: number;
+    ctaLabel: string;
+  } | null;
 };
 
 type PulseProgress = {
@@ -66,6 +73,13 @@ type PulseCandidate = {
   isMoney: boolean;
   isPostponed: boolean;
   hookType: PulseHookType;
+  autoFlow: {
+    id: string;
+    triggerType: string;
+    state: string;
+    priorityScore: number;
+    ctaLabel: string;
+  } | null;
 };
 
 const MAX_ITEMS = 5;
@@ -109,6 +123,9 @@ export class DailyPulseService {
       const isPostponed =
         obligation.status === ObligationStatus.POSTPONED || recentlyPostponedIds.has(obligation.id);
       const hookType = resolveHookType({ isUrgent, isQuickWin, isMoney, isPostponed }, feedByObligationId.get(obligation.id)?.hookType);
+      const autoFlow = feedByObligationId.get(obligation.id)?.autoFlow ?? null;
+      const autoFlowBoost =
+        autoFlow?.state === "READY" ? 20 : autoFlow?.state === "SUGGESTED" ? 12 : 0;
 
       const personalization = this.personalizationService.getDailyPulseScoreAdjustment(signals, {
         obligationType: obligation.type,
@@ -134,12 +151,13 @@ export class DailyPulseService {
         confidenceBand: obligation.confidenceBand,
         sourceType: obligation.sourceType,
         needsReview: obligation.needsReview,
-        priorityScore: basePriorityScore + personalization.delta,
+        priorityScore: basePriorityScore + personalization.delta + autoFlowBoost,
         isUrgent,
         isQuickWin,
         isMoney,
         isPostponed,
-        hookType
+        hookType,
+        autoFlow
       } satisfies PulseCandidate;
     });
 
@@ -441,12 +459,17 @@ export class DailyPulseService {
 
     const existingItems = await this.repository.listItemStates(state.id);
 
-    const shouldSeed = existingItems.length === 0 || refresh;
+    const activeCount = existingItems.filter(
+      (item) =>
+        item.status === DailyPulseItemStatus.PENDING ||
+        item.status === DailyPulseItemStatus.OPENED_GUIDED
+    ).length;
+    const shouldSeed = existingItems.length === 0 || refresh || activeCount < MAX_ITEMS;
     if (shouldSeed) {
       const existingIds = new Set(existingItems.map((item) => item.obligationId));
       const candidatesToAdd = selectedCandidates
         .filter((candidate) => !existingIds.has(candidate.obligationId))
-        .slice(0, Math.max(0, MAX_ITEMS - existingItems.length));
+        .slice(0, Math.max(0, MAX_ITEMS - activeCount));
 
       if (candidatesToAdd.length > 0) {
         await this.repository.runInTransaction(async (tx) => {
@@ -496,6 +519,13 @@ export class DailyPulseService {
         whyItMatters: string;
         why: TrustWhy;
         hookType: "urgent" | "money" | "quick_win" | "none";
+        autoFlow?: {
+          id: string;
+          triggerType: string;
+          state: string;
+          priorityScore: number;
+          ctaLabel: string;
+        } | null;
         decisionTrace?: DecisionTrace;
       }
     >,
@@ -567,9 +597,10 @@ export class DailyPulseService {
               },
               hookType
             ),
-          actionLabel: "Start",
+          actionLabel: candidate?.autoFlow?.ctaLabel ?? "Start",
           hookType,
           priorityScore: candidate?.priorityScore ?? 0,
+          autoFlow: candidate?.autoFlow ?? feed?.autoFlow ?? null,
           status:
             state.status === DailyPulseItemStatus.OPENED_GUIDED
               ? "OPENED_GUIDED"
@@ -607,6 +638,10 @@ export class DailyPulseService {
     };
 
     addFrom(sortedByPriority.filter((item) => item.isUrgent), 2);
+    addFrom(
+      sortedByPriority.filter((item) => item.autoFlow?.state === "READY"),
+      2
+    );
     addFrom(sortedByPriority.filter((item) => item.isQuickWin), 2);
     addFrom(sortedByPriority.filter((item) => item.isMoney), 1);
     addFrom(sortedByPriority, MAX_ITEMS);

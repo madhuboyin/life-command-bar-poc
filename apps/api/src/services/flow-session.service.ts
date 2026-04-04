@@ -14,7 +14,13 @@ import type {
 
 const createFlowSessionSchema = z.object({
   sessionId: z.string().min(1).optional(),
-  sourceType: z.enum(["DAILY_PULSE", "TODAY_FEED", "DASHBOARD", "OBLIGATION_DETAIL"]),
+  sourceType: z.enum([
+    "DAILY_PULSE",
+    "TODAY_FEED",
+    "DASHBOARD",
+    "OBLIGATION_DETAIL",
+    "AUTO_FLOW"
+  ]),
   sourceContext: z.record(z.string(), z.unknown()).optional(),
   currentObligationId: z.string().min(1),
   currentJourneyId: z.string().min(1).optional(),
