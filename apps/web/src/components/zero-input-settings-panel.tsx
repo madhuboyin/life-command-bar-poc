@@ -8,21 +8,34 @@ import {
   undoZeroInputDecision,
   updateZeroInputPolicy
 } from "../lib/api";
-import type { ZeroInputDecisionItem, ZeroInputPolicy } from "../lib/types";
+import type {
+  GmailConnectionStatus,
+  ZeroInputDecisionItem,
+  ZeroInputPolicy
+} from "../lib/types";
 import { buttonStyles, cardStyles, colors, pageStyles, radius } from "../lib/ui";
 import PageHeader from "./ui/page-header";
 import StatusMessage from "./ui/status-message";
 import { useToast } from "./ui/toast-provider";
+import GmailConnectPanel from "./gmail-connect-panel";
 
 type Props = {
   initialPolicy: ZeroInputPolicy;
   initialDecisions: ZeroInputDecisionItem[];
+  initialGmailConnection?: GmailConnectionStatus | null;
+  oauthState?: string | null;
+  oauthError?: string | null;
+  oauthErrorDetails?: string | null;
   initialError?: string | null;
 };
 
 export default function ZeroInputSettingsPanel({
   initialPolicy,
   initialDecisions,
+  initialGmailConnection = null,
+  oauthState = null,
+  oauthError = null,
+  oauthErrorDetails = null,
   initialError = null
 }: Props) {
   const [policy, setPolicy] = useState<ZeroInputPolicy>(initialPolicy);
@@ -109,6 +122,13 @@ export default function ZeroInputSettingsPanel({
             {loading ? "Saving..." : "Save settings"}
           </button>
         }
+      />
+
+      <GmailConnectPanel
+        initialConnection={initialGmailConnection}
+        oauthState={oauthState}
+        oauthError={oauthError}
+        oauthErrorDetails={oauthErrorDetails}
       />
 
       {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}

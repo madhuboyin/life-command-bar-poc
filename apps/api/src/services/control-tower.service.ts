@@ -276,6 +276,12 @@ export class ControlTowerService {
 
     const obligationItems = reviewQueue.items.map<ControlTowerReviewItem>((item) => {
       const reasons = item.reviewReasons.length > 0 ? item.reviewReasons : ["Needs confirmation"];
+      const rawData = asRecord(item.sourceMetadata?.rawData);
+      const extractedFields = {
+        ...(asRecord(item.extractedFields) ?? {}),
+        ...(typeof rawData?.from === "string" ? { sender: rawData.from } : {}),
+        ...(typeof rawData?.subject === "string" ? { subject: rawData.subject } : {})
+      };
       return {
         id: `obl:${item.id}`,
         itemType: "OBLIGATION",
@@ -287,7 +293,7 @@ export class ControlTowerService {
         confidenceBand: item.confidenceBand,
         confidenceScore: item.confidenceScore,
         reviewReasons: reasons,
-        extractedFields: item.extractedFields,
+        extractedFields,
         predictedDate: item.dueDate,
         status: item.status,
         why: {
@@ -441,6 +447,8 @@ export class ControlTowerService {
             "obligation_dismissed",
             "ingestion_candidate_confirmed",
             "ingestion_candidate_rejected",
+            "gmail_candidate_reviewed",
+            "gmail_candidate_rejected",
             "auto_flow_accepted",
             "focus_session_completed",
             "focus_session_item_completed",
@@ -488,6 +496,10 @@ export class ControlTowerService {
               "ingestion_duplicate_detected",
               "ingestion_structured_duplicate_detected",
               "ingestion_candidate_skipped",
+              "gmail_candidate_skipped",
+              "gmail_duplicate_suppressed",
+              "gmail_prediction_strengthened",
+              "gmail_sync_error",
               "auto_flow_triggered",
               "prediction_rebuilt",
               "prediction_resolved_by_ingestion",
@@ -790,6 +802,18 @@ function toRecentDescription(eventType: string, metadata: Record<string, unknown
         description: "A captured ingestion candidate was rejected.",
         outcomeLabel: "Rejected"
       };
+    case "gmail_candidate_reviewed":
+      return {
+        title: "Gmail candidate confirmed",
+        description: "A Gmail-derived candidate was reviewed and confirmed.",
+        outcomeLabel: "Confirmed"
+      };
+    case "gmail_candidate_rejected":
+      return {
+        title: "Gmail candidate rejected",
+        description: "A Gmail-derived candidate was reviewed and rejected.",
+        outcomeLabel: "Rejected"
+      };
     default:
       return {
         title: normalizeEventLabel(eventType),
@@ -803,6 +827,7 @@ function toRecentDescription(eventType: string, metadata: Record<string, unknown
 }
 
 function sourceLabelFromRecentEvent(eventType: string) {
+  if (eventType.startsWith("gmail_")) return "Gmail";
   if (eventType.startsWith("prediction_")) return "Prediction Engine";
   if (eventType.startsWith("auto_flow_")) return "Auto-Flow";
   if (eventType.startsWith("ingestion_")) return "Ingestion";
@@ -820,6 +845,68 @@ function toSystemDecisionFromAudit(
   },
   metadata: Record<string, unknown> | null
 ): ControlTowerSystemDecisionItem {
+  if (event.eventType === "gmail_duplicate_suppressed") {
+    return {
+      id: event.id,
+      decisionType: "DUPLICATE",
+      title: "Duplicate Gmail message suppressed",
+      explanation: "A previously processed or duplicate Gmail message was suppressed.",
+      sourceSignals: [
+        event.eventType,
+        typeof metadata?.reason === "string" ? metadata.reason : "duplicate_detected"
+      ],
+      createdAt: event.createdAt.toISOString(),
+      obligationId: event.obligationId,
+      referenceId:
+        typeof metadata?.gmailMessageId === "string" ? metadata.gmailMessageId : null
+    };
+  }
+
+  if (event.eventType === "gmail_prediction_strengthened") {
+    return {
+      id: event.id,
+      decisionType: "PREDICTION",
+      title: "Recurring signal strengthened",
+      explanation: "Gmail activity reinforced an existing recurring obligation pattern.",
+      sourceSignals: [event.eventType, "gmail_recurring_signal"],
+      createdAt: event.createdAt.toISOString(),
+      obligationId: event.obligationId,
+      referenceId:
+        typeof metadata?.gmailMessageId === "string" ? metadata.gmailMessageId : null
+    };
+  }
+
+  if (event.eventType === "gmail_candidate_skipped") {
+    return {
+      id: event.id,
+      decisionType: "ROUTING",
+      title: "Gmail candidate routed to review",
+      explanation: "A Gmail-derived signal had insufficient confidence and was routed to review.",
+      sourceSignals: [
+        event.eventType,
+        typeof metadata?.reason === "string" ? metadata.reason : "insufficient_signal"
+      ],
+      createdAt: event.createdAt.toISOString(),
+      obligationId: event.obligationId,
+      referenceId:
+        typeof metadata?.gmailMessageId === "string" ? metadata.gmailMessageId : null
+    };
+  }
+
+  if (event.eventType === "gmail_sync_error") {
+    return {
+      id: event.id,
+      decisionType: "ROUTING",
+      title: "Gmail sync error handled",
+      explanation: "A Gmail message failed to sync and was safely skipped.",
+      sourceSignals: [event.eventType, typeof metadata?.error === "string" ? metadata.error : "sync_error"],
+      createdAt: event.createdAt.toISOString(),
+      obligationId: event.obligationId,
+      referenceId:
+        typeof metadata?.gmailMessageId === "string" ? metadata.gmailMessageId : null
+    };
+  }
+
   if (
     event.eventType === "ingestion_duplicate_detected" ||
     event.eventType === "ingestion_structured_duplicate_detected"

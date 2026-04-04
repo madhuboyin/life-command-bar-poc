@@ -58,7 +58,10 @@ export function mapObligation(obligation: ObligationWithRelations) {
     source: obligation.source,
     subtype: source?.subtype
   });
-  const provenanceLabel = sourceLabelFromType(sourceType);
+  const provenanceLabel =
+    source?.subtype === ImportSourceSubtype.GMAIL_READONLY
+      ? "Imported from Gmail"
+      : sourceLabelFromType(sourceType);
   const ingestionConfidence = source
     ? Number(source.parseConfidence)
     : Number(obligation.confidenceScore);

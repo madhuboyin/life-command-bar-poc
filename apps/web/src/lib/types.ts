@@ -90,7 +90,7 @@ export interface ObligationExtractedFields {
 
 export interface ObligationSourceMetadata {
   importSourceId: string | null;
-  sourceSubtype: "EMAIL_FORWARD" | "FILE_UPLOAD" | "COMMAND_CAPTURE" | null;
+  sourceSubtype: "EMAIL_FORWARD" | "GMAIL_READONLY" | "FILE_UPLOAD" | "COMMAND_CAPTURE" | null;
   importedAt: string | null;
   parserVersion: string | null;
   parseStatus:
@@ -1081,7 +1081,7 @@ export interface IngestionResult {
 export interface ObligationSourceDetails {
   obligationId: string;
   sourceType: TrustSourceType;
-  sourceSubtype: "EMAIL_FORWARD" | "FILE_UPLOAD" | "COMMAND_CAPTURE" | null;
+  sourceSubtype: "EMAIL_FORWARD" | "GMAIL_READONLY" | "FILE_UPLOAD" | "COMMAND_CAPTURE" | null;
   parseStatus:
     | "RECEIVED"
     | "PARTIAL"
@@ -1108,6 +1108,55 @@ export interface ReviewQueueResponse {
     limit: number;
     total: number;
   };
+}
+
+export interface GmailConnectionStatus {
+  id: string;
+  provider: "GOOGLE_GMAIL";
+  email: string;
+  scope: string;
+  status: "ACTIVE" | "DISCONNECTED" | "ERROR";
+  errorCode: string | null;
+  errorMessage: string | null;
+  lastSyncedAt: string | null;
+  lastHistoryId: string | null;
+  lastProcessedMessageId: string | null;
+  lastProcessedMessageDate: string | null;
+  lastSyncStatus: "IDLE" | "RUNNING" | "COMPLETED" | "ERROR" | null;
+  lastSyncWindowDays: number | null;
+  lastSyncMatchedCount: number;
+  lastSyncIngestedCount: number;
+  lastSyncDuplicateCount: number;
+  lastSyncErrorCount: number;
+  autoSyncEnabled: boolean;
+  scanSubscriptions: boolean;
+  scanBills: boolean;
+  scanRenewals: boolean;
+  includeRecurringReceipts: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GmailSyncResult {
+  mode: "INITIAL_BACKFILL" | "MANUAL_RESYNC" | "INCREMENTAL";
+  windowDays: 30 | 90 | 365;
+  queries: Array<{
+    key: string;
+    query: string;
+    matched: number;
+  }>;
+  stats: {
+    matchedMessages: number;
+    fetchedMessages: number;
+    ingestedCandidates: number;
+    reviewRouted: number;
+    duplicateSuppressed: number;
+    errors: number;
+    skippedAlreadyProcessed: number;
+  };
+  lastProcessedMessageId: string | null;
+  lastProcessedMessageDate: string | null;
+  completedAt: string;
 }
 
 export interface CommandExecuteResponse {

@@ -62,6 +62,7 @@ enum ImportSourceType {
 
 enum ImportSourceSubtype {
   EMAIL_FORWARD
+  GMAIL_READONLY
   FILE_UPLOAD
   COMMAND_CAPTURE
 }
@@ -73,6 +74,31 @@ enum ImportParseStatus {
   NEEDS_CONFIRMATION
   REJECTED
   FAILED
+}
+
+enum ExternalProvider {
+  GOOGLE_GMAIL
+}
+
+enum ExternalAccountStatus {
+  ACTIVE
+  DISCONNECTED
+  ERROR
+}
+
+enum ExternalSyncStatus {
+  IDLE
+  RUNNING
+  COMPLETED
+  ERROR
+}
+
+enum ExternalMessageIngestionStatus {
+  PROCESSED
+  DUPLICATE_SUPPRESSED
+  ROUTED_TO_REVIEW
+  SKIPPED
+  ERROR
 }
 
 enum FeedbackType {
@@ -342,6 +368,8 @@ model User {
   householdsCreated   Household[]      @relation("HouseholdCreatedBy")
   householdMemberships HouseholdMember[]
   householdInvitesSent HouseholdInvite[] @relation("HouseholdInviteSentBy")
+  externalAccountConnections ExternalAccountConnection[]
+  externalMessageIngestions  ExternalMessageIngestion[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -478,6 +506,7 @@ model Obligation {
   focusSessionItems   FocusSessionItem[]
   promotedPredictions Prediction[] @relation("PredictionPromotedObligation")
   autonomyDecisions   AutonomyDecision[]
+  externalMessageIngestions ExternalMessageIngestion[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1162,6 +1191,7 @@ model ImportSource {
   upload   Upload? @relation(fields: [uploadId], references: [id], onDelete: SetNull)
 
   obligations Obligation[]
+  externalMessageIngestions ExternalMessageIngestion[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1172,6 +1202,91 @@ model ImportSource {
   @@index([parseStatus], map: "idx_import_sources_parse_status")
   @@index([userId, contentHash], map: "idx_import_sources_user_id_content_hash")
   @@map("import_sources")
+}
+
+model ExternalAccountConnection {
+  id String @id @default(cuid())
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  provider ExternalProvider
+  providerAccountId String @map("provider_account_id")
+  email String
+
+  accessTokenEncrypted String? @map("access_token_encrypted") @db.Text
+  refreshTokenEncrypted String? @map("refresh_token_encrypted") @db.Text
+  scope String @db.Text
+
+  status ExternalAccountStatus @default(ACTIVE)
+  errorCode String? @map("error_code")
+  errorMessage String? @map("error_message") @db.Text
+
+  lastSyncedAt DateTime? @map("last_synced_at")
+  lastHistoryId String? @map("last_history_id")
+  lastProcessedMessageId String? @map("last_processed_message_id")
+  lastProcessedMessageDate DateTime? @map("last_processed_message_date")
+  lastSyncStatus ExternalSyncStatus? @map("last_sync_status")
+  lastSyncCursor String? @map("last_sync_cursor")
+  lastSyncWindowDays Int? @map("last_sync_window_days")
+  lastSyncMatchedCount Int @default(0) @map("last_sync_matched_count")
+  lastSyncIngestedCount Int @default(0) @map("last_sync_ingested_count")
+  lastSyncDuplicateCount Int @default(0) @map("last_sync_duplicate_count")
+  lastSyncErrorCount Int @default(0) @map("last_sync_error_count")
+
+  autoSyncEnabled Boolean @default(false) @map("auto_sync_enabled")
+  scanSubscriptions Boolean @default(true) @map("scan_subscriptions")
+  scanBills Boolean @default(true) @map("scan_bills")
+  scanRenewals Boolean @default(true) @map("scan_renewals")
+  includeRecurringReceipts Boolean @default(false) @map("include_recurring_receipts")
+
+  messages ExternalMessageIngestion[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([provider, providerAccountId], map: "uniq_external_connections_provider_account")
+  @@unique([userId, provider], map: "uniq_external_connections_user_provider")
+  @@index([userId, provider], map: "idx_external_connections_user_provider")
+  @@index([userId, status], map: "idx_external_connections_user_status")
+  @@index([provider, email], map: "idx_external_connections_provider_email")
+  @@map("external_account_connections")
+}
+
+model ExternalMessageIngestion {
+  id String @id @default(cuid())
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  externalConnectionId String @map("external_connection_id")
+  externalConnection ExternalAccountConnection @relation(fields: [externalConnectionId], references: [id], onDelete: Cascade)
+
+  provider ExternalProvider
+  externalMessageId String @map("external_message_id")
+  externalThreadId String? @map("external_thread_id")
+  messageDate DateTime? @map("message_date")
+  messageInternalDate DateTime? @map("message_internal_date")
+  matchedQueryKey String? @map("matched_query_key")
+
+  importSourceId String? @map("import_source_id")
+  importSource ImportSource? @relation(fields: [importSourceId], references: [id], onDelete: SetNull)
+
+  obligationId String? @map("obligation_id")
+  obligation Obligation? @relation(fields: [obligationId], references: [id], onDelete: SetNull)
+
+  status ExternalMessageIngestionStatus @default(PROCESSED)
+  dedupeReason String? @map("dedupe_reason")
+  metadata Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([externalConnectionId, externalMessageId], map: "uniq_external_messages_connection_message")
+  @@index([userId, createdAt], map: "idx_external_messages_user_created")
+  @@index([externalConnectionId, messageInternalDate], map: "idx_external_messages_connection_internal_date")
+  @@index([provider, externalMessageId], map: "idx_external_messages_provider_message")
+  @@map("external_message_ingestions")
 }
 
 model ResolutionRun {

@@ -131,7 +131,10 @@ export default function ObligationCandidateReview({ obligation, source }: Props)
       <section style={cardStyles.bordered}>
         <h3 style={{ marginTop: 0 }}>Source Provenance</h3>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
-          <SourceBadge sourceType={obligation.sourceType} />
+          <SourceBadge
+            sourceType={obligation.sourceType}
+            label={source?.provenanceLabel ?? obligation.sourceMetadata?.provenanceLabel}
+          />
           <ConfidenceBadge
             confidenceBand={obligation.confidenceBand}
             needsReview={obligation.needsReview}

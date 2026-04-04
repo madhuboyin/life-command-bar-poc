@@ -1,7 +1,11 @@
 import crypto from "crypto";
 import { ImportSourceSubtype, ImportSourceType, ObligationSource } from "@prisma/client";
 
-export type IngestionChannel = "EMAIL_FORWARD" | "FILE_UPLOAD" | "COMMAND_CAPTURE";
+export type IngestionChannel =
+  | "EMAIL_FORWARD"
+  | "EMAIL_GMAIL"
+  | "FILE_UPLOAD"
+  | "COMMAND_CAPTURE";
 
 export interface NormalizedIngestionInput {
   userId: string;
@@ -39,6 +43,22 @@ type UploadIngestionPayload = {
   fileSize: number;
   storagePath: string;
   extractedText?: string | null;
+};
+
+type GmailReadonlyIngestionPayload = {
+  userId: string;
+  externalConnectionId: string;
+  gmailMessageId: string;
+  gmailThreadId?: string | null;
+  matchedQueryKey: string;
+  historyId?: string | null;
+  from: string;
+  subject: string;
+  bodyText: string;
+  snippet?: string | null;
+  labelIds?: string[];
+  messageDate?: string | null;
+  internalDate?: string | null;
 };
 
 export function normalizeEmailForwardInput(payload: EmailForwardPayload): NormalizedIngestionInput {
@@ -118,6 +138,50 @@ export function normalizeUploadInput(payload: UploadIngestionPayload): Normalize
       fileSize: payload.fileSize,
       storagePath: payload.storagePath,
       extractedTextLength: extractedText.length
+    }
+  };
+}
+
+export function normalizeGmailReadonlyInput(
+  payload: GmailReadonlyIngestionPayload
+): NormalizedIngestionInput {
+  const subject = payload.subject.trim();
+  const from = payload.from.trim();
+  const bodyText = payload.bodyText.trim();
+  const snippet = (payload.snippet ?? "").trim();
+
+  const rawText = [subject, bodyText || snippet].filter(Boolean).join("\n\n");
+  const normalizedText = normalizeText(rawText);
+
+  return {
+    userId: payload.userId,
+    channel: "EMAIL_GMAIL",
+    importType: ImportSourceType.EMAIL,
+    importSubtype: ImportSourceSubtype.GMAIL_READONLY,
+    obligationSource: ObligationSource.EMAIL,
+    rawText,
+    normalizedText,
+    contentHash: buildContentHash(
+      "EMAIL_GMAIL",
+      payload.externalConnectionId,
+      payload.gmailMessageId,
+      payload.internalDate ?? "",
+      normalizedText
+    ),
+    titleHint: subject || null,
+    metadata: {
+      externalConnectionId: payload.externalConnectionId,
+      gmailMessageId: payload.gmailMessageId,
+      gmailThreadId: payload.gmailThreadId ?? null,
+      matchedQueryKey: payload.matchedQueryKey,
+      historyId: payload.historyId ?? null,
+      from,
+      subject,
+      bodyText,
+      snippet: snippet || null,
+      labelIds: payload.labelIds ?? [],
+      messageDate: payload.messageDate ?? null,
+      internalDate: payload.internalDate ?? null
     }
   };
 }

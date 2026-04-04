@@ -24,6 +24,7 @@ type ConfidenceInput = {
 
 const channelReliability: Record<IngestionChannel, number> = {
   EMAIL_FORWARD: 0.76,
+  EMAIL_GMAIL: 0.84,
   FILE_UPLOAD: 0.62,
   COMMAND_CAPTURE: 0.82
 };

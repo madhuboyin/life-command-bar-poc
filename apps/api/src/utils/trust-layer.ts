@@ -52,6 +52,7 @@ export function sourceTypeFromObligation(input: {
   subtype?: ImportSourceSubtype | null;
 }): TrustSourceType {
   if (input.subtype === ImportSourceSubtype.EMAIL_FORWARD) return "EMAIL";
+  if (input.subtype === ImportSourceSubtype.GMAIL_READONLY) return "EMAIL";
   if (input.subtype === ImportSourceSubtype.FILE_UPLOAD) return "UPLOAD";
   if (input.subtype === ImportSourceSubtype.COMMAND_CAPTURE) return "COMMAND";
 

@@ -26,6 +26,8 @@ import { householdRouter } from "./routes/household.routes";
 import { householdInviteRouter } from "./routes/household-invite.routes";
 import { adminObservabilityRouter } from "./routes/admin-observability.routes";
 import { requireAdmin } from "./middleware/admin.middleware";
+import { gmailRouter } from "./routes/gmail.routes";
+import { gmailPublicRouter } from "./routes/gmail-public.routes";
 
 export function createApp() {
   const app = express();
@@ -34,6 +36,7 @@ export function createApp() {
   app.use(express.json());
 
   app.use("/api/health", healthRouter);
+  app.use("/api/gmail/oauth", gmailPublicRouter);
   app.use("/api", requireAuth);
   app.use("/api/commands", commandRouter);
   app.use("/api/obligations", obligationRouter);
@@ -56,6 +59,7 @@ export function createApp() {
   app.use("/api/zero-input", zeroInputRouter);
   app.use("/api/households", householdRouter);
   app.use("/api/household-invites", householdInviteRouter);
+  app.use("/api/gmail", gmailRouter);
   app.use("/api/admin", requireAdmin, adminObservabilityRouter);
   app.use("/api", resolutionRouter);
 

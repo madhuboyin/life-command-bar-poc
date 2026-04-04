@@ -246,7 +246,10 @@ export default function ObligationDetailClient({ obligation }: Props) {
       <section style={cardStyles.bordered}>
         <div style={text.label}>Overview</div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-          <SourceBadge sourceType={current.sourceType} />
+          <SourceBadge
+            sourceType={current.sourceType}
+            label={sourceDetails?.provenanceLabel ?? current.sourceMetadata?.provenanceLabel}
+          />
           <ConfidenceBadge
             confidenceBand={current.confidenceBand}
             needsReview={current.needsReview}

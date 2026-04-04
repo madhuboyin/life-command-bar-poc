@@ -87,6 +87,27 @@ function mapEventType(
     case "upload_ingestion_failed":
       return OBSERVABILITY_EVENT_TYPES.INGESTION_REJECTED;
 
+    case "gmail_connection_created":
+      return OBSERVABILITY_EVENT_TYPES.GMAIL_CONNECTION_CREATED;
+    case "gmail_sync_started":
+      return OBSERVABILITY_EVENT_TYPES.GMAIL_SYNC_STARTED;
+    case "gmail_sync_completed":
+      return OBSERVABILITY_EVENT_TYPES.GMAIL_SYNC_COMPLETED;
+    case "gmail_message_matched":
+      return OBSERVABILITY_EVENT_TYPES.GMAIL_MESSAGE_MATCHED;
+    case "gmail_candidate_created":
+      return OBSERVABILITY_EVENT_TYPES.GMAIL_CANDIDATE_CREATED;
+    case "gmail_candidate_reviewed":
+      return OBSERVABILITY_EVENT_TYPES.GMAIL_CANDIDATE_REVIEWED;
+    case "gmail_candidate_rejected":
+      return OBSERVABILITY_EVENT_TYPES.GMAIL_CANDIDATE_REJECTED;
+    case "gmail_duplicate_suppressed":
+      return OBSERVABILITY_EVENT_TYPES.GMAIL_DUPLICATE_SUPPRESSED;
+    case "gmail_prediction_strengthened":
+      return OBSERVABILITY_EVENT_TYPES.GMAIL_PREDICTION_STRENGTHENED;
+    case "gmail_sync_error":
+      return OBSERVABILITY_EVENT_TYPES.GMAIL_SYNC_ERROR;
+
     case "prediction_rebuilt":
     case "prediction_updated":
       return OBSERVABILITY_EVENT_TYPES.PREDICTION_CREATED;

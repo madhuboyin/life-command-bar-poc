@@ -323,7 +323,7 @@ function extractVendor(input: {
   channel: IngestionChannel;
   metadata: Record<string, unknown>;
 }): { value: string | null; confidence: number } {
-  if (input.channel === "EMAIL_FORWARD") {
+  if (input.channel === "EMAIL_FORWARD" || input.channel === "EMAIL_GMAIL") {
     const from = typeof input.metadata.from === "string" ? input.metadata.from : "";
     const vendorFromEmail = extractVendorFromEmail(from);
     if (vendorFromEmail) {

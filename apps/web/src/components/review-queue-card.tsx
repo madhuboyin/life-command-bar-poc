@@ -17,6 +17,14 @@ type Props = {
 export default function ReviewQueueCard({ item, onUpdated }: Props) {
   const { showToast } = useToast();
   const [loading, setLoading] = useState<"confirm" | "reject" | null>(null);
+  const gmailSource =
+    item.sourceMetadata?.sourceSubtype === "GMAIL_READONLY" &&
+    item.sourceMetadata.rawData &&
+    typeof item.sourceMetadata.rawData === "object"
+      ? (item.sourceMetadata.rawData as Record<string, unknown>)
+      : null;
+  const gmailFrom = typeof gmailSource?.from === "string" ? gmailSource.from : null;
+  const gmailSubject = typeof gmailSource?.subject === "string" ? gmailSource.subject : null;
 
   async function handleConfirm() {
     try {
@@ -54,7 +62,10 @@ export default function ReviewQueueCard({ item, onUpdated }: Props) {
           <div style={{ fontSize: 13, color: colors.textMuted }}>{item.type}</div>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          <SourceBadge sourceType={item.sourceType} />
+          <SourceBadge
+            sourceType={item.sourceType}
+            label={item.sourceMetadata?.provenanceLabel}
+          />
           <ConfidenceBadge
             confidenceBand={item.confidenceBand}
             needsReview={item.needsReview}
@@ -65,6 +76,14 @@ export default function ReviewQueueCard({ item, onUpdated }: Props) {
       <div style={{ fontSize: 13, color: colors.textMuted }}>
         {item.reviewReasons.join(" · ")}
       </div>
+
+      {gmailFrom || gmailSubject ? (
+        <div style={{ fontSize: 12, color: colors.textMuted }}>
+          {gmailFrom ? `From: ${gmailFrom}` : ""}
+          {gmailFrom && gmailSubject ? " · " : ""}
+          {gmailSubject ? `Subject: ${gmailSubject}` : ""}
+        </div>
+      ) : null}
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
         <button

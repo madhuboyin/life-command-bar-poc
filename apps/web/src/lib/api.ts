@@ -19,6 +19,8 @@ import type {
   FlowSourceContext,
   FlowSourceType,
   GuidedJourney,
+  GmailConnectionStatus,
+  GmailSyncResult,
   HouseholdControlTowerResponse,
   HouseholdInvite,
   HouseholdMember,
@@ -157,6 +159,19 @@ type HouseholdMembersResponse = {
 
 type HouseholdInviteResponse = {
   invite: HouseholdInvite;
+};
+
+type GmailStatusResponse = {
+  connection: GmailConnectionStatus | null;
+};
+
+type GmailOAuthStartResponse = {
+  authUrl: string;
+};
+
+type GmailSyncResponse = {
+  sync: GmailSyncResult;
+  connection: GmailConnectionStatus | null;
 };
 
 function isAbsoluteHttpUrl(value: string) {
@@ -546,6 +561,82 @@ export async function updateZeroInputPolicy(
     body: JSON.stringify(input)
   });
   return handleResponse<{ policy: ZeroInputPolicy }>(res);
+}
+
+export async function getGmailConnectionStatus() {
+  const res = await apiFetch("/gmail/status", {
+    cache: "no-store"
+  });
+  return handleResponse<GmailStatusResponse>(res);
+}
+
+export async function startGmailOAuth(input: {
+  windowDays: 30 | 90 | 365;
+  autoSyncEnabled: boolean;
+  scanSubscriptions: boolean;
+  scanBills: boolean;
+  scanRenewals: boolean;
+  includeRecurringReceipts: boolean;
+}) {
+  const res = await apiFetch("/gmail/oauth/start", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      windowDays: String(input.windowDays),
+      autoSyncEnabled: input.autoSyncEnabled,
+      scanSubscriptions: input.scanSubscriptions,
+      scanBills: input.scanBills,
+      scanRenewals: input.scanRenewals,
+      includeRecurringReceipts: input.includeRecurringReceipts
+    })
+  });
+
+  return handleResponse<GmailOAuthStartResponse>(res);
+}
+
+export async function updateGmailPreferences(input: {
+  autoSyncEnabled?: boolean;
+  scanSubscriptions?: boolean;
+  scanBills?: boolean;
+  scanRenewals?: boolean;
+  includeRecurringReceipts?: boolean;
+}) {
+  const res = await apiFetch("/gmail/preferences", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  return handleResponse<GmailStatusResponse>(res);
+}
+
+export async function syncGmail(input?: {
+  mode?: "INITIAL_BACKFILL" | "MANUAL_RESYNC" | "INCREMENTAL";
+  windowDays?: 30 | 90 | 365;
+  scanSubscriptions?: boolean;
+  scanBills?: boolean;
+  scanRenewals?: boolean;
+  includeRecurringReceipts?: boolean;
+  maxMessages?: number;
+}) {
+  const res = await apiFetch("/gmail/sync", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      ...input,
+      windowDays:
+        typeof input?.windowDays === "number" ? String(input.windowDays) : undefined
+    })
+  });
+  return handleResponse<GmailSyncResponse>(res);
+}
+
+export async function disconnectGmail() {
+  const res = await apiFetch("/gmail/disconnect", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
+  return handleResponse<{ disconnected: boolean }>(res);
 }
 
 export async function getZeroInputDecisions(params?: {

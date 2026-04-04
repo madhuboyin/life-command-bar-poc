@@ -3,6 +3,17 @@ export const OBSERVABILITY_EVENT_TYPES = {
   INGESTION_CORRECTED: "ingestion_corrected",
   INGESTION_REJECTED: "ingestion_rejected",
 
+  GMAIL_CONNECTION_CREATED: "gmail_connection_created",
+  GMAIL_SYNC_STARTED: "gmail_sync_started",
+  GMAIL_SYNC_COMPLETED: "gmail_sync_completed",
+  GMAIL_MESSAGE_MATCHED: "gmail_message_matched",
+  GMAIL_CANDIDATE_CREATED: "gmail_candidate_created",
+  GMAIL_CANDIDATE_REVIEWED: "gmail_candidate_reviewed",
+  GMAIL_CANDIDATE_REJECTED: "gmail_candidate_rejected",
+  GMAIL_DUPLICATE_SUPPRESSED: "gmail_duplicate_suppressed",
+  GMAIL_PREDICTION_STRENGTHENED: "gmail_prediction_strengthened",
+  GMAIL_SYNC_ERROR: "gmail_sync_error",
+
   PREDICTION_CREATED: "prediction_created",
   PREDICTION_CONFIRMED: "prediction_confirmed",
   PREDICTION_DISMISSED: "prediction_dismissed",

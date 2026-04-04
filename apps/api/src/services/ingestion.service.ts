@@ -1,4 +1,5 @@
 import {
+  ImportSourceSubtype,
   AutoFlowTriggerType,
   ImportParseStatus,
   Obligation,
@@ -31,6 +32,7 @@ import { extractStructuredFields } from "./ingestion.extractor";
 import {
   normalizeCommandCaptureInput,
   normalizeEmailForwardInput,
+  normalizeGmailReadonlyInput,
   normalizeUploadInput,
   type NormalizedIngestionInput
 } from "./ingestion-normalizers";
@@ -56,6 +58,22 @@ const uploadIngestionSchema = z.object({
   fileSize: z.number().int().nonnegative(),
   storagePath: z.string().min(1),
   extractedText: z.string().optional().nullable()
+});
+
+const gmailReadonlySchema = z.object({
+  userId: z.string().min(1),
+  externalConnectionId: z.string().min(1),
+  gmailMessageId: z.string().min(1),
+  gmailThreadId: z.string().nullable().optional(),
+  matchedQueryKey: z.string().min(1),
+  historyId: z.string().nullable().optional(),
+  from: z.string().min(1),
+  subject: z.string().min(1),
+  bodyText: z.string().optional().default(""),
+  snippet: z.string().nullable().optional(),
+  labelIds: z.array(z.string()).optional(),
+  messageDate: z.string().nullable().optional(),
+  internalDate: z.string().nullable().optional()
 });
 
 const commandCaptureSchema = z.object({
@@ -137,6 +155,15 @@ export class IngestionService {
     });
   }
 
+  async ingestGmailReadonly(payload: unknown): Promise<IngestionResult> {
+    const input = gmailReadonlySchema.parse(payload);
+    const normalized = normalizeGmailReadonlyInput(input);
+
+    return this.ingestNormalized(normalized, {
+      hasUsableText: Boolean(input.bodyText.trim() || (input.snippet ?? "").trim())
+    });
+  }
+
   async ingestCommandCapture(payload: unknown): Promise<IngestionResult> {
     const input = commandCaptureSchema.parse(payload);
     const normalized = normalizeCommandCaptureInput(input);
@@ -179,7 +206,10 @@ export class IngestionService {
       parserVersion: source.parserVersion,
       importedAt: source.createdAt.toISOString(),
       extractionSummary: source.extractionSummary,
-      provenanceLabel: sourceLabelFromType(trustSourceType),
+      provenanceLabel:
+        source.subtype === ImportSourceSubtype.GMAIL_READONLY
+          ? "Imported from Gmail"
+          : sourceLabelFromType(trustSourceType),
       rawData: source.rawData
     };
   }
@@ -233,6 +263,19 @@ export class IngestionService {
         confidenceScore: Number(updated.confidenceScore)
       }
     });
+
+    if (updated.importSource?.subtype === ImportSourceSubtype.GMAIL_READONLY) {
+      await this.repository.createAuditEvent({
+        userId,
+        obligationId,
+        eventType: "gmail_candidate_reviewed",
+        metadata: {
+          status: updated.status,
+          confidenceScore: Number(updated.confidenceScore),
+          action: "confirmed"
+        }
+      });
+    }
 
     await this.captureMemorySignal({
       userId,
@@ -297,6 +340,17 @@ export class IngestionService {
         reason: input.reason ?? null
       }
     });
+
+    if (updated.importSource?.subtype === ImportSourceSubtype.GMAIL_READONLY) {
+      await this.repository.createAuditEvent({
+        userId,
+        obligationId,
+        eventType: "gmail_candidate_rejected",
+        metadata: {
+          reason: input.reason ?? null
+        }
+      });
+    }
 
     await this.captureMemorySignal({
       userId,
