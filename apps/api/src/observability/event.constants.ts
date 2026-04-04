@@ -31,6 +31,12 @@ export const OBSERVABILITY_EVENT_TYPES = {
   SUBSCRIPTION_CANCELLATION_DETECTED: "subscription_cancellation_detected",
   SUBSCRIPTION_PREDICTION_STRENGTHENED: "subscription_prediction_strengthened",
   SUBSCRIPTION_OBLIGATION_CREATED: "subscription_obligation_created",
+  SUBSCRIPTION_INSIGHT_CREATED: "subscription_insight_created",
+  SUBSCRIPTION_RECOMMENDATION_GENERATED: "subscription_recommendation_generated",
+  SUBSCRIPTION_REVIEW_STARTED: "subscription_review_started",
+  SUBSCRIPTION_DECISION_TAKEN: "subscription_decision_taken",
+  SUBSCRIPTION_KEPT: "subscription_kept",
+  SUBSCRIPTION_MARKED_FOR_CANCEL: "subscription_marked_for_cancel",
 
   PREDICTION_CREATED: "prediction_created",
   PREDICTION_CONFIRMED: "prediction_confirmed",

@@ -3,8 +3,11 @@ import { notFound } from "next/navigation";
 import SubscriptionConfirmationForm from "../../../components/subscription-confirmation-form";
 import SubscriptionDetailHeader from "../../../components/subscription-detail-header";
 import SubscriptionEvidenceList from "../../../components/subscription-evidence-list";
+import SubscriptionInsightCard from "../../../components/subscription-insight-card";
 import SubscriptionMergePanel from "../../../components/subscription-merge-panel";
 import SubscriptionPriceHistory from "../../../components/subscription-price-history";
+import SubscriptionRecommendationCard from "../../../components/subscription-recommendation-card";
+import SubscriptionReviewFlow from "../../../components/subscription-review-flow";
 import { getSubscriptionById } from "../../../lib/api";
 import { cardStyles, colors, pageStyles } from "../../../lib/ui";
 
@@ -53,6 +56,26 @@ export default async function SubscriptionDetailPage({ params }: Props) {
           <section style={{ ...cardStyles.section }}>
             <SubscriptionDetailHeader subscription={subscription} />
           </section>
+
+          {subscription.optimization ? (
+            <section style={{ ...cardStyles.section, display: "grid", gap: 10 }}>
+              <h2 style={{ margin: 0 }}>Optimization Recommendation</h2>
+              <SubscriptionRecommendationCard
+                recommendation={subscription.optimization.recommendation}
+              />
+            </section>
+          ) : null}
+
+          {subscription.optimization && subscription.optimization.insights.length > 0 ? (
+            <section style={{ ...cardStyles.section, display: "grid", gap: 10 }}>
+              <h2 style={{ margin: 0 }}>Insights</h2>
+              <div style={{ display: "grid", gap: 8 }}>
+                {subscription.optimization.insights.map((insight) => (
+                  <SubscriptionInsightCard key={insight.id} insight={insight} />
+                ))}
+              </div>
+            </section>
+          ) : null}
 
           <section style={{ ...cardStyles.section, display: "grid", gap: 10 }}>
             <h2 style={{ margin: 0 }}>Linked Obligations</h2>
@@ -111,6 +134,7 @@ export default async function SubscriptionDetailPage({ params }: Props) {
             <SubscriptionPriceHistory items={subscription.priceHistory} />
           </section>
 
+          <SubscriptionReviewFlow subscriptionId={subscription.id} />
           <SubscriptionConfirmationForm subscription={subscription} />
           <SubscriptionMergePanel primarySubscriptionId={subscription.id} />
         </div>

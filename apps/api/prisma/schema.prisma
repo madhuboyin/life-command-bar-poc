@@ -134,6 +134,32 @@ enum SubscriptionConfidenceBand {
   LOW
 }
 
+enum SubscriptionInsightType {
+  PRICE_INCREASE
+  RENEWAL_UPCOMING
+  UNUSED_RISK
+  LOW_CONFIDENCE
+  CANCELLATION_CONFIRMED
+  DUPLICATE_SUBSCRIPTION
+  PLAN_MISMATCH
+  UNKNOWN_STATE
+}
+
+enum SubscriptionInsightSeverity {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum SubscriptionRecommendationType {
+  KEEP
+  REVIEW
+  CANCEL
+  DOWNGRADE
+  CONFIRM
+  IGNORE
+}
+
 enum SubscriptionEvidenceSourceType {
   GMAIL
   UPLOAD
@@ -454,6 +480,8 @@ model User {
   assignedSubscriptions      SubscriptionRegistry[] @relation("SubscriptionAssignedTo")
   createdSubscriptions       SubscriptionRegistry[] @relation("SubscriptionCreatedBy")
   lastHandledSubscriptions   SubscriptionRegistry[] @relation("SubscriptionLastHandledBy")
+  subscriptionInsights       SubscriptionInsight[]
+  subscriptionRecommendations SubscriptionRecommendation[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -661,6 +689,8 @@ model SubscriptionRegistry {
   evidence        SubscriptionEvidence[]
   lifecycleEvents SubscriptionLifecycleEvent[]
   priceHistory    SubscriptionPriceHistory[]
+  insights        SubscriptionInsight[]
+  recommendation  SubscriptionRecommendation?
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -673,6 +703,53 @@ model SubscriptionRegistry {
   @@index([createdByUserId], map: "idx_subscription_registry_created_by")
   @@index([lastHandledByUserId], map: "idx_subscription_registry_last_handled_by")
   @@map("subscription_registry")
+}
+
+model SubscriptionInsight {
+  id String @id @default(cuid())
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  subscriptionId String               @map("subscription_id")
+  subscription   SubscriptionRegistry @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  insightType SubscriptionInsightType @map("insight_type")
+  title       String
+  description String
+  severity    SubscriptionInsightSeverity
+  confidenceScore Decimal @default(0.0) @map("confidence_score") @db.Decimal(5, 4)
+  metadata Json?
+  recommendedAction String @map("recommended_action")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([subscriptionId, insightType], map: "uniq_subscription_insights_subscription_type")
+  @@index([userId, insightType], map: "idx_subscription_insights_user_type")
+  @@index([subscriptionId, severity], map: "idx_subscription_insights_subscription_severity")
+  @@map("subscription_insights")
+}
+
+model SubscriptionRecommendation {
+  id String @id @default(cuid())
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  subscriptionId String               @unique @map("subscription_id")
+  subscription   SubscriptionRegistry @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  recommendationType SubscriptionRecommendationType @map("recommendation_type")
+  reason             String
+  confidenceScore    Decimal @default(0.0) @map("confidence_score") @db.Decimal(5, 4)
+  supportingInsights Json? @map("supporting_insights")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, recommendationType], map: "idx_subscription_recommendations_user_type")
+  @@map("subscription_recommendations")
 }
 
 model SubscriptionEvidence {

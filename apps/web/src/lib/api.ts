@@ -48,6 +48,8 @@ import type {
   ResolutionResponse,
   SortDirection,
   SubscriptionLifecycleState,
+  SubscriptionGuidedFlow,
+  SubscriptionOptimizationRecord,
   SubscriptionRegistryDetail,
   SubscriptionRegistryListResponse,
   TodayFeedResponse,
@@ -179,6 +181,22 @@ type GmailSyncResponse = {
 
 type SubscriptionByIdResponse = {
   subscription: SubscriptionRegistryDetail;
+};
+
+type SubscriptionReviewFlowResponse = {
+  flow: SubscriptionGuidedFlow;
+  optimization: SubscriptionOptimizationRecord;
+};
+
+type SubscriptionDecisionResponse = {
+  result: {
+    subscriptionId: string;
+    decision: "KEEP" | "CANCEL" | "DOWNGRADE" | "REVIEW" | "REMIND_LATER";
+    recommendationType: "KEEP" | "REVIEW" | "CANCEL" | "DOWNGRADE" | "CONFIRM" | "IGNORE";
+    reminderId: string | null;
+    createdObligationId: string | null;
+  };
+  subscription: SubscriptionRegistryDetail | null;
 };
 
 function isAbsoluteHttpUrl(value: string) {
@@ -610,6 +628,36 @@ export async function mergeSubscriptions(input: {
   });
 
   return handleResponse<SubscriptionByIdResponse>(res);
+}
+
+export async function getSubscriptionOptimization(subscriptionId: string) {
+  const res = await apiFetch(`/subscriptions/${subscriptionId}/optimization`, {
+    cache: "no-store"
+  });
+  return handleResponse<SubscriptionOptimizationRecord>(res);
+}
+
+export async function getSubscriptionReviewFlow(subscriptionId: string) {
+  const res = await apiFetch(`/subscriptions/${subscriptionId}/review-flow`, {
+    cache: "no-store"
+  });
+  return handleResponse<SubscriptionReviewFlowResponse>(res);
+}
+
+export async function applySubscriptionDecision(
+  subscriptionId: string,
+  input: {
+    decision: "KEEP" | "CANCEL" | "DOWNGRADE" | "REVIEW" | "REMIND_LATER";
+    remindAt?: string | null;
+    note?: string | null;
+  }
+) {
+  const res = await apiFetch(`/subscriptions/${subscriptionId}/decision`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  return handleResponse<SubscriptionDecisionResponse>(res);
 }
 
 export async function getZeroInputPolicy() {

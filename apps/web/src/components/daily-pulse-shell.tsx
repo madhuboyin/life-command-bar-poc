@@ -176,6 +176,45 @@ export default function DailyPulseShell({
             </section>
           ) : null}
 
+          {pulse.subscriptionSignals &&
+          (pulse.subscriptionSignals.items.length > 0 ||
+            pulse.subscriptionSignals.summaryLine) ? (
+            <section style={cardStyles.section}>
+              <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 6 }}>
+                Subscription Signals
+              </div>
+              {pulse.subscriptionSignals.summaryLine ? (
+                <div style={{ marginBottom: 10, color: colors.textMuted }}>
+                  {pulse.subscriptionSignals.summaryLine}
+                </div>
+              ) : null}
+              <div style={{ display: "grid", gap: 10 }}>
+                {pulse.subscriptionSignals.items.map((item) => (
+                  <article
+                    key={`${item.subscriptionId}_${item.insightType}`}
+                    style={{ ...cardStyles.item, display: "grid", gap: 6 }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                      <strong>{item.title}</strong>
+                      <span style={{ fontSize: 12, color: colors.textMuted }}>
+                        {item.severity.toLowerCase()}
+                      </span>
+                    </div>
+                    <div style={{ color: colors.textMuted, fontSize: 13 }}>{item.insightTitle}</div>
+                    <div style={{ fontSize: 13 }}>
+                      Recommendation {item.recommendationType.toLowerCase()} · Health {item.healthScore}
+                    </div>
+                    <div>
+                      <Link href={`/subscriptions/${item.subscriptionId}`} style={buttonStyles.link}>
+                        Review
+                      </Link>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
           {pulse.progress.totalItems === 0 ? (
             <EmptyState
               title="You are all caught up today"

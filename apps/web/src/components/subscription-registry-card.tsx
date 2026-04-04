@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { SubscriptionRegistrySummary } from "../lib/types";
 import { cardStyles, colors, radius } from "../lib/ui";
 import SubscriptionLifecycleBadge from "./subscription-lifecycle-badge";
+import SubscriptionHealthBadge from "./subscription-health-badge";
 
 export default function SubscriptionRegistryCard({
   subscription
@@ -24,6 +25,14 @@ export default function SubscriptionRegistryCard({
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <Tag label={`Confidence ${subscription.sourceConfidenceBand.toLowerCase()}`} />
         <Tag label={`Billing ${subscription.billingPeriod.toLowerCase()}`} />
+        {subscription.optimization ? (
+          <SubscriptionHealthBadge health={subscription.optimization.health} />
+        ) : null}
+        {subscription.optimization ? (
+          <Tag
+            label={`Recommendation ${subscription.optimization.recommendation.recommendationType.toLowerCase()}`}
+          />
+        ) : null}
         {subscription.recurringPrice !== null ? (
           <Tag label={`Recurring ${formatMoney(subscription.recurringPrice, subscription.currency)}`} />
         ) : null}

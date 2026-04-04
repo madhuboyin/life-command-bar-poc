@@ -1,6 +1,7 @@
 import type { SubscriptionRegistryDetail } from "../lib/types";
 import { colors } from "../lib/ui";
 import SubscriptionLifecycleBadge from "./subscription-lifecycle-badge";
+import SubscriptionHealthBadge from "./subscription-health-badge";
 
 export default function SubscriptionDetailHeader({
   subscription
@@ -24,6 +25,14 @@ export default function SubscriptionDetailHeader({
         Confidence {subscription.sourceConfidenceBand.toLowerCase()} ({Math.round(subscription.sourceConfidenceScore * 100)}%) ·
         Billing {subscription.billingPeriod.toLowerCase()}
       </div>
+      {subscription.optimization ? (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <SubscriptionHealthBadge health={subscription.optimization.health} />
+          <span style={{ color: colors.textMuted, fontSize: 13 }}>
+            Recommendation {subscription.optimization.recommendation.recommendationType.toLowerCase()}
+          </span>
+        </div>
+      ) : null}
     </header>
   );
 }

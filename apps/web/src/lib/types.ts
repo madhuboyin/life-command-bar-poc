@@ -426,6 +426,22 @@ export interface DailyPulseResponse {
   generatedAt: string;
   topInsight: DailyPulseTopInsight;
   upcomingPredictions?: PredictionSummaryItem[];
+  subscriptionSignals?: {
+    summaryLine: string | null;
+    renewingSoonCount: number;
+    priceIncreasedCount: number;
+    needsReviewCount: number;
+    items: Array<{
+      subscriptionId: string;
+      title: string;
+      insightType: string;
+      insightTitle: string;
+      severity: "HIGH" | "MEDIUM" | "LOW";
+      recommendationType: string;
+      healthScore: number;
+      nextRenewalDate: string | null;
+    }>;
+  };
   items: DailyPulseItem[];
   momentum: DailyPulseMomentum;
   progress: DailyPulseProgress;
@@ -739,6 +755,12 @@ export interface ControlTowerResponse {
   upcoming: ControlTowerUpcomingSection;
   recent: ControlTowerRecentItem[];
   systemDecisions: ControlTowerSystemDecisionItem[];
+  subscriptionOptimization: {
+    renewingSoon: ControlTowerSubscriptionOptimizationItem[];
+    priceIncreased: ControlTowerSubscriptionOptimizationItem[];
+    potentiallyUnused: ControlTowerSubscriptionOptimizationItem[];
+    needsReview: ControlTowerSubscriptionOptimizationItem[];
+  };
   summary: {
     reviewCount: number;
     approvalCount: number;
@@ -746,7 +768,30 @@ export interface ControlTowerResponse {
     upcomingCount: number;
     recentCount: number;
     systemDecisionCount: number;
+    subscriptionOptimizationCount: number;
   };
+}
+
+export interface ControlTowerSubscriptionOptimizationItem {
+  id: string;
+  subscriptionId: string;
+  title: string;
+  vendorName: string;
+  lifecycleState: string;
+  recurringPrice: number | null;
+  currency: string | null;
+  nextRenewalDate: string | null;
+  healthScore: number;
+  healthBand: "GOOD" | "FAIR" | "AT_RISK";
+  insightType: string;
+  insightTitle: string;
+  insightDescription: string;
+  severity: "HIGH" | "MEDIUM" | "LOW";
+  confidence: number;
+  recommendationType: string;
+  recommendationReason: string;
+  recommendedAction: string;
+  ctaLabel: string;
 }
 
 export type SubscriptionLifecycleState =
@@ -769,6 +814,51 @@ export type SubscriptionBillingPeriod =
   | "UNKNOWN";
 
 export type SubscriptionAutoRenewStatus = "ON" | "OFF" | "UNKNOWN";
+
+export interface SubscriptionOptimizationHealth {
+  score: number;
+  band: "GOOD" | "FAIR" | "AT_RISK";
+  rationale: string[];
+}
+
+export interface SubscriptionOptimizationInsight {
+  id: string;
+  subscriptionId: string;
+  insightType:
+    | "PRICE_INCREASE"
+    | "RENEWAL_UPCOMING"
+    | "UNUSED_RISK"
+    | "LOW_CONFIDENCE"
+    | "CANCELLATION_CONFIRMED"
+    | "DUPLICATE_SUBSCRIPTION"
+    | "PLAN_MISMATCH"
+    | "UNKNOWN_STATE";
+  title: string;
+  description: string;
+  severity: "HIGH" | "MEDIUM" | "LOW";
+  confidence: number;
+  metadata: Record<string, unknown> | null;
+  recommendedAction: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface SubscriptionOptimizationRecommendation {
+  subscriptionId: string;
+  recommendationType: "KEEP" | "REVIEW" | "CANCEL" | "DOWNGRADE" | "CONFIRM" | "IGNORE";
+  reason: string;
+  confidence: number;
+  supportingInsights: SubscriptionOptimizationInsight["insightType"][];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface SubscriptionOptimizationRecord {
+  subscriptionId: string;
+  health: SubscriptionOptimizationHealth;
+  insights: SubscriptionOptimizationInsight[];
+  recommendation: SubscriptionOptimizationRecommendation;
+}
 
 export interface SubscriptionRegistrySummary {
   id: string;
@@ -801,11 +891,13 @@ export interface SubscriptionRegistrySummary {
   cancellationEffectiveDate: string | null;
   sourceConfidenceScore: number;
   sourceConfidenceBand: ConfidenceBand;
+  optimization: SubscriptionOptimizationRecord | null;
   counts: {
     evidence: number;
     lifecycleEvents: number;
     priceHistory: number;
     linkedObligations: number;
+    insights: number;
   };
   createdAt: string;
   updatedAt: string;
@@ -900,6 +992,24 @@ export interface SubscriptionRegistryListResponse {
     limit: number;
     offset: number;
   };
+}
+
+export interface SubscriptionGuidedFlow {
+  flowId: string;
+  subscriptionId: string;
+  title: string;
+  recommendedDecision: "KEEP" | "REVIEW" | "CANCEL" | "DOWNGRADE" | "CONFIRM" | "IGNORE";
+  steps: Array<{
+    key: string;
+    title: string;
+    description: string;
+    options: Array<{
+      key: string;
+      label: string;
+      description: string;
+      recommended?: boolean;
+    }>;
+  }>;
 }
 
 export interface HouseholdSummary {

@@ -17,6 +17,7 @@ import type { DecisionTrace, TrustWhy } from "../utils/trust-layer";
 import { toWhyConfidence } from "../utils/trust-layer";
 import { HomeMemoryService } from "./home-memory.service";
 import { PredictionEngineService } from "./prediction-engine.service";
+import { SubscriptionInsightService } from "./subscription-insight.service";
 
 type PulseHookType = "urgent" | "quick_win" | "money" | "postponed" | "important";
 type PulseTrend = "up" | "down" | "flat";
@@ -63,6 +64,17 @@ type PulseProgress = {
   completedAt: string | null;
 };
 
+type PulseSubscriptionSignalItem = {
+  subscriptionId: string;
+  title: string;
+  insightType: string;
+  insightTitle: string;
+  severity: "HIGH" | "MEDIUM" | "LOW";
+  recommendationType: string;
+  healthScore: number;
+  nextRenewalDate: string | null;
+};
+
 type PulseCandidate = {
   obligationId: string;
   title: string;
@@ -106,6 +118,7 @@ export class DailyPulseService {
   private readonly repository = new DailyPulseRepository();
   private readonly homeMemoryService = new HomeMemoryService();
   private readonly predictionEngineService = new PredictionEngineService();
+  private readonly subscriptionInsightService = new SubscriptionInsightService();
 
   async getPulse(
     userId: string,
@@ -123,7 +136,8 @@ export class DailyPulseService {
       recentlyPostponedIds,
       personalizationSummary,
       memorySignals,
-      preparationPredictions
+      preparationPredictions,
+      subscriptionActions
     ] =
       await Promise.all([
         this.dashboardInsightsService.getInsights(userId, { includeTrace }),
@@ -142,7 +156,8 @@ export class DailyPulseService {
         })),
         this.predictionEngineService
           .getPreparationItems(userId, { days: 7, limit: 3 })
-          .catch(() => [])
+          .catch(() => []),
+        this.subscriptionInsightService.listActions(userId, 20).catch(() => [])
       ]);
     const signals = personalizationSummary?.signals ?? getDefaultSignals();
     const predictionBoostByObligation = await this.predictionEngineService
@@ -240,6 +255,7 @@ export class DailyPulseService {
       includeTrace
     );
     const momentum = await this.getMomentum(userId, progress.completedCount);
+    const subscriptionSignalSummary = summarizeSubscriptionSignals(subscriptionActions);
 
     return {
       generatedAt: state.createdAt.toISOString(),
@@ -258,6 +274,7 @@ export class DailyPulseService {
         confidenceBand: item.confidenceBand,
         rationaleSummary: item.rationaleSummary
       })) satisfies PulsePredictionPreview[],
+      subscriptionSignals: subscriptionSignalSummary,
       items,
       momentum: {
         ...momentum,
@@ -1012,6 +1029,70 @@ export class DailyPulseService {
     }
     return ids;
   }
+}
+
+function summarizeSubscriptionSignals(
+  actions: Awaited<ReturnType<SubscriptionInsightService["listActions"]>>
+) {
+  const items = actions
+    .flatMap<PulseSubscriptionSignalItem>((item) =>
+      item.insights.map((insight) => ({
+        subscriptionId: item.subscriptionId,
+        title: item.subscriptionTitle,
+        insightType: insight.insightType,
+        insightTitle: insight.title,
+        severity: insight.severity,
+        recommendationType: item.recommendation.recommendationType,
+        healthScore: item.health.score,
+        nextRenewalDate: item.nextRenewalDate
+      }))
+    )
+    .sort((a, b) => pulseSubscriptionSignalScore(b) - pulseSubscriptionSignalScore(a));
+
+  const renewingSoonCount = items.filter((item) => item.insightType === "RENEWAL_UPCOMING").length;
+  const priceIncreasedCount = items.filter((item) => item.insightType === "PRICE_INCREASE").length;
+  const needsReviewCount = items.filter((item) => item.recommendationType === "REVIEW").length;
+
+  return {
+    summaryLine: buildSubscriptionSummaryLine({
+      renewingSoonCount,
+      priceIncreasedCount,
+      needsReviewCount
+    }),
+    renewingSoonCount,
+    priceIncreasedCount,
+    needsReviewCount,
+    items: items.slice(0, 3)
+  };
+}
+
+function pulseSubscriptionSignalScore(item: PulseSubscriptionSignalItem) {
+  let score = item.healthScore;
+  if (item.severity === "HIGH") score += 24;
+  if (item.severity === "MEDIUM") score += 12;
+  if (item.insightType === "RENEWAL_UPCOMING") score += 16;
+  if (item.insightType === "PRICE_INCREASE") score += 18;
+  if (item.insightType === "UNUSED_RISK") score += 14;
+  if (item.recommendationType === "REVIEW") score += 8;
+  return score;
+}
+
+function buildSubscriptionSummaryLine(input: {
+  renewingSoonCount: number;
+  priceIncreasedCount: number;
+  needsReviewCount: number;
+}) {
+  const parts: string[] = [];
+  if (input.renewingSoonCount > 0) {
+    parts.push(`${input.renewingSoonCount} subscription${input.renewingSoonCount === 1 ? "" : "s"} renewing soon`);
+  }
+  if (input.priceIncreasedCount > 0) {
+    parts.push(`${input.priceIncreasedCount} price increase${input.priceIncreasedCount === 1 ? "" : "s"}`);
+  }
+  if (input.needsReviewCount > 0) {
+    parts.push(`${input.needsReviewCount} need review`);
+  }
+  return parts.length > 0 ? parts.join(" · ") : null;
 }
 
 function buildPulseWhy(input: {

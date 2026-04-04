@@ -9,6 +9,7 @@ import { ObligationService } from "./obligation.service";
 import { PredictionEngineService } from "./prediction-engine.service";
 import { HomeMemoryService } from "./home-memory.service";
 import { ZeroInputService } from "./zero-input.service";
+import { SubscriptionInsightService } from "./subscription-insight.service";
 
 const DEFAULT_REVIEW_LIMIT = 6;
 const DEFAULT_APPROVAL_LIMIT = 6;
@@ -120,6 +121,35 @@ type ControlTowerUpcomingSection = {
   items: ControlTowerUpcomingItem[];
 };
 
+type ControlTowerSubscriptionOptimizationItem = {
+  id: string;
+  subscriptionId: string;
+  title: string;
+  vendorName: string;
+  lifecycleState: string;
+  recurringPrice: number | null;
+  currency: string | null;
+  nextRenewalDate: string | null;
+  healthScore: number;
+  healthBand: "GOOD" | "FAIR" | "AT_RISK";
+  insightType: string;
+  insightTitle: string;
+  insightDescription: string;
+  severity: "HIGH" | "MEDIUM" | "LOW";
+  confidence: number;
+  recommendationType: string;
+  recommendationReason: string;
+  recommendedAction: string;
+  ctaLabel: string;
+};
+
+type ControlTowerSubscriptionOptimizationSection = {
+  renewingSoon: ControlTowerSubscriptionOptimizationItem[];
+  priceIncreased: ControlTowerSubscriptionOptimizationItem[];
+  potentiallyUnused: ControlTowerSubscriptionOptimizationItem[];
+  needsReview: ControlTowerSubscriptionOptimizationItem[];
+};
+
 export class ControlTowerService {
   private readonly obligationService = new ObligationService();
   private readonly obligationRepository = new ObligationRepository();
@@ -127,6 +157,7 @@ export class ControlTowerService {
   private readonly predictionEngineService = new PredictionEngineService();
   private readonly homeMemoryService = new HomeMemoryService();
   private readonly zeroInputService = new ZeroInputService();
+  private readonly subscriptionInsightService = new SubscriptionInsightService();
 
   async getControlTower(userId: string, options?: {
     reviewLimit?: number;
@@ -145,13 +176,14 @@ export class ControlTowerService {
     const systemDecisionsLimit =
       options?.systemDecisionsLimit ?? DEFAULT_SYSTEM_DECISIONS_LIMIT;
 
-    const [reviewRaw, approvalsRaw, readyRaw, upcomingRaw, recent, systemDecisions] = await Promise.all([
+    const [reviewRaw, approvalsRaw, readyRaw, upcomingRaw, recent, systemDecisions, subscriptionOptimization] = await Promise.all([
       this.getReview(userId, reviewLimit * 2),
       this.getApprovals(userId, approvalLimit * 2),
       this.getReady(userId, readyLimit * 2),
       this.getUpcoming(userId, upcomingLimitPerWindow),
       this.getRecent(userId, recentLimit),
-      this.getSystemDecisions(userId, systemDecisionsLimit)
+      this.getSystemDecisions(userId, systemDecisionsLimit),
+      this.getSubscriptionOptimization(userId, reviewLimit)
     ]);
 
     const review = reviewRaw.items.slice(0, reviewLimit);
@@ -209,15 +241,78 @@ export class ControlTowerService {
       },
       recent: recent.items,
       systemDecisions: systemDecisions.items,
+      subscriptionOptimization,
       summary: {
         reviewCount: review.length,
         approvalCount: approvals.length,
         readyCount: ready.length,
         upcomingCount: upcomingItems.length,
         recentCount: recent.items.length,
-        systemDecisionCount: systemDecisions.items.length
+        systemDecisionCount: systemDecisions.items.length,
+        subscriptionOptimizationCount:
+          subscriptionOptimization.renewingSoon.length +
+          subscriptionOptimization.priceIncreased.length +
+          subscriptionOptimization.potentiallyUnused.length +
+          subscriptionOptimization.needsReview.length
       }
     };
+  }
+
+  async getSubscriptionOptimization(userId: string, limit = 6) {
+    const actions = await this.subscriptionInsightService.listActions(userId, 60);
+    const items = actions.flatMap<ControlTowerSubscriptionOptimizationItem>((item) =>
+      item.insights.map((insight) => ({
+        id: `subscription:${item.subscriptionId}:${insight.insightType}`,
+        subscriptionId: item.subscriptionId,
+        title: item.subscriptionTitle,
+        vendorName: item.vendorName,
+        lifecycleState: item.lifecycleState,
+        recurringPrice: item.recurringPrice,
+        currency: item.currency,
+        nextRenewalDate: item.nextRenewalDate,
+        healthScore: item.health.score,
+        healthBand: item.health.band,
+        insightType: insight.insightType,
+        insightTitle: insight.title,
+        insightDescription: insight.description,
+        severity: insight.severity,
+        confidence: insight.confidence,
+        recommendationType: item.recommendation.recommendationType,
+        recommendationReason: item.recommendation.reason,
+        recommendedAction: insight.recommendedAction,
+        ctaLabel: "Review"
+      }))
+    );
+
+    const renewingSoon = items
+      .filter((item) => item.insightType === "RENEWAL_UPCOMING")
+      .sort((a, b) => scoreSubscriptionOptimizationItem(b) - scoreSubscriptionOptimizationItem(a))
+      .slice(0, limit);
+    const priceIncreased = items
+      .filter((item) => item.insightType === "PRICE_INCREASE")
+      .sort((a, b) => scoreSubscriptionOptimizationItem(b) - scoreSubscriptionOptimizationItem(a))
+      .slice(0, limit);
+    const potentiallyUnused = items
+      .filter((item) => item.insightType === "UNUSED_RISK")
+      .sort((a, b) => scoreSubscriptionOptimizationItem(b) - scoreSubscriptionOptimizationItem(a))
+      .slice(0, limit);
+    const needsReview = items
+      .filter(
+        (item) =>
+          item.recommendationType === "REVIEW" ||
+          item.insightType === "LOW_CONFIDENCE" ||
+          item.insightType === "UNKNOWN_STATE" ||
+          item.insightType === "PLAN_MISMATCH"
+      )
+      .sort((a, b) => scoreSubscriptionOptimizationItem(b) - scoreSubscriptionOptimizationItem(a))
+      .slice(0, limit);
+
+    return {
+      renewingSoon: dedupeSubscriptionOptimizationItems(renewingSoon),
+      priceIncreased: dedupeSubscriptionOptimizationItems(priceIncreased),
+      potentiallyUnused: dedupeSubscriptionOptimizationItems(potentiallyUnused),
+      needsReview: dedupeSubscriptionOptimizationItems(needsReview)
+    } satisfies ControlTowerSubscriptionOptimizationSection;
   }
 
   async getApprovals(userId: string, limit = DEFAULT_APPROVAL_LIMIT) {
@@ -532,6 +627,11 @@ export class ControlTowerService {
               "subscription_price_changed",
               "subscription_cancellation_detected",
               "subscription_prediction_strengthened",
+              "subscription_insight_created",
+              "subscription_recommendation_generated",
+              "subscription_decision_taken",
+              "subscription_kept",
+              "subscription_marked_for_cancel",
               "gmail_sync_error",
               "auto_flow_triggered",
               "prediction_rebuilt",
@@ -1112,6 +1212,86 @@ function toSystemDecisionFromAudit(
     };
   }
 
+  if (event.eventType === "subscription_insight_created") {
+    return {
+      id: event.id,
+      decisionType: "CONFIDENCE",
+      title: "Subscription insight generated",
+      explanation: "Optimization engine produced a high-signal subscription insight.",
+      sourceSignals: [
+        event.eventType,
+        typeof metadata?.insightType === "string"
+          ? `insight:${String(metadata.insightType).toLowerCase()}`
+          : "insight:unknown"
+      ],
+      createdAt: event.createdAt.toISOString(),
+      obligationId: event.obligationId,
+      referenceId: typeof metadata?.subscriptionId === "string" ? metadata.subscriptionId : null
+    };
+  }
+
+  if (event.eventType === "subscription_recommendation_generated") {
+    return {
+      id: event.id,
+      decisionType: "ROUTING",
+      title: "Subscription recommendation generated",
+      explanation: "Deterministic recommendation was generated from subscription lifecycle insights.",
+      sourceSignals: [
+        event.eventType,
+        typeof metadata?.recommendationType === "string"
+          ? `recommendation:${String(metadata.recommendationType).toLowerCase()}`
+          : "recommendation:unknown"
+      ],
+      createdAt: event.createdAt.toISOString(),
+      obligationId: event.obligationId,
+      referenceId: typeof metadata?.subscriptionId === "string" ? metadata.subscriptionId : null
+    };
+  }
+
+  if (event.eventType === "subscription_decision_taken") {
+    return {
+      id: event.id,
+      decisionType: "ROUTING",
+      title: "Subscription decision applied",
+      explanation: "A guided subscription decision updated recommendation state.",
+      sourceSignals: [
+        event.eventType,
+        typeof metadata?.decision === "string"
+          ? `decision:${String(metadata.decision).toLowerCase()}`
+          : "decision:unknown"
+      ],
+      createdAt: event.createdAt.toISOString(),
+      obligationId: event.obligationId,
+      referenceId: typeof metadata?.subscriptionId === "string" ? metadata.subscriptionId : null
+    };
+  }
+
+  if (event.eventType === "subscription_kept") {
+    return {
+      id: event.id,
+      decisionType: "PREDICTION",
+      title: "Subscription marked keep",
+      explanation: "User confirmed this subscription should remain active.",
+      sourceSignals: [event.eventType],
+      createdAt: event.createdAt.toISOString(),
+      obligationId: event.obligationId,
+      referenceId: typeof metadata?.subscriptionId === "string" ? metadata.subscriptionId : null
+    };
+  }
+
+  if (event.eventType === "subscription_marked_for_cancel") {
+    return {
+      id: event.id,
+      decisionType: "SUPPRESSION",
+      title: "Subscription marked for cancellation",
+      explanation: "User selected cancel path and lifecycle state was moved toward cancellation.",
+      sourceSignals: [event.eventType],
+      createdAt: event.createdAt.toISOString(),
+      obligationId: event.obligationId,
+      referenceId: typeof metadata?.subscriptionId === "string" ? metadata.subscriptionId : null
+    };
+  }
+
   if (event.eventType === "gmail_candidate_skipped") {
     return {
       id: event.id,
@@ -1271,6 +1451,30 @@ function dedupeById<T extends { id: string }>(items: T[]) {
     deduped.push(item);
   }
   return deduped;
+}
+
+function dedupeSubscriptionOptimizationItems(items: ControlTowerSubscriptionOptimizationItem[]) {
+  const seen = new Set<string>();
+  const output: ControlTowerSubscriptionOptimizationItem[] = [];
+  for (const item of items) {
+    const key = `${item.subscriptionId}:${item.insightType}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    output.push(item);
+  }
+  return output;
+}
+
+function scoreSubscriptionOptimizationItem(item: ControlTowerSubscriptionOptimizationItem) {
+  let score = item.healthScore;
+  if (item.severity === "HIGH") score += 24;
+  if (item.severity === "MEDIUM") score += 14;
+  if (item.recommendationType === "REVIEW") score += 10;
+  if (item.recommendationType === "CANCEL") score += 14;
+  if (item.insightType === "RENEWAL_UPCOMING") score += 16;
+  if (item.insightType === "PRICE_INCREASE") score += 18;
+  if (item.insightType === "UNUSED_RISK") score += 12;
+  return score;
 }
 
 function normalizeEventLabel(eventType: string) {

@@ -25,6 +25,9 @@ import type { GmailSubscriptionHeuristicResult } from "./gmail-subscription-heur
 import { HomeMemoryService } from "./home-memory.service";
 import { PredictionEngineService } from "./prediction-engine.service";
 import { AppError } from "../utils/app-error";
+import { SubscriptionInsightService } from "./subscription-insight.service";
+import { buildSubscriptionGuidedFlow } from "./subscription-guided-flow";
+import { SubscriptionDecisionEngine } from "./subscription-decision-engine";
 
 const listQuerySchema = z.object({
   limit: z.number().int().min(1).max(100).default(25),
@@ -108,6 +111,8 @@ export class SubscriptionRegistryService {
   private readonly mergeService = new SubscriptionMergeService();
   private readonly homeMemoryService = new HomeMemoryService();
   private readonly predictionEngineService = new PredictionEngineService();
+  private readonly insightService = new SubscriptionInsightService();
+  private readonly decisionEngine = new SubscriptionDecisionEngine();
 
   async list(userId: string, rawQuery: unknown) {
     const query = listQuerySchema.parse(rawQuery ?? {});
@@ -119,9 +124,16 @@ export class SubscriptionRegistryService {
       limit: query.limit,
       offset: query.offset
     });
+    const optimization = await this.insightService.refreshForSubscriptions(
+      userId,
+      data.items.map((item) => item.id),
+      { emitEvents: false }
+    );
 
     return {
-      items: data.items.map((item) => mapSubscriptionSummary(item)),
+      items: data.items.map((item) =>
+        mapSubscriptionSummary(item, optimization.get(item.id) ?? null)
+      ),
       pagination: {
         total: data.total,
         limit: query.limit,
@@ -138,8 +150,11 @@ export class SubscriptionRegistryService {
       householdIds
     });
     if (!subscription) return null;
+    const optimization = await this.insightService.refreshForSubscriptions(userId, [id], {
+      emitEvents: false
+    });
     return {
-      subscription: mapSubscriptionDetail(subscription)
+      subscription: mapSubscriptionDetail(subscription, optimization.get(id) ?? null)
     };
   }
 
@@ -209,6 +224,9 @@ export class SubscriptionRegistryService {
       subscriptionId: id,
       eventType: "subscription_registry_review_confirmed",
       rebuild: true
+    });
+    await this.insightService.refreshForSubscriptions(userId, [id], {
+      emitEvents: true
     });
 
     return this.getById(userId, id);
@@ -329,6 +347,11 @@ export class SubscriptionRegistryService {
       eventType: "subscription_registry_updated",
       rebuild: true
     });
+    await this.insightService.refreshForSubscriptions(
+      userId,
+      [primary.id, duplicate.id],
+      { emitEvents: true }
+    );
 
     return this.getById(userId, primary.id);
   }
@@ -644,8 +667,80 @@ export class SubscriptionRegistryService {
       eventType: "subscription_registry_updated",
       rebuild: shouldRebuild
     });
+    await this.insightService.refreshForSubscriptions(
+      input.userId,
+      [result.subscriptionId],
+      { emitEvents: true }
+    );
 
     return result;
+  }
+
+  async getOptimization(userId: string, id: string) {
+    const existing = await this.repository.findForUserStrict(id, userId);
+    if (!existing) return null;
+
+    const optimization = await this.insightService.refreshForSubscriptions(userId, [id], {
+      emitEvents: false
+    });
+    return optimization.get(id) ?? null;
+  }
+
+  async getGuidedReviewFlow(userId: string, id: string) {
+    const detail = await this.getById(userId, id);
+    if (!detail) return null;
+
+    const optimization = await this.getOptimization(userId, id);
+    if (!optimization) return null;
+
+    await this.repository.createAuditEvent({
+      userId,
+      eventType: "subscription_review_started",
+      metadata: {
+        subscriptionId: id,
+        recommendationType: optimization.recommendation.recommendationType
+      }
+    });
+
+    return {
+      flow: buildSubscriptionGuidedFlow({
+        subscription: {
+          id: detail.subscription.id,
+          subscriptionTitle: detail.subscription.subscriptionTitle,
+          vendorName: detail.subscription.vendorName,
+          planName: detail.subscription.planName,
+          recurringPrice: detail.subscription.recurringPrice,
+          currency: detail.subscription.currency,
+          nextRenewalDate: detail.subscription.nextRenewalDate,
+          lifecycleState: detail.subscription.lifecycleState
+        },
+        optimization
+      }),
+      optimization
+    };
+  }
+
+  async applyDecision(
+    userId: string,
+    id: string,
+    payload: {
+      decision: "KEEP" | "CANCEL" | "DOWNGRADE" | "REVIEW" | "REMIND_LATER";
+      remindAt?: string | null;
+      note?: string | null;
+    }
+  ) {
+    const result = await this.decisionEngine.applyDecision({
+      userId,
+      subscriptionId: id,
+      decision: payload.decision,
+      remindAt: payload.remindAt,
+      note: payload.note
+    });
+    const subscription = await this.getById(userId, id);
+    return {
+      result,
+      subscription: subscription?.subscription ?? null
+    };
   }
 
   private async captureDownstreamSignals(input: {
@@ -673,7 +768,7 @@ export class SubscriptionRegistryService {
   }
 }
 
-function mapSubscriptionSummary(item: any) {
+function mapSubscriptionSummary(item: any, optimization: any | null = null) {
   return {
     id: item.id,
     userId: item.userId,
@@ -707,20 +802,28 @@ function mapSubscriptionSummary(item: any) {
     cancellationEffectiveDate: item.cancellationEffectiveDate?.toISOString() ?? null,
     sourceConfidenceScore: Number(item.sourceConfidenceScore),
     sourceConfidenceBand: item.sourceConfidenceBand,
+    optimization: optimization
+      ? {
+          health: optimization.health,
+          insights: optimization.insights,
+          recommendation: optimization.recommendation
+        }
+      : null,
     counts: {
       evidence: item._count?.evidence ?? 0,
       lifecycleEvents: item._count?.lifecycleEvents ?? 0,
       priceHistory: item._count?.priceHistory ?? 0,
-      linkedObligations: item._count?.obligations ?? 0
+      linkedObligations: item._count?.obligations ?? 0,
+      insights: optimization?.insights?.length ?? 0
     },
     createdAt: item.createdAt.toISOString(),
     updatedAt: item.updatedAt.toISOString()
   };
 }
 
-function mapSubscriptionDetail(item: any) {
+function mapSubscriptionDetail(item: any, optimization: any | null = null) {
   return {
-    ...mapSubscriptionSummary(item),
+    ...mapSubscriptionSummary(item, optimization),
     createdBy: item.createdByUser
       ? {
           id: item.createdByUser.id,

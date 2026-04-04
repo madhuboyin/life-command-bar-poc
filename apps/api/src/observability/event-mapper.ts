@@ -141,6 +141,18 @@ function mapEventType(
       return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_PREDICTION_STRENGTHENED;
     case "subscription_obligation_created":
       return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_OBLIGATION_CREATED;
+    case "subscription_insight_created":
+      return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_INSIGHT_CREATED;
+    case "subscription_recommendation_generated":
+      return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_RECOMMENDATION_GENERATED;
+    case "subscription_review_started":
+      return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_REVIEW_STARTED;
+    case "subscription_decision_taken":
+      return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_DECISION_TAKEN;
+    case "subscription_kept":
+      return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_KEPT;
+    case "subscription_marked_for_cancel":
+      return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_MARKED_FOR_CANCEL;
 
     case "prediction_rebuilt":
     case "prediction_updated":

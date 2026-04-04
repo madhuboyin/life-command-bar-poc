@@ -3,7 +3,10 @@
 import Link from "next/link";
 import { useState } from "react";
 import { getControlTower } from "../lib/api";
-import type { ControlTowerResponse } from "../lib/types";
+import type {
+  ControlTowerResponse,
+  ControlTowerSubscriptionOptimizationItem
+} from "../lib/types";
 import { buttonStyles, cardStyles, colors, pageStyles } from "../lib/ui";
 import ControlItemCard from "./control-item-card";
 import ControlSection from "./control-section";
@@ -27,13 +30,20 @@ const EMPTY_CONTROL_TOWER: ControlTowerResponse = {
   },
   recent: [],
   systemDecisions: [],
+  subscriptionOptimization: {
+    renewingSoon: [],
+    priceIncreased: [],
+    potentiallyUnused: [],
+    needsReview: []
+  },
   summary: {
     reviewCount: 0,
     approvalCount: 0,
     readyCount: 0,
     upcomingCount: 0,
     recentCount: 0,
-    systemDecisionCount: 0
+    systemDecisionCount: 0,
+    subscriptionOptimizationCount: 0
   }
 };
 
@@ -95,8 +105,43 @@ export default function ControlTowerShell({ initialData, initialError = null }: 
           <Pill label={`Upcoming ${data.summary.upcomingCount}`} />
           <Pill label={`Recent ${data.summary.recentCount}`} />
           <Pill label={`System decisions ${data.summary.systemDecisionCount}`} />
+          <Pill label={`Subscriptions ${data.summary.subscriptionOptimizationCount}`} />
         </div>
       </section>
+
+      <ControlSection
+        title="Renewing Soon"
+        description="Subscriptions with upcoming renewals that likely need a keep/cancel decision."
+        count={data.subscriptionOptimization.renewingSoon.length}
+      >
+        <SubscriptionOptimizationList items={data.subscriptionOptimization.renewingSoon} />
+      </ControlSection>
+
+      <ControlSection
+        title="Price Increased"
+        description="Detected recurring price increases tied to subscription lifecycle evidence."
+        count={data.subscriptionOptimization.priceIncreased.length}
+      >
+        <SubscriptionOptimizationList items={data.subscriptionOptimization.priceIncreased} />
+      </ControlSection>
+
+      <ControlSection
+        title="Potentially Unused"
+        description="Subscriptions with inactivity or weak value signals."
+        count={data.subscriptionOptimization.potentiallyUnused.length}
+        defaultCollapsedOnMobile
+      >
+        <SubscriptionOptimizationList items={data.subscriptionOptimization.potentiallyUnused} />
+      </ControlSection>
+
+      <ControlSection
+        title="Subscription Needs Review"
+        description="Conflicts, low-confidence states, and plan mismatches routed for review."
+        count={data.subscriptionOptimization.needsReview.length}
+        defaultCollapsedOnMobile
+      >
+        <SubscriptionOptimizationList items={data.subscriptionOptimization.needsReview} />
+      </ControlSection>
 
       <div style={{ display: "grid", gap: 16 }}>
         <ControlSection
@@ -265,5 +310,69 @@ function Pill({ label }: { label: string }) {
     >
       {label}
     </span>
+  );
+}
+
+function SubscriptionOptimizationList({
+  items
+}: {
+  items: ControlTowerSubscriptionOptimizationItem[];
+}) {
+  if (items.length === 0) {
+    return (
+      <EmptyState
+        title="No items right now"
+        description="High-signal subscription insights will appear here."
+      />
+    );
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      {items.map((item) => (
+        <article key={item.id} style={{ ...cardStyles.item, display: "grid", gap: 8 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+            <div>
+              <h3 style={{ margin: "0 0 4px 0", fontSize: 16 }}>{item.title}</h3>
+              <div style={{ color: colors.textMuted, fontSize: 13 }}>
+                {item.vendorName} · {item.lifecycleState.toLowerCase()}
+              </div>
+            </div>
+            <span
+              style={{
+                borderRadius: 999,
+                background:
+                  item.severity === "HIGH"
+                    ? colors.dangerBg
+                    : item.severity === "MEDIUM"
+                      ? colors.quickWinBg
+                      : colors.neutralBadgeBg,
+                color:
+                  item.severity === "HIGH"
+                    ? colors.dangerText
+                    : item.severity === "MEDIUM"
+                      ? colors.quickWinText
+                      : colors.neutralBadgeText,
+                padding: "4px 10px",
+                fontSize: 12,
+                fontWeight: 700
+              }}
+            >
+              {item.severity.toLowerCase()}
+            </span>
+          </div>
+
+          <div style={{ color: colors.textMuted, fontSize: 14 }}>{item.insightDescription}</div>
+          <div style={{ fontSize: 13 }}>
+            Recommendation {item.recommendationType.toLowerCase()} · Health {item.healthScore}
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Link href={`/subscriptions/${item.subscriptionId}`} style={buttonStyles.link}>
+              {item.ctaLabel}
+            </Link>
+          </div>
+        </article>
+      ))}
+    </div>
   );
 }
