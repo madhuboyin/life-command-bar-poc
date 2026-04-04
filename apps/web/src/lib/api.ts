@@ -1,6 +1,8 @@
 import type {
   CommandExecuteResponse,
   CommandParseResponse,
+  DailyPulseItemUpdateResponse,
+  DailyPulseProgressResponse,
   DailyPulseResponse,
   DailyPulseState,
   DashboardInsightsResponse,
@@ -82,6 +84,8 @@ type GuidedJourneyMaybeResponse = {
 
 type DailyPulseApiResponse = DailyPulseResponse;
 type DailyPulseStateApiResponse = DailyPulseState;
+type DailyPulseProgressApiResponse = DailyPulseProgressResponse;
+type DailyPulseItemUpdateApiResponse = DailyPulseItemUpdateResponse;
 type PersonalizationSummaryApiResponse = PersonalizationSummary;
 type PersonalizationDebugApiResponse = PersonalizationDebug;
 
@@ -725,6 +729,77 @@ export async function getDailyPulseState(): Promise<DailyPulseStateApiResponse> 
   });
 
   return handleResponse<DailyPulseStateApiResponse>(res);
+}
+
+export async function openDailyPulse() {
+  const res = await apiFetch("/daily-pulse/open", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
+
+  return handleResponse<{
+    date: string;
+    openedAt?: string | null;
+    progress: DailyPulseProgressResponse["progress"];
+    momentum: DailyPulseProgressResponse["momentum"];
+  }>(res);
+}
+
+export async function getDailyPulseProgress(): Promise<DailyPulseProgressApiResponse> {
+  const res = await apiFetch("/daily-pulse/progress", {
+    cache: "no-store"
+  });
+
+  return handleResponse<DailyPulseProgressApiResponse>(res);
+}
+
+export async function completeDailyPulseItem(
+  obligationId: string
+): Promise<DailyPulseItemUpdateApiResponse> {
+  const res = await apiFetch(`/daily-pulse/items/${obligationId}/complete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
+
+  return handleResponse<DailyPulseItemUpdateApiResponse>(res);
+}
+
+export async function postponeDailyPulseItem(
+  obligationId: string
+): Promise<DailyPulseItemUpdateApiResponse> {
+  const res = await apiFetch(`/daily-pulse/items/${obligationId}/postpone`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
+
+  return handleResponse<DailyPulseItemUpdateApiResponse>(res);
+}
+
+export async function dismissDailyPulseItem(
+  obligationId: string
+): Promise<DailyPulseItemUpdateApiResponse> {
+  const res = await apiFetch(`/daily-pulse/items/${obligationId}/dismiss`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
+
+  return handleResponse<DailyPulseItemUpdateApiResponse>(res);
+}
+
+export async function openGuidedDailyPulseItem(
+  obligationId: string
+): Promise<DailyPulseItemUpdateApiResponse> {
+  const res = await apiFetch(`/daily-pulse/items/${obligationId}/open-guided`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
+
+  return handleResponse<DailyPulseItemUpdateApiResponse>(res);
 }
 
 export async function trackDailyPulseAction(action: "COMPLETED" | "DISMISSED" | "POSTPONED") {

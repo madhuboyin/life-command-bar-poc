@@ -19,6 +19,7 @@ import {
   normalizeTemplateSteps
 } from "./guided-journey.builder";
 import { PersonalizationService } from "./personalization.service";
+import { DailyPulseService } from "./daily-pulse.service";
 import type { PersonalizationSignals } from "../types/personalization.types";
 import type {
   GuidedJourneyOption,
@@ -37,6 +38,7 @@ const advanceSchema = z.object({
 export class GuidedJourneyService {
   private readonly repository = new GuidedJourneyRepository();
   private readonly personalizationService = new PersonalizationService();
+  private readonly dailyPulseService = new DailyPulseService();
 
   async createOrResume(userId: string, obligationId: string) {
     const obligation = await this.repository.findObligationById(userId, obligationId);
@@ -245,6 +247,12 @@ export class GuidedJourneyService {
 
     });
 
+    if (journey.currentStepIndex >= journey.steps.length - 1) {
+      await this.dailyPulseService
+        .markCompletedFromGuidedJourney(userId, journey.obligationId)
+        .catch(() => null);
+    }
+
     const updated = await this.requireJourney(userId, journeyId);
     return {
       journey: this.toJourneyPayload(updated)
@@ -364,6 +372,10 @@ export class GuidedJourneyService {
       );
 
     });
+
+    await this.dailyPulseService
+      .markCompletedFromGuidedJourney(userId, journey.obligationId)
+      .catch(() => null);
 
     const updated = await this.requireJourney(userId, journeyId);
     return {

@@ -109,6 +109,14 @@ enum GuidedJourneyEventType {
   JOURNEY_DISMISSED
 }
 
+enum DailyPulseItemStatus {
+  PENDING
+  OPENED_GUIDED
+  COMPLETED
+  POSTPONED
+  DISMISSED
+}
+
 enum OutcomeSourceContext {
   TODAY_FEED
   DASHBOARD_INSIGHT
@@ -146,6 +154,7 @@ model User {
   guidedJourneys      GuidedJourney[]
   guidedJourneyEvents GuidedJourneyEvent[]
   dailyPulseStates    DailyPulseState[]
+  dailyPulseItemStates DailyPulseItemState[]
   outcomeFeedback     OutcomeFeedback[]
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -190,6 +199,7 @@ model Obligation {
   resolutionRuns      ResolutionRun[]
   guidedJourneys      GuidedJourney[]
   guidedJourneyEvents GuidedJourneyEvent[]
+  dailyPulseItemStates DailyPulseItemState[]
   outcomeFeedback     OutcomeFeedback[]
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -295,14 +305,47 @@ model DailyPulseState {
 
   openedAt DateTime? @map("opened_at")
 
+  totalItems Int @default(0) @map("total_items")
   completedCount Int @default(0) @map("completed_count")
+  postponedCount Int @default(0) @map("postponed_count")
   dismissedCount Int @default(0) @map("dismissed_count")
+  isCompletedForNow Boolean @default(false) @map("is_completed_for_now")
+  completedAt DateTime? @map("completed_at")
 
   createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  items DailyPulseItemState[]
 
   @@unique([userId, date], map: "uniq_daily_pulse_state_user_id_date")
   @@index([userId, createdAt], map: "idx_daily_pulse_state_user_id_created_at")
   @@map("daily_pulse_states")
+}
+
+model DailyPulseItemState {
+  id String @id @default(cuid())
+
+  dailyPulseStateId String @map("daily_pulse_state_id")
+  dailyPulseState DailyPulseState @relation(fields: [dailyPulseStateId], references: [id], onDelete: Cascade)
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  obligationId String @map("obligation_id")
+  obligation   Obligation @relation(fields: [obligationId], references: [id], onDelete: Cascade)
+
+  status DailyPulseItemStatus @default(PENDING)
+  hookType String? @map("hook_type")
+  sourceType String? @map("source_type")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([dailyPulseStateId, obligationId], map: "uniq_daily_pulse_item_state_state_obligation")
+  @@index([userId, createdAt], map: "idx_daily_pulse_item_state_user_id_created_at")
+  @@index([obligationId], map: "idx_daily_pulse_item_state_obligation_id")
+  @@index([status], map: "idx_daily_pulse_item_state_status")
+  @@map("daily_pulse_item_states")
 }
 
 model OutcomeFeedback {

@@ -4,27 +4,31 @@ import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  completeDailyPulseItem,
   createFeedback,
   createOrResumeGuidedJourney,
   createOutcomeFeedback,
+  dismissDailyPulseItem,
   dismissObligation,
   markObligationDone,
+  openGuidedDailyPulseItem,
+  postponeDailyPulseItem,
   postponeObligation,
-  trackDailyPulseAction
 } from "../lib/api";
-import type { DailyPulseItem } from "../lib/types";
+import type { DailyPulseItem, DailyPulseItemUpdateResponse } from "../lib/types";
 import { buttonStyles, cardStyles, colors } from "../lib/ui";
 import { useToast } from "./ui/toast-provider";
 
 type Props = {
   item: DailyPulseItem;
-  onResolved: (obligationId: string) => void;
+  onItemUpdated: (payload: DailyPulseItemUpdateResponse) => void;
 };
 
-export default function PulseItemCard({ item, onResolved }: Props) {
+export default function PulseItemCard({ item, onItemUpdated }: Props) {
   const [loading, setLoading] = useState<string | null>(null);
   const router = useRouter();
   const { showToast } = useToast();
+  const guideLabel = item.status === "OPENED_GUIDED" ? "Resume guided" : item.actionLabel;
 
   async function reportOutcome(input: {
     selectedActionKey: string;
@@ -50,6 +54,10 @@ export default function PulseItemCard({ item, onResolved }: Props) {
   async function handleGuideMe() {
     try {
       setLoading("guide");
+      const pulseUpdate = await openGuidedDailyPulseItem(item.obligationId).catch(() => null);
+      if (pulseUpdate) {
+        onItemUpdated(pulseUpdate);
+      }
       const data = await createOrResumeGuidedJourney(item.obligationId);
       router.push(`/guided/${data.journey.id}`);
     } catch (error) {
@@ -69,18 +77,18 @@ export default function PulseItemCard({ item, onResolved }: Props) {
         type: "COMPLETED",
         note: "Completed from Daily Pulse"
       });
-      await trackDailyPulseAction("COMPLETED");
+      const pulseUpdate = await completeDailyPulseItem(item.obligationId);
       await reportOutcome({
         selectedActionKey: "mark_done",
         outcomeType: "COMPLETED_SUCCESSFULLY",
         note: "Completed from Daily Pulse"
       });
 
-      onResolved(item.obligationId);
+      onItemUpdated(pulseUpdate);
       showToast({
         variant: "success",
-        title: "+1 cleared today",
-        description: "Nice momentum."
+        title: "+1 cleared from today's pulse",
+        description: pulseUpdate.momentum.completionMessage
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not mark done";
@@ -99,17 +107,18 @@ export default function PulseItemCard({ item, onResolved }: Props) {
         type: "DONT_SHOW_AGAIN",
         note: "Dismissed from Daily Pulse"
       });
-      await trackDailyPulseAction("DISMISSED");
+      const pulseUpdate = await dismissDailyPulseItem(item.obligationId);
       await reportOutcome({
         selectedActionKey: "dismiss",
         outcomeType: "DISMISSED_NOT_RELEVANT",
         note: "Dismissed from Daily Pulse"
       });
 
-      onResolved(item.obligationId);
+      onItemUpdated(pulseUpdate);
       showToast({
         variant: "success",
-        title: "Dismissed for today"
+        title: "Pulse updated",
+        description: pulseUpdate.momentum.completionMessage
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not dismiss";
@@ -133,7 +142,7 @@ export default function PulseItemCard({ item, onResolved }: Props) {
         type: "POSTPONED",
         note: "Postponed from Daily Pulse"
       });
-      await trackDailyPulseAction("POSTPONED");
+      const pulseUpdate = await postponeDailyPulseItem(item.obligationId);
       await reportOutcome({
         selectedActionKey: "postpone_1_day",
         outcomeType: "POSTPONED_INTENTIONALLY",
@@ -143,10 +152,11 @@ export default function PulseItemCard({ item, onResolved }: Props) {
         }
       });
 
-      onResolved(item.obligationId);
+      onItemUpdated(pulseUpdate);
       showToast({
         variant: "success",
-        title: "Postponed intentionally"
+        title: "Postponed intentionally",
+        description: pulseUpdate.momentum.completionMessage
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not postpone";
@@ -161,6 +171,11 @@ export default function PulseItemCard({ item, onResolved }: Props) {
       <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 6 }}>
         {formatHookLabel(item.hookType)}
       </div>
+      {item.status === "OPENED_GUIDED" ? (
+        <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 6 }}>
+          Guided Mode started
+        </div>
+      ) : null}
       <h3 style={{ margin: "0 0 6px 0" }}>{item.title}</h3>
       <p style={{ margin: "0 0 12px 0", color: colors.textMuted }}>{item.whyItMatters}</p>
 
@@ -172,7 +187,7 @@ export default function PulseItemCard({ item, onResolved }: Props) {
         }}
       >
         <button onClick={handleGuideMe} disabled={loading !== null} style={buttonStyles.primary}>
-          {loading === "guide" ? "Starting..." : item.actionLabel}
+          {loading === "guide" ? "Starting..." : guideLabel}
         </button>
 
         <button onClick={handleDone} disabled={loading !== null} style={buttonStyles.secondary}>

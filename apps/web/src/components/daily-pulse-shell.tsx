@@ -3,12 +3,17 @@
 import Link from "next/link";
 import { useState } from "react";
 import { getDailyPulse } from "../lib/api";
-import type { DailyPulseResponse } from "../lib/types";
+import type {
+  DailyPulseItemUpdateResponse,
+  DailyPulseResponse
+} from "../lib/types";
 import { buttonStyles, cardStyles, colors, pageStyles } from "../lib/ui";
+import DailyPulseProgress from "./daily-pulse-progress";
 import EmptyState from "./ui/empty-state";
 import LoadingCard from "./ui/loading-card";
 import PulseItemCard from "./pulse-item-card";
-import PulseSummary from "./pulse-summary";
+import PulseCompletionCard from "./pulse-completion-card";
+import PulseMomentumCard from "./pulse-momentum-card";
 
 type Props = {
   initialPulse: DailyPulseResponse | null;
@@ -36,12 +41,31 @@ export default function DailyPulseShell({
     }
   }
 
-  function handleItemResolved(obligationId: string) {
+  function handleItemUpdated(update: DailyPulseItemUpdateResponse) {
     setPulse((current) => {
       if (!current) return current;
+      const shouldRemove =
+        update.status === "COMPLETED" ||
+        update.status === "POSTPONED" ||
+        update.status === "DISMISSED";
+
+      const nextItems = shouldRemove
+        ? current.items.filter((item) => item.obligationId !== update.obligationId)
+        : current.items.map((item) =>
+            item.obligationId === update.obligationId
+              ? {
+                  ...item,
+                  status: update.status === "OPENED_GUIDED" ? "OPENED_GUIDED" : item.status
+                }
+              : item
+          );
+
       return {
         ...current,
-        items: current.items.filter((item) => item.obligationId !== obligationId)
+        items: nextItems,
+        progress: update.progress,
+        momentum: update.momentum,
+        quickSummary: getQuickSummaryFromProgress(update.progress)
       };
     });
   }
@@ -101,19 +125,32 @@ export default function DailyPulseShell({
             <p style={{ margin: 0, color: colors.textMuted }}>{pulse.topInsight.description}</p>
           </section>
 
-          <PulseSummary pulse={pulse} />
+          <DailyPulseProgress progress={pulse.progress} />
+          <PulseMomentumCard momentum={pulse.momentum} quickSummary={pulse.quickSummary} />
 
-          {pulse.items.length === 0 ? (
+          {pulse.progress.totalItems === 0 ? (
             <EmptyState
               title="You are all caught up today"
               description="No high-priority items need action right now. Check back tomorrow."
+            />
+          ) : pulse.progress.isCompletedForNow ? (
+            <PulseCompletionCard onRefresh={refreshPulse} />
+          ) : pulse.items.length === 0 ? (
+            <EmptyState
+              title="Pulse is updating"
+              description="No pending pulse items are visible right now. Refresh to sync the latest status."
+              action={
+                <button onClick={refreshPulse} style={buttonStyles.secondary}>
+                  Refresh pulse
+                </button>
+              }
             />
           ) : (
             pulse.items.slice(0, 5).map((item) => (
               <PulseItemCard
                 key={item.obligationId}
                 item={item}
-                onResolved={handleItemResolved}
+                onItemUpdated={handleItemUpdated}
               />
             ))
           )}
@@ -121,4 +158,20 @@ export default function DailyPulseShell({
       ) : null}
     </main>
   );
+}
+
+function getQuickSummaryFromProgress(progress: DailyPulseResponse["progress"]) {
+  if (progress.totalItems === 0) {
+    return "You're all caught up today.";
+  }
+
+  if (progress.isCompletedForNow) {
+    return "You handled today's pulse and are done for now.";
+  }
+
+  if (progress.remainingCount === 1) {
+    return "One item left in today's pulse.";
+  }
+
+  return `${progress.remainingCount} items still in today's pulse.`;
 }

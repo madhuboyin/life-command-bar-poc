@@ -146,22 +146,43 @@ export interface DailyPulseItem {
   actionLabel: string;
   hookType: "urgent" | "quick_win" | "money" | "postponed" | "important";
   priorityScore: number;
+  status: "PENDING" | "OPENED_GUIDED";
+}
+
+export interface DailyPulseProgress {
+  totalItems: number;
+  completedCount: number;
+  postponedCount: number;
+  dismissedCount: number;
+  remainingCount: number;
+  progressPercent: number;
+  isCompletedForNow: boolean;
+  completedAt?: string | null;
+}
+
+export interface DailyPulseMomentum {
+  handledThisWeek: number;
+  todayCompleted: number;
+  trend: "up" | "down" | "flat";
+  completionMessage: string;
 }
 
 export interface DailyPulseResponse {
   generatedAt: string;
   topInsight: DailyPulseTopInsight;
   items: DailyPulseItem[];
-  momentum: {
-    handledThisWeek: number;
-    trend: "up" | "down" | "flat";
-  };
+  momentum: DailyPulseMomentum;
+  progress: DailyPulseProgress;
   quickSummary: string;
   state: {
     date: string;
     openedAt?: string | null;
+    totalItems: number;
     completedCount: number;
+    postponedCount: number;
     dismissedCount: number;
+    isCompletedForNow: boolean;
+    completedAt?: string | null;
   };
 }
 
@@ -169,8 +190,25 @@ export interface DailyPulseState {
   date: string;
   openedToday: boolean;
   openedAt?: string | null;
+  totalItems: number;
   completedCount: number;
+  postponedCount: number;
   dismissedCount: number;
+  isCompletedForNow: boolean;
+  completedAt?: string | null;
+}
+
+export interface DailyPulseItemUpdateResponse {
+  obligationId: string;
+  status: "PENDING" | "OPENED_GUIDED" | "COMPLETED" | "POSTPONED" | "DISMISSED";
+  didChange: boolean;
+  progress: DailyPulseProgress;
+  momentum: DailyPulseMomentum;
+}
+
+export interface DailyPulseProgressResponse {
+  progress: DailyPulseProgress;
+  momentum: DailyPulseMomentum;
 }
 
 export type OutcomeSourceContext =
