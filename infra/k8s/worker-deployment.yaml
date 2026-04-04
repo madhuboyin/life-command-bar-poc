@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: worker
-          image: ghcr.io/madhuboyin/life-command-bar-poc/worker:latest
+          image: ghcr.io/madhuboyin/life-command-bar-poc/worker:f1b4840
           imagePullPolicy: IfNotPresent
           resources:
             requests:
