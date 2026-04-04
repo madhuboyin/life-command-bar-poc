@@ -1,0 +1,120 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import SubscriptionConfirmationForm from "../../../components/subscription-confirmation-form";
+import SubscriptionDetailHeader from "../../../components/subscription-detail-header";
+import SubscriptionEvidenceList from "../../../components/subscription-evidence-list";
+import SubscriptionMergePanel from "../../../components/subscription-merge-panel";
+import SubscriptionPriceHistory from "../../../components/subscription-price-history";
+import { getSubscriptionById } from "../../../lib/api";
+import { cardStyles, colors, pageStyles } from "../../../lib/ui";
+
+type Props = {
+  params: Promise<{ id: string }>;
+};
+
+export default async function SubscriptionDetailPage({ params }: Props) {
+  const resolved = await params;
+  const id = resolved.id;
+
+  let subscription: Awaited<ReturnType<typeof getSubscriptionById>>["subscription"] | null = null;
+  let error: string | null = null;
+
+  try {
+    const data = await getSubscriptionById(id);
+    subscription = data.subscription;
+  } catch (fetchError) {
+    if (fetchError instanceof Error && fetchError.message.toLowerCase().includes("not found")) {
+      notFound();
+    }
+    error =
+      fetchError instanceof Error
+        ? fetchError.message
+        : "Could not load subscription details.";
+  }
+
+  if (!subscription && !error) {
+    notFound();
+  }
+
+  return (
+    <main style={pageStyles.shell}>
+      <div style={{ marginBottom: 14 }}>
+        <Link href="/subscriptions" style={{ color: "#2563eb", textDecoration: "none" }}>
+          ← Back to subscriptions
+        </Link>
+      </div>
+
+      {error || !subscription ? (
+        <section style={{ ...cardStyles.bordered, color: colors.errorText }}>
+          {error ?? "Subscription not found"}
+        </section>
+      ) : (
+        <div style={{ display: "grid", gap: 14 }}>
+          <section style={{ ...cardStyles.section }}>
+            <SubscriptionDetailHeader subscription={subscription} />
+          </section>
+
+          <section style={{ ...cardStyles.section, display: "grid", gap: 10 }}>
+            <h2 style={{ margin: 0 }}>Linked Obligations</h2>
+            {subscription.linkedObligations.length === 0 ? (
+              <div style={{ color: colors.textMuted, fontSize: 13 }}>No linked obligations yet.</div>
+            ) : (
+              <div style={{ display: "grid", gap: 8 }}>
+                {subscription.linkedObligations.map((item) => (
+                  <div key={item.id} style={{ ...cardStyles.bordered, display: "grid", gap: 4 }}>
+                    <Link href={`/obligations/${item.id}`} style={{ color: "#2563eb", textDecoration: "none", fontWeight: 600 }}>
+                      {item.title}
+                    </Link>
+                    <div style={{ color: colors.textMuted, fontSize: 13 }}>
+                      {item.type} · {item.status}
+                      {item.dueDate ? ` · Due ${item.dueDate.slice(0, 10)}` : ""}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section style={{ ...cardStyles.section, display: "grid", gap: 10 }}>
+            <h2 style={{ margin: 0 }}>Evidence Timeline</h2>
+            <SubscriptionEvidenceList items={subscription.evidence} />
+          </section>
+
+          <section style={{ ...cardStyles.section, display: "grid", gap: 10 }}>
+            <h2 style={{ margin: 0 }}>Lifecycle Events</h2>
+            {subscription.lifecycleEvents.length === 0 ? (
+              <div style={{ ...cardStyles.bordered, color: colors.textMuted, fontSize: 13 }}>
+                No lifecycle events yet.
+              </div>
+            ) : (
+              <div style={{ display: "grid", gap: 8 }}>
+                {subscription.lifecycleEvents.map((event) => (
+                  <div key={event.id} style={{ ...cardStyles.bordered, display: "grid", gap: 5 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>
+                      {event.eventType.toLowerCase().replace(/_/g, " ")}
+                    </div>
+                    <div style={{ color: colors.textMuted, fontSize: 13 }}>
+                      {event.previousState ? event.previousState.toLowerCase() : "unknown"} →{" "}
+                      {event.nextState ? event.nextState.toLowerCase() : "unknown"}
+                    </div>
+                    <div style={{ color: colors.textMuted, fontSize: 12 }}>
+                      {event.eventDate ? event.eventDate.slice(0, 10) : event.createdAt.slice(0, 10)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section style={{ ...cardStyles.section, display: "grid", gap: 10 }}>
+            <h2 style={{ margin: 0 }}>Price History</h2>
+            <SubscriptionPriceHistory items={subscription.priceHistory} />
+          </section>
+
+          <SubscriptionConfirmationForm subscription={subscription} />
+          <SubscriptionMergePanel primarySubscriptionId={subscription.id} />
+        </div>
+      )}
+    </main>
+  );
+}

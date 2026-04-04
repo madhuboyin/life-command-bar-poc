@@ -293,6 +293,18 @@ export class IngestionService {
           }
         });
       }
+
+      if (updated.subscriptionId) {
+        await this.repository.createAuditEvent({
+          userId,
+          obligationId,
+          eventType: "subscription_registry_review_confirmed",
+          metadata: {
+            subscriptionId: updated.subscriptionId,
+            confidenceScore: Number(updated.confidenceScore)
+          }
+        });
+      }
     }
 
     await this.captureMemorySignal({
@@ -379,6 +391,18 @@ export class IngestionService {
           eventType: "gmail_subscription_review_rejected",
           metadata: {
             lifecycleEmailType: lifecycle.lifecycleEmailType,
+            reason: input.reason ?? null
+          }
+        });
+      }
+
+      if (updated.subscriptionId) {
+        await this.repository.createAuditEvent({
+          userId,
+          obligationId,
+          eventType: "subscription_registry_review_rejected",
+          metadata: {
+            subscriptionId: updated.subscriptionId,
             reason: input.reason ?? null
           }
         });

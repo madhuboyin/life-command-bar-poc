@@ -47,6 +47,9 @@ import type {
   Reminder,
   ResolutionResponse,
   SortDirection,
+  SubscriptionLifecycleState,
+  SubscriptionRegistryDetail,
+  SubscriptionRegistryListResponse,
   TodayFeedResponse,
   ZeroInputDecisionItem,
   ZeroInputPolicy
@@ -172,6 +175,10 @@ type GmailOAuthStartResponse = {
 type GmailSyncResponse = {
   sync: GmailSyncResult;
   connection: GmailConnectionStatus | null;
+};
+
+type SubscriptionByIdResponse = {
+  subscription: SubscriptionRegistryDetail;
 };
 
 function isAbsoluteHttpUrl(value: string) {
@@ -528,6 +535,81 @@ export async function getControlTowerSystemDecisions(limit = 6) {
     }
   );
   return handleResponse<{ items: ControlTowerResponse["systemDecisions"] }>(res);
+}
+
+export async function getSubscriptions(params?: {
+  lifecycleState?: SubscriptionLifecycleState;
+  limit?: number;
+  offset?: number;
+}) {
+  const query = new URLSearchParams();
+  if (params?.lifecycleState) {
+    query.set("lifecycleState", params.lifecycleState);
+  }
+  if (typeof params?.limit === "number") {
+    query.set("limit", String(params.limit));
+  }
+  if (typeof params?.offset === "number") {
+    query.set("offset", String(params.offset));
+  }
+
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  const res = await apiFetch(`/subscriptions${suffix}`, {
+    cache: "no-store"
+  });
+
+  return handleResponse<SubscriptionRegistryListResponse>(res);
+}
+
+export async function getSubscriptionById(subscriptionId: string) {
+  const res = await apiFetch(`/subscriptions/${subscriptionId}`, {
+    cache: "no-store"
+  });
+  return handleResponse<SubscriptionByIdResponse>(res);
+}
+
+export async function updateSubscription(
+  subscriptionId: string,
+  input: Partial<{
+    vendorName: string;
+    planName: string | null;
+    subscriptionTitle: string;
+    scopeType: "PERSONAL" | "HOUSEHOLD";
+    householdId: string | null;
+    assignedToUserId: string | null;
+    lifecycleState: SubscriptionLifecycleState;
+    billingPeriod: "MONTHLY" | "YEARLY" | "QUARTERLY" | "WEEKLY" | "UNKNOWN";
+    recurringPrice: number | null;
+    introPrice: number | null;
+    amountLastCharged: number | null;
+    currency: string | null;
+    autoRenewStatus: "ON" | "OFF" | "UNKNOWN";
+    trialEndDate: string | null;
+    nextRenewalDate: string | null;
+    lastChargedDate: string | null;
+    cancellationEffectiveDate: string | null;
+    category: string | null;
+  }>
+) {
+  const res = await apiFetch(`/subscriptions/${subscriptionId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  return handleResponse<SubscriptionByIdResponse>(res);
+}
+
+export async function mergeSubscriptions(input: {
+  primarySubscriptionId: string;
+  duplicateSubscriptionId: string;
+}) {
+  const res = await apiFetch("/subscriptions/merge", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+
+  return handleResponse<SubscriptionByIdResponse>(res);
 }
 
 export async function getZeroInputPolicy() {

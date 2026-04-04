@@ -101,6 +101,86 @@ enum ExternalMessageIngestionStatus {
   ERROR
 }
 
+enum SubscriptionLifecycleState {
+  DISCOVERED
+  TRIALING
+  ACTIVE
+  RENEWING
+  PRICE_CHANGED
+  CANCELING
+  CANCELED
+  ENDED
+  INACTIVE
+  UNKNOWN
+}
+
+enum SubscriptionBillingPeriod {
+  MONTHLY
+  YEARLY
+  QUARTERLY
+  WEEKLY
+  UNKNOWN
+}
+
+enum SubscriptionAutoRenewStatus {
+  ON
+  OFF
+  UNKNOWN
+}
+
+enum SubscriptionConfidenceBand {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum SubscriptionEvidenceSourceType {
+  GMAIL
+  UPLOAD
+  COMMAND
+  MANUAL
+  PREDICTION
+}
+
+enum SubscriptionEvidenceSourceSubtype {
+  WELCOME_EMAIL
+  RENEWAL_EMAIL
+  RECEIPT_EMAIL
+  CANCELLATION_EMAIL
+  MANUAL_CONFIRMATION
+  REVIEW_CONFIRMATION
+}
+
+enum SubscriptionEvidenceReferenceType {
+  IMPORT_SOURCE
+  OBLIGATION
+  PREDICTION
+  MEMORY_PATTERN
+  EXTERNAL_MESSAGE
+}
+
+enum SubscriptionLifecycleEventType {
+  DISCOVERED
+  TRIAL_STARTED
+  ACTIVATED
+  RENEWAL_DETECTED
+  RECEIPT_CAPTURED
+  PRICE_CHANGED
+  AUTO_RENEW_ON
+  AUTO_RENEW_OFF
+  CANCELLATION_DETECTED
+  CANCELED
+  REACTIVATED
+  MERGED
+  CORRECTED
+}
+
+enum SubscriptionPriceType {
+  INTRO
+  RECURRING
+  CHARGED
+}
+
 enum FeedbackType {
   ACCEPTED
   IGNORED
@@ -370,6 +450,10 @@ model User {
   householdInvitesSent HouseholdInvite[] @relation("HouseholdInviteSentBy")
   externalAccountConnections ExternalAccountConnection[]
   externalMessageIngestions  ExternalMessageIngestion[]
+  subscriptionsOwned         SubscriptionRegistry[] @relation("SubscriptionOwner")
+  assignedSubscriptions      SubscriptionRegistry[] @relation("SubscriptionAssignedTo")
+  createdSubscriptions       SubscriptionRegistry[] @relation("SubscriptionCreatedBy")
+  lastHandledSubscriptions   SubscriptionRegistry[] @relation("SubscriptionLastHandledBy")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -389,6 +473,7 @@ model Household {
   members           HouseholdMember[]
   invites           HouseholdInvite[]
   obligations       Obligation[]
+  subscriptions     SubscriptionRegistry[]
   predictions       Prediction[]
   reminders         Reminder[]
   autonomyDecisions AutonomyDecision[]
@@ -480,6 +565,9 @@ model Obligation {
   source ObligationSource
   status ObligationStatus @default(DRAFT)
 
+  subscriptionId String? @map("subscription_id")
+  subscription   SubscriptionRegistry? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
   importSourceId String?      @map("import_source_id")
   importSource   ImportSource? @relation(fields: [importSourceId], references: [id], onDelete: SetNull)
 
@@ -522,7 +610,146 @@ model Obligation {
   @@index([createdByUserId], map: "idx_obligations_created_by_user_id")
   @@index([lastHandledByUserId], map: "idx_obligations_last_handled_by_user_id")
   @@index([importSourceId], map: "idx_obligations_import_source_id")
+  @@index([subscriptionId], map: "idx_obligations_subscription_id")
   @@map("obligations")
+}
+
+model SubscriptionRegistry {
+  id String @id @default(cuid())
+
+  userId String @map("user_id")
+  user   User   @relation("SubscriptionOwner", fields: [userId], references: [id], onDelete: Cascade)
+
+  scopeType ScopeType @default(PERSONAL) @map("scope_type")
+  householdId String? @map("household_id")
+  household Household? @relation(fields: [householdId], references: [id], onDelete: SetNull)
+
+  assignedToUserId String? @map("assigned_to_user_id")
+  assignedToUser   User?   @relation("SubscriptionAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+
+  createdByUserId String? @map("created_by_user_id")
+  createdByUser   User?   @relation("SubscriptionCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  lastHandledByUserId String? @map("last_handled_by_user_id")
+  lastHandledByUser   User?   @relation("SubscriptionLastHandledBy", fields: [lastHandledByUserId], references: [id], onDelete: SetNull)
+
+  vendorName          String @map("vendor_name")
+  vendorNormalizedKey String @map("vendor_normalized_key")
+  planName            String? @map("plan_name")
+  subscriptionTitle   String @map("subscription_title")
+  category            String?
+
+  lifecycleState SubscriptionLifecycleState @default(DISCOVERED) @map("lifecycle_state")
+  billingPeriod   SubscriptionBillingPeriod @default(UNKNOWN) @map("billing_period")
+
+  recurringPrice    Decimal? @map("recurring_price") @db.Decimal(12, 2)
+  currency          String?  @db.VarChar(3)
+  introPrice        Decimal? @map("intro_price") @db.Decimal(12, 2)
+  amountLastCharged Decimal? @map("amount_last_charged") @db.Decimal(12, 2)
+
+  autoRenewStatus SubscriptionAutoRenewStatus @default(UNKNOWN) @map("auto_renew_status")
+
+  trialEndDate               DateTime? @map("trial_end_date")
+  nextRenewalDate            DateTime? @map("next_renewal_date")
+  lastChargedDate            DateTime? @map("last_charged_date")
+  cancellationEffectiveDate  DateTime? @map("cancellation_effective_date")
+
+  sourceConfidenceScore Decimal                    @default(0.0) @map("source_confidence_score") @db.Decimal(5, 4)
+  sourceConfidenceBand  SubscriptionConfidenceBand @default(LOW) @map("source_confidence_band")
+
+  obligations     Obligation[]
+  evidence        SubscriptionEvidence[]
+  lifecycleEvents SubscriptionLifecycleEvent[]
+  priceHistory    SubscriptionPriceHistory[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, lifecycleState], map: "idx_subscription_registry_user_lifecycle")
+  @@index([userId, vendorNormalizedKey], map: "idx_subscription_registry_user_vendor_key")
+  @@index([scopeType], map: "idx_subscription_registry_scope_type")
+  @@index([householdId, lifecycleState], map: "idx_subscription_registry_household_lifecycle")
+  @@index([assignedToUserId, lifecycleState], map: "idx_subscription_registry_assigned_lifecycle")
+  @@index([createdByUserId], map: "idx_subscription_registry_created_by")
+  @@index([lastHandledByUserId], map: "idx_subscription_registry_last_handled_by")
+  @@map("subscription_registry")
+}
+
+model SubscriptionEvidence {
+  id String @id @default(cuid())
+
+  subscriptionId String               @map("subscription_id")
+  subscription   SubscriptionRegistry @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  sourceType    SubscriptionEvidenceSourceType
+  sourceSubType SubscriptionEvidenceSourceSubtype? @map("source_sub_type")
+
+  referenceType SubscriptionEvidenceReferenceType @map("reference_type")
+  referenceId   String                            @map("reference_id")
+
+  signalSummary Json? @map("signal_summary")
+  confidenceScore Decimal @default(0.0) @map("confidence_score") @db.Decimal(5, 4)
+  observedAt DateTime @map("observed_at")
+
+  lifecycleEvents SubscriptionLifecycleEvent[] @relation("LifecycleEventEvidence")
+  priceHistory    SubscriptionPriceHistory[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([subscriptionId, observedAt], map: "idx_subscription_evidence_subscription_observed")
+  @@index([sourceType, sourceSubType], map: "idx_subscription_evidence_source")
+  @@index([referenceType, referenceId], map: "idx_subscription_evidence_reference")
+  @@map("subscription_evidence")
+}
+
+model SubscriptionLifecycleEvent {
+  id String @id @default(cuid())
+
+  subscriptionId String               @map("subscription_id")
+  subscription   SubscriptionRegistry @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  eventType SubscriptionLifecycleEventType @map("event_type")
+
+  previousState SubscriptionLifecycleState? @map("previous_state")
+  nextState     SubscriptionLifecycleState? @map("next_state")
+  eventDate     DateTime? @map("event_date")
+
+  metadata Json?
+
+  sourceEvidenceId String? @map("source_evidence_id")
+  sourceEvidence   SubscriptionEvidence? @relation("LifecycleEventEvidence", fields: [sourceEvidenceId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([subscriptionId, createdAt], map: "idx_subscription_lifecycle_events_subscription_created")
+  @@index([eventType, createdAt], map: "idx_subscription_lifecycle_events_type_created")
+  @@index([sourceEvidenceId], map: "idx_subscription_lifecycle_events_source_evidence")
+  @@map("subscription_lifecycle_events")
+}
+
+model SubscriptionPriceHistory {
+  id String @id @default(cuid())
+
+  subscriptionId String               @map("subscription_id")
+  subscription   SubscriptionRegistry @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  priceType SubscriptionPriceType @map("price_type")
+  amount Decimal @db.Decimal(12, 2)
+  currency String @db.VarChar(3)
+  billingPeriod SubscriptionBillingPeriod? @map("billing_period")
+
+  effectiveDate DateTime? @map("effective_date")
+
+  sourceEvidenceId String? @map("source_evidence_id")
+  sourceEvidence   SubscriptionEvidence? @relation(fields: [sourceEvidenceId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([subscriptionId, createdAt], map: "idx_subscription_price_history_subscription_created")
+  @@index([priceType], map: "idx_subscription_price_history_type")
+  @@index([effectiveDate], map: "idx_subscription_price_history_effective")
+  @@index([sourceEvidenceId], map: "idx_subscription_price_history_source_evidence")
+  @@map("subscription_price_history")
 }
 
 model GuidedJourney {

@@ -474,7 +474,10 @@ export class ControlTowerService {
             "focus_session_item_completed",
             "guided_journey_completed",
             "prediction_confirmed",
-            "prediction_promoted_to_obligation"
+            "prediction_promoted_to_obligation",
+            "subscription_registry_created",
+            "subscription_price_changed",
+            "subscription_cancellation_detected"
           ]
         }
       },
@@ -522,6 +525,13 @@ export class ControlTowerService {
               "gmail_subscription_matched_existing",
               "gmail_subscription_conflict_detected",
               "gmail_subscription_cancellation_detected",
+              "subscription_registry_created",
+              "subscription_registry_updated",
+              "subscription_registry_merged",
+              "subscription_lifecycle_transitioned",
+              "subscription_price_changed",
+              "subscription_cancellation_detected",
+              "subscription_prediction_strengthened",
               "gmail_sync_error",
               "auto_flow_triggered",
               "prediction_rebuilt",
@@ -813,6 +823,24 @@ function toRecentDescription(eventType: string, metadata: Record<string, unknown
         description: "A future signal was confirmed and retained.",
         outcomeLabel: "Confirmed"
       };
+    case "subscription_registry_created":
+      return {
+        title: "Subscription discovered",
+        description: "A canonical subscription record was created from lifecycle evidence.",
+        outcomeLabel: "Discovered"
+      };
+    case "subscription_price_changed":
+      return {
+        title: "Subscription price changed",
+        description: "The recurring price changed and was logged for review.",
+        outcomeLabel: "Updated"
+      };
+    case "subscription_cancellation_detected":
+      return {
+        title: "Subscription cancellation detected",
+        description: "Cancellation evidence was captured and lifecycle state updated.",
+        outcomeLabel: "Updated"
+      };
     case "ingestion_candidate_confirmed":
       return {
         title: "Imported item confirmed",
@@ -851,6 +879,7 @@ function toRecentDescription(eventType: string, metadata: Record<string, unknown
 
 function sourceLabelFromRecentEvent(eventType: string) {
   if (eventType.startsWith("gmail_")) return "Gmail";
+  if (eventType.startsWith("subscription_")) return "Subscription Registry";
   if (eventType.startsWith("prediction_")) return "Prediction Engine";
   if (eventType.startsWith("auto_flow_")) return "Auto-Flow";
   if (eventType.startsWith("ingestion_")) return "Ingestion";
@@ -951,6 +980,135 @@ function toSystemDecisionFromAudit(
       createdAt: event.createdAt.toISOString(),
       obligationId: event.obligationId,
       referenceId: typeof metadata?.importSourceId === "string" ? metadata.importSourceId : null
+    };
+  }
+
+  if (event.eventType === "subscription_registry_created") {
+    return {
+      id: event.id,
+      decisionType: "PREDICTION",
+      title: "Canonical subscription created",
+      explanation:
+        "Lifecycle evidence was consolidated into a canonical subscription record.",
+      sourceSignals: [
+        event.eventType,
+        typeof metadata?.lifecycleEmailType === "string"
+          ? `lifecycle:${String(metadata.lifecycleEmailType).toLowerCase()}`
+          : "lifecycle:unknown"
+      ],
+      createdAt: event.createdAt.toISOString(),
+      obligationId: event.obligationId,
+      referenceId: typeof metadata?.subscriptionId === "string" ? metadata.subscriptionId : null
+    };
+  }
+
+  if (event.eventType === "subscription_registry_updated") {
+    return {
+      id: event.id,
+      decisionType: "PREDICTION",
+      title: "Subscription registry updated",
+      explanation:
+        "New lifecycle evidence updated an existing canonical subscription state.",
+      sourceSignals: [
+        event.eventType,
+        typeof metadata?.nextState === "string"
+          ? `state:${String(metadata.nextState).toLowerCase()}`
+          : "state:updated"
+      ],
+      createdAt: event.createdAt.toISOString(),
+      obligationId: event.obligationId,
+      referenceId: typeof metadata?.subscriptionId === "string" ? metadata.subscriptionId : null
+    };
+  }
+
+  if (event.eventType === "subscription_registry_merged") {
+    return {
+      id: event.id,
+      decisionType: "DUPLICATE",
+      title: "Duplicate subscriptions merged",
+      explanation:
+        "Two subscription records were merged to keep one canonical subscription object.",
+      sourceSignals: [
+        event.eventType,
+        typeof metadata?.duplicateSubscriptionId === "string"
+          ? `merged:${metadata.duplicateSubscriptionId}`
+          : "merged:duplicate"
+      ],
+      createdAt: event.createdAt.toISOString(),
+      obligationId: event.obligationId,
+      referenceId:
+        typeof metadata?.primarySubscriptionId === "string"
+          ? metadata.primarySubscriptionId
+          : null
+    };
+  }
+
+  if (event.eventType === "subscription_price_changed") {
+    return {
+      id: event.id,
+      decisionType: "CONFIDENCE",
+      title: "Subscription price change detected",
+      explanation:
+        "A pricing signal changed the known recurring cost for a subscription.",
+      sourceSignals: [event.eventType],
+      createdAt: event.createdAt.toISOString(),
+      obligationId: event.obligationId,
+      referenceId: typeof metadata?.subscriptionId === "string" ? metadata.subscriptionId : null
+    };
+  }
+
+  if (event.eventType === "subscription_cancellation_detected") {
+    return {
+      id: event.id,
+      decisionType: "SUPPRESSION",
+      title: "Subscription cancellation detected",
+      explanation:
+        "Cancellation evidence reduced future renewal expectations for this subscription.",
+      sourceSignals: [
+        event.eventType,
+        typeof metadata?.nextState === "string"
+          ? `state:${String(metadata.nextState).toLowerCase()}`
+          : "state:canceled"
+      ],
+      createdAt: event.createdAt.toISOString(),
+      obligationId: event.obligationId,
+      referenceId: typeof metadata?.subscriptionId === "string" ? metadata.subscriptionId : null
+    };
+  }
+
+  if (event.eventType === "subscription_lifecycle_transitioned") {
+    return {
+      id: event.id,
+      decisionType: "ROUTING",
+      title: "Subscription lifecycle transitioned",
+      explanation:
+        "Lifecycle state was deterministically updated based on new evidence.",
+      sourceSignals: [
+        event.eventType,
+        typeof metadata?.previousState === "string"
+          ? `from:${String(metadata.previousState).toLowerCase()}`
+          : "from:unknown",
+        typeof metadata?.nextState === "string"
+          ? `to:${String(metadata.nextState).toLowerCase()}`
+          : "to:unknown"
+      ],
+      createdAt: event.createdAt.toISOString(),
+      obligationId: event.obligationId,
+      referenceId: typeof metadata?.subscriptionId === "string" ? metadata.subscriptionId : null
+    };
+  }
+
+  if (event.eventType === "subscription_prediction_strengthened") {
+    return {
+      id: event.id,
+      decisionType: "PREDICTION",
+      title: "Subscription prediction strengthened",
+      explanation:
+        "Additional lifecycle evidence increased confidence in recurring predictions.",
+      sourceSignals: [event.eventType],
+      createdAt: event.createdAt.toISOString(),
+      obligationId: event.obligationId,
+      referenceId: typeof metadata?.subscriptionId === "string" ? metadata.subscriptionId : null
     };
   }
 

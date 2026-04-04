@@ -115,6 +115,7 @@ export function mapObligation(obligation: ObligationWithRelations) {
     recurrence: obligation.recurrence,
     source: obligation.source,
     importSourceId: obligation.importSourceId,
+    subscriptionId: obligation.subscriptionId,
     sourceType,
     sourceMetadata: {
       importSourceId: source?.id ?? null,

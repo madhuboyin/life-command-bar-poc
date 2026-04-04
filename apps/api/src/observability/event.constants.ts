@@ -21,6 +21,17 @@ export const OBSERVABILITY_EVENT_TYPES = {
   GMAIL_SUBSCRIPTION_REVIEW_CONFIRMED: "gmail_subscription_review_confirmed",
   GMAIL_SUBSCRIPTION_REVIEW_REJECTED: "gmail_subscription_review_rejected",
 
+  SUBSCRIPTION_REGISTRY_CREATED: "subscription_registry_created",
+  SUBSCRIPTION_REGISTRY_UPDATED: "subscription_registry_updated",
+  SUBSCRIPTION_REGISTRY_MERGED: "subscription_registry_merged",
+  SUBSCRIPTION_REGISTRY_REVIEW_CONFIRMED: "subscription_registry_review_confirmed",
+  SUBSCRIPTION_REGISTRY_REVIEW_REJECTED: "subscription_registry_review_rejected",
+  SUBSCRIPTION_LIFECYCLE_TRANSITIONED: "subscription_lifecycle_transitioned",
+  SUBSCRIPTION_PRICE_CHANGED: "subscription_price_changed",
+  SUBSCRIPTION_CANCELLATION_DETECTED: "subscription_cancellation_detected",
+  SUBSCRIPTION_PREDICTION_STRENGTHENED: "subscription_prediction_strengthened",
+  SUBSCRIPTION_OBLIGATION_CREATED: "subscription_obligation_created",
+
   PREDICTION_CREATED: "prediction_created",
   PREDICTION_CONFIRMED: "prediction_confirmed",
   PREDICTION_DISMISSED: "prediction_dismissed",

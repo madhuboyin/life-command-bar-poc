@@ -31,6 +31,7 @@ export interface Obligation {
   recurrence?: string | null;
   source: "MANUAL" | "EMAIL" | "DOCUMENT" | "INFERRED";
   importSourceId?: string | null;
+  subscriptionId?: string | null;
   confidenceScore: number;
   urgencyScore: number;
   importanceScore: number;
@@ -745,6 +746,159 @@ export interface ControlTowerResponse {
     upcomingCount: number;
     recentCount: number;
     systemDecisionCount: number;
+  };
+}
+
+export type SubscriptionLifecycleState =
+  | "DISCOVERED"
+  | "TRIALING"
+  | "ACTIVE"
+  | "RENEWING"
+  | "PRICE_CHANGED"
+  | "CANCELING"
+  | "CANCELED"
+  | "ENDED"
+  | "INACTIVE"
+  | "UNKNOWN";
+
+export type SubscriptionBillingPeriod =
+  | "MONTHLY"
+  | "YEARLY"
+  | "QUARTERLY"
+  | "WEEKLY"
+  | "UNKNOWN";
+
+export type SubscriptionAutoRenewStatus = "ON" | "OFF" | "UNKNOWN";
+
+export interface SubscriptionRegistrySummary {
+  id: string;
+  userId: string;
+  scopeType: "PERSONAL" | "HOUSEHOLD";
+  householdId: string | null;
+  assignedToUserId: string | null;
+  createdByUserId: string | null;
+  lastHandledByUserId: string | null;
+  assignedTo: {
+    id: string;
+    email: string;
+    name: string | null;
+  } | null;
+  vendorName: string;
+  vendorNormalizedKey: string;
+  planName: string | null;
+  subscriptionTitle: string;
+  category: string | null;
+  lifecycleState: SubscriptionLifecycleState;
+  billingPeriod: SubscriptionBillingPeriod;
+  recurringPrice: number | null;
+  currency: string | null;
+  introPrice: number | null;
+  amountLastCharged: number | null;
+  autoRenewStatus: SubscriptionAutoRenewStatus;
+  trialEndDate: string | null;
+  nextRenewalDate: string | null;
+  lastChargedDate: string | null;
+  cancellationEffectiveDate: string | null;
+  sourceConfidenceScore: number;
+  sourceConfidenceBand: ConfidenceBand;
+  counts: {
+    evidence: number;
+    lifecycleEvents: number;
+    priceHistory: number;
+    linkedObligations: number;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SubscriptionEvidenceItem {
+  id: string;
+  sourceType: "GMAIL" | "UPLOAD" | "COMMAND" | "MANUAL" | "PREDICTION";
+  sourceSubType:
+    | "WELCOME_EMAIL"
+    | "RENEWAL_EMAIL"
+    | "RECEIPT_EMAIL"
+    | "CANCELLATION_EMAIL"
+    | "MANUAL_CONFIRMATION"
+    | "REVIEW_CONFIRMATION"
+    | null;
+  referenceType: "IMPORT_SOURCE" | "OBLIGATION" | "PREDICTION" | "MEMORY_PATTERN" | "EXTERNAL_MESSAGE";
+  referenceId: string;
+  signalSummary: Record<string, unknown> | null;
+  confidenceScore: number;
+  observedAt: string;
+  createdAt: string;
+}
+
+export interface SubscriptionLifecycleEventItem {
+  id: string;
+  eventType:
+    | "DISCOVERED"
+    | "TRIAL_STARTED"
+    | "ACTIVATED"
+    | "RENEWAL_DETECTED"
+    | "RECEIPT_CAPTURED"
+    | "PRICE_CHANGED"
+    | "AUTO_RENEW_ON"
+    | "AUTO_RENEW_OFF"
+    | "CANCELLATION_DETECTED"
+    | "CANCELED"
+    | "REACTIVATED"
+    | "MERGED"
+    | "CORRECTED";
+  previousState: SubscriptionLifecycleState | null;
+  nextState: SubscriptionLifecycleState | null;
+  eventDate: string | null;
+  metadata: Record<string, unknown> | null;
+  sourceEvidenceId: string | null;
+  createdAt: string;
+}
+
+export interface SubscriptionPriceHistoryItem {
+  id: string;
+  priceType: "INTRO" | "RECURRING" | "CHARGED";
+  amount: number;
+  currency: string;
+  billingPeriod: SubscriptionBillingPeriod | null;
+  effectiveDate: string | null;
+  sourceEvidenceId: string | null;
+  createdAt: string;
+}
+
+export interface SubscriptionLinkedObligationItem {
+  id: string;
+  title: string;
+  status: Obligation["status"];
+  type: Obligation["type"];
+  dueDate: string | null;
+  amount: number | null;
+  currency: string | null;
+  updatedAt: string;
+}
+
+export interface SubscriptionRegistryDetail extends SubscriptionRegistrySummary {
+  createdBy: {
+    id: string;
+    email: string;
+    name: string | null;
+  } | null;
+  lastHandledBy: {
+    id: string;
+    email: string;
+    name: string | null;
+  } | null;
+  evidence: SubscriptionEvidenceItem[];
+  lifecycleEvents: SubscriptionLifecycleEventItem[];
+  priceHistory: SubscriptionPriceHistoryItem[];
+  linkedObligations: SubscriptionLinkedObligationItem[];
+}
+
+export interface SubscriptionRegistryListResponse {
+  items: SubscriptionRegistrySummary[];
+  pagination: {
+    total: number;
+    limit: number;
+    offset: number;
   };
 }
 

@@ -47,6 +47,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/obligations" style={{ textDecoration: "none", color: colors.textMuted }}>
                 Obligations
               </Link>
+              <Link href="/subscriptions" style={{ textDecoration: "none", color: colors.textMuted }}>
+                Subscriptions
+              </Link>
               <Link href="/households" style={{ textDecoration: "none", color: colors.textMuted }}>
                 Households
               </Link>

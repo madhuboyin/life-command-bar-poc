@@ -121,6 +121,26 @@ function mapEventType(
       return OBSERVABILITY_EVENT_TYPES.GMAIL_SUBSCRIPTION_REVIEW_CONFIRMED;
     case "gmail_subscription_review_rejected":
       return OBSERVABILITY_EVENT_TYPES.GMAIL_SUBSCRIPTION_REVIEW_REJECTED;
+    case "subscription_registry_created":
+      return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_REGISTRY_CREATED;
+    case "subscription_registry_updated":
+      return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_REGISTRY_UPDATED;
+    case "subscription_registry_merged":
+      return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_REGISTRY_MERGED;
+    case "subscription_registry_review_confirmed":
+      return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_REGISTRY_REVIEW_CONFIRMED;
+    case "subscription_registry_review_rejected":
+      return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_REGISTRY_REVIEW_REJECTED;
+    case "subscription_lifecycle_transitioned":
+      return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_LIFECYCLE_TRANSITIONED;
+    case "subscription_price_changed":
+      return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_PRICE_CHANGED;
+    case "subscription_cancellation_detected":
+      return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_CANCELLATION_DETECTED;
+    case "subscription_prediction_strengthened":
+      return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_PREDICTION_STRENGTHENED;
+    case "subscription_obligation_created":
+      return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_OBLIGATION_CREATED;
 
     case "prediction_rebuilt":
     case "prediction_updated":
@@ -234,6 +254,11 @@ function resolveEntity(
   const importSourceId = getString(metadata.importSourceId);
   if (importSourceId) {
     return { entityType: "import_source", entityId: importSourceId };
+  }
+
+  const subscriptionId = getString(metadata.subscriptionId);
+  if (subscriptionId) {
+    return { entityType: "subscription_registry", entityId: subscriptionId };
   }
 
   const reminderId = getString(metadata.reminderId);

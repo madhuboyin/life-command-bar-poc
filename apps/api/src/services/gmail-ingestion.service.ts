@@ -6,6 +6,7 @@ import {
 } from "./gmail-message-normalizer";
 import { GmailDedupeService } from "./gmail-dedupe.service";
 import { runGmailSubscriptionHeuristics, GmailSubscriptionHeuristicResult } from "./gmail-subscription-heuristics";
+import { SubscriptionRegistryService } from "./subscription-registry.service";
 
 export type GmailMessageIngestionResult = {
   skippedAsExactDuplicate: boolean;
@@ -17,6 +18,7 @@ export class GmailIngestionService {
   private readonly externalAccountRepository = new ExternalAccountRepository();
   private readonly ingestionService = new IngestionService();
   private readonly dedupeService = new GmailDedupeService();
+  private readonly subscriptionRegistryService = new SubscriptionRegistryService();
 
   async ingestMessage(input: {
     userId: string;
@@ -152,6 +154,41 @@ export class GmailIngestionService {
       });
 
       await this.emitIngestionAuditEvents(input, ingestion, dedupeReason, lifecycle);
+
+      if (lifecycle.lifecycleEmailType !== "UNKNOWN") {
+        await this.subscriptionRegistryService
+          .ingestFromGmail({
+            userId: input.userId,
+            lifecycle,
+            provenance: {
+              externalConnectionId: input.externalConnectionId,
+              externalMessageId: input.normalizedMessage.gmailMessageId,
+              matchedQueryKey: input.matchedQueryKey,
+              sender: input.normalizedMessage.from,
+              subject: input.normalizedMessage.subject,
+              messageDate: input.normalizedMessage.messageDate,
+              importSourceId: ingestion.importSourceId,
+              obligationId: ingestion.obligationId
+            }
+          })
+          .catch(async (registryError) => {
+            await this.externalAccountRepository.createAuditEvent({
+              userId: input.userId,
+              obligationId: ingestion.obligationId,
+              eventType: "gmail_sync_error",
+              metadata: {
+                externalConnectionId: input.externalConnectionId,
+                gmailMessageId: input.normalizedMessage.gmailMessageId,
+                matchedQueryKey: input.matchedQueryKey,
+                stage: "subscription_registry_ingest",
+                error:
+                  registryError instanceof Error
+                    ? registryError.message
+                    : "subscription_registry_ingest_failed"
+              }
+            });
+          });
+      }
 
       return {
         skippedAsExactDuplicate: false,
