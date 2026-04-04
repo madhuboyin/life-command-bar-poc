@@ -109,6 +109,19 @@ enum GuidedJourneyEventType {
   JOURNEY_DISMISSED
 }
 
+enum FlowSourceType {
+  DAILY_PULSE
+  TODAY_FEED
+  DASHBOARD
+  OBLIGATION_DETAIL
+}
+
+enum FlowSessionState {
+  ACTIVE
+  COMPLETED
+  ABANDONED
+}
+
 enum DailyPulseItemStatus {
   PENDING
   OPENED_GUIDED
@@ -155,6 +168,7 @@ model User {
   guidedJourneyEvents GuidedJourneyEvent[]
   dailyPulseStates    DailyPulseState[]
   dailyPulseItemStates DailyPulseItemState[]
+  flowSessions        FlowSession[]
   outcomeFeedback     OutcomeFeedback[]
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -200,6 +214,7 @@ model Obligation {
   guidedJourneys      GuidedJourney[]
   guidedJourneyEvents GuidedJourneyEvent[]
   dailyPulseItemStates DailyPulseItemState[]
+  flowSessionsAsCurrent FlowSession[] @relation("FlowSessionCurrentObligation")
   outcomeFeedback     OutcomeFeedback[]
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -236,6 +251,7 @@ model GuidedJourney {
 
   steps  GuidedJourneyStep[]
   events GuidedJourneyEvent[]
+  flowSessionsAsCurrent FlowSession[] @relation("FlowSessionCurrentJourney")
   outcomeFeedback OutcomeFeedback[]
 
   @@index([userId, status], map: "idx_guided_journeys_user_id_status")
@@ -320,6 +336,33 @@ model DailyPulseState {
   @@unique([userId, date], map: "uniq_daily_pulse_state_user_id_date")
   @@index([userId, createdAt], map: "idx_daily_pulse_state_user_id_created_at")
   @@map("daily_pulse_states")
+}
+
+model FlowSession {
+  id String @id @default(cuid())
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  sourceType    FlowSourceType @map("source_type")
+  sourceContext Json?          @map("source_context")
+
+  currentObligationId String?      @map("current_obligation_id")
+  currentObligation   Obligation?  @relation("FlowSessionCurrentObligation", fields: [currentObligationId], references: [id], onDelete: SetNull)
+
+  currentJourneyId String?       @map("current_journey_id")
+  currentJourney   GuidedJourney? @relation("FlowSessionCurrentJourney", fields: [currentJourneyId], references: [id], onDelete: SetNull)
+
+  state FlowSessionState @default(ACTIVE)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, state], map: "idx_flow_sessions_user_id_state")
+  @@index([sourceType], map: "idx_flow_sessions_source_type")
+  @@index([currentObligationId], map: "idx_flow_sessions_current_obligation_id")
+  @@index([currentJourneyId], map: "idx_flow_sessions_current_journey_id")
+  @@map("flow_sessions")
 }
 
 model DailyPulseItemState {
