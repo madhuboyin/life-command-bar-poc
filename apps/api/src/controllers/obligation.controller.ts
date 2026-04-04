@@ -1,10 +1,12 @@
 import { Request, Response } from "express";
 import { ObligationService } from "../services/obligation.service";
+import { IngestionService } from "../services/ingestion.service";
 import { fail, ok } from "../utils/api-response";
 import { handleControllerError } from "../utils/handle-controller-error";
 import { getRequiredUserId } from "../utils/request-user";
 
 const service = new ObligationService();
+const ingestionService = new IngestionService();
 
 export async function listObligations(req: Request, res: Response) {
   try {
@@ -82,5 +84,64 @@ export async function getObligationHistory(req: Request, res: Response) {
     return ok(res, data);
   } catch (error) {
     return handleControllerError(res, error, "Could not fetch obligation history");
+  }
+}
+
+export async function getObligationSource(req: Request, res: Response) {
+  try {
+    const userId = getRequiredUserId(req, res);
+    if (!userId) return;
+
+    const data = await ingestionService.getObligationSource(userId, req.params.id as string);
+
+    if (!data) {
+      return fail(res, "NOT_FOUND", "Obligation not found", 404);
+    }
+
+    return ok(res, data);
+  } catch (error) {
+    return handleControllerError(res, error, "Could not fetch obligation source");
+  }
+}
+
+export async function confirmObligationCandidate(req: Request, res: Response) {
+  try {
+    const userId = getRequiredUserId(req, res);
+    if (!userId) return;
+
+    const obligation = await ingestionService.confirmCandidate(
+      userId,
+      req.params.id as string,
+      req.body
+    );
+
+    if (!obligation) {
+      return fail(res, "NOT_FOUND", "Obligation not found", 404);
+    }
+
+    return ok(res, { obligation });
+  } catch (error) {
+    return handleControllerError(res, error, "Could not confirm obligation candidate");
+  }
+}
+
+export async function rejectObligationCandidate(req: Request, res: Response) {
+  try {
+    const userId = getRequiredUserId(req, res);
+    if (!userId) return;
+
+    const obligation = await ingestionService.rejectCandidate(
+      userId,
+      req.params.id as string,
+      req.body
+    );
+
+    if (!obligation) {
+      return fail(res, "NOT_FOUND", "Obligation not found", 404);
+    }
+
+    return ok(res, { obligation });
+  } catch (error) {
+    return handleControllerError(res, error, "Could not reject obligation candidate");
   }
 }

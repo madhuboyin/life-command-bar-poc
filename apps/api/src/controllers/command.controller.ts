@@ -29,3 +29,15 @@ export async function executeCommand(req: Request, res: Response) {
     return handleControllerError(res, error, "Could not execute command");
   }
 }
+
+export async function ingestCommand(req: Request, res: Response) {
+  try {
+    const userId = getRequiredUserId(req, res);
+    if (!userId) return;
+
+    const result = await service.ingest(userId, req.body);
+    return ok(res, result, 201);
+  } catch (error) {
+    return handleControllerError(res, error, "Could not ingest command");
+  }
+}

@@ -8,11 +8,17 @@ import {
   createOutcomeFeedback,
   dismissObligation,
   getActiveGuidedJourneyForObligation,
+  getObligationSource,
   getResolution,
   markObligationDone,
   postponeObligation
 } from "../lib/api";
-import type { GuidedJourney, Obligation, ResolutionResponse } from "../lib/types";
+import type {
+  GuidedJourney,
+  Obligation,
+  ObligationSourceDetails,
+  ResolutionResponse
+} from "../lib/types";
 import { buildGuidedHref } from "../lib/flow-navigation";
 import ResolutionModal from "./resolution-modal";
 import {
@@ -45,6 +51,7 @@ export default function ObligationDetailClient({ obligation }: Props) {
   const [resolution, setResolution] = useState<ResolutionResponse | null>(null);
   const [showResolution, setShowResolution] = useState(false);
   const [activeJourney, setActiveJourney] = useState<GuidedJourney | null>(null);
+  const [sourceDetails, setSourceDetails] = useState<ObligationSourceDetails | null>(null);
   const isMobile = useIsMobile();
   const { showToast } = useToast();
   const router = useRouter();
@@ -75,13 +82,18 @@ export default function ObligationDetailClient({ obligation }: Props) {
 
     async function loadActiveJourney() {
       try {
-        const data = await getActiveGuidedJourneyForObligation(current.id);
+        const [journeyData, sourceData] = await Promise.all([
+          getActiveGuidedJourneyForObligation(current.id),
+          getObligationSource(current.id).catch(() => null)
+        ]);
         if (!cancelled) {
-          setActiveJourney(data.journey);
+          setActiveJourney(journeyData.journey);
+          setSourceDetails(sourceData);
         }
       } catch {
         if (!cancelled) {
           setActiveJourney(null);
+          setSourceDetails(null);
         }
       }
     }
@@ -231,6 +243,14 @@ export default function ObligationDetailClient({ obligation }: Props) {
         <div><strong>Due Date:</strong> {formatDateTime(current.dueDate)}</div>
         <div><strong>Amount:</strong> {current.amount ?? "—"} {current.currency ?? ""}</div>
         <div><strong>Source:</strong> {current.source}</div>
+        {sourceDetails ? (
+          <div>
+            <strong>Provenance:</strong> {sourceDetails.provenanceLabel}
+            {sourceDetails.parseConfidence !== null && sourceDetails.parseConfidence !== undefined
+              ? ` (${Math.round(sourceDetails.parseConfidence * 100)}%)`
+              : ""}
+          </div>
+        ) : null}
         <div><strong>Recurrence:</strong> {current.recurrence ?? "—"}</div>
       </section>
 
@@ -301,6 +321,12 @@ export default function ObligationDetailClient({ obligation }: Props) {
               <button onClick={handleGuideMe} disabled={loading !== null} style={buttonStyles.primary}>
                 {loading === "guide" ? "Starting..." : "Guide me"}
               </button>
+
+              {current.status === "DRAFT" && current.source !== "MANUAL" ? (
+                <Link href={`/obligations/${current.id}/review`} style={buttonStyles.link}>
+                  Review draft
+                </Link>
+              ) : null}
 
               <button onClick={handleShowResolution} disabled={loading !== null} style={buttonStyles.secondary}>
                 {loading === "resolution" ? "Loading..." : "Open resolution"}

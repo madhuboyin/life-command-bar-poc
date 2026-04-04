@@ -77,6 +77,11 @@ export default function ObligationListItemCard({
         <button onClick={handleGuideMe} disabled={startingGuide} style={buttonStyles.secondary}>
           {startingGuide ? "Starting..." : "Guide me"}
         </button>
+        {item.status === "DRAFT" && item.source !== "MANUAL" ? (
+          <Link href={`/obligations/${item.id}/review`} style={buttonStyles.link}>
+            Review draft
+          </Link>
+        ) : null}
         <Link href={`/obligations/${item.id}`} style={buttonStyles.link}>
           View details
         </Link>

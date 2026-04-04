@@ -3,6 +3,7 @@ import { TodayFeedService } from "./today-feed.service";
 import { ResolutionService } from "./resolution.service";
 import { ObligationRepository } from "../repositories/obligation.repository";
 import { mapObligation } from "../utils/obligation.mapper";
+import { IngestionService } from "./ingestion.service";
 
 const commandSchema = z.object({
   input: z.string().min(1),
@@ -17,6 +18,7 @@ export class CommandService {
   private readonly todayFeedService = new TodayFeedService();
   private readonly resolutionService = new ResolutionService();
   private readonly obligationRepository = new ObligationRepository();
+  private readonly ingestionService = new IngestionService();
 
   parse(payload: unknown) {
     const input = commandSchema.parse(payload);
@@ -107,6 +109,35 @@ export class CommandService {
       };
     }
 
+    const ingestionHints = [
+      "renew",
+      "subscription",
+      "bill",
+      "invoice",
+      "payment due",
+      "remind me",
+      "submit",
+      "expires"
+    ];
+
+    if (
+      ingestionHints.some((hint) => text.includes(hint)) ||
+      /\$\s*\d+/.test(text) ||
+      /\bdue\b/.test(text)
+    ) {
+      return {
+        intent: "tracking",
+        confidence: 0.74,
+        entities: {
+          rawTitle: input.input.trim()
+        },
+        resolution: {
+          type: "new_obligation_candidate"
+        },
+        needsClarification: false
+      };
+    }
+
     return {
       intent: "clarification",
       confidence: 0.5,
@@ -165,9 +196,19 @@ export class CommandService {
     }
 
     if (parsed.resolution.type === "new_obligation_candidate") {
+      const rawPayloadInput =
+        typeof (payload as { input?: unknown })?.input === "string"
+          ? ((payload as { input: string }).input ?? "")
+          : "";
+
+      const ingestion = await this.ingestionService.ingestCommandCapture({
+        userId,
+        input: (parsed.entities.rawTitle as string | undefined) ?? rawPayloadInput
+      });
+
       return {
-        resultType: "new_obligation_candidate",
-        title: parsed.entities.rawTitle ?? null
+        resultType: "ingestion_candidate",
+        ingestion
       };
     }
 
@@ -177,5 +218,12 @@ export class CommandService {
         parsed.question ??
         "I could not determine your intent. Try asking for today’s feed or resolution help."
     };
+  }
+
+  async ingest(userId: string, payload: unknown) {
+    return this.ingestionService.ingestCommandCapture({
+      ...((payload ?? {}) as Record<string, unknown>),
+      userId
+    });
   }
 }

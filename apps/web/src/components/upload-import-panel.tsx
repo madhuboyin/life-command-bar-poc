@@ -3,6 +3,8 @@
 import { FormEvent, useRef, useState } from "react";
 import { importEmailForward, uploadFile } from "../lib/api";
 import { buttonStyles, cardStyles, inputStyles } from "../lib/ui";
+import type { IngestionResult } from "../lib/types";
+import IngestionResultCard from "./ingestion-result-card";
 import SectionCard from "./ui/section-card";
 import StatusMessage from "./ui/status-message";
 import { useToast } from "./ui/toast-provider";
@@ -18,6 +20,12 @@ export default function UploadImportPanel({ onCompleted }: Props) {
   const [importLoading, setImportLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [uploadIngestionResult, setUploadIngestionResult] = useState<IngestionResult | null>(
+    null
+  );
+  const [emailIngestionResult, setEmailIngestionResult] = useState<IngestionResult | null>(
+    null
+  );
   const { showToast } = useToast();
 
   const [emailForm, setEmailForm] = useState({
@@ -35,12 +43,20 @@ export default function UploadImportPanel({ onCompleted }: Props) {
       setError(null);
       setSuccess(null);
 
-      await uploadFile(file);
-      setSuccess("File uploaded successfully");
+      const result = await uploadFile(file);
+      setUploadIngestionResult(result.ingestion);
+      setSuccess(
+        result.ingestion.status === "NO_CANDIDATE"
+          ? "File uploaded. We saved the import but need more signal to build a draft."
+          : "File uploaded and ingested"
+      );
       showToast({
         variant: "success",
         title: "Upload complete",
-        description: file.name
+        description:
+          result.ingestion.status === "NO_CANDIDATE"
+            ? "Upload saved with partial extraction"
+            : file.name
       });
       setFile(null);
       if (fileInputRef.current) {
@@ -65,8 +81,13 @@ export default function UploadImportPanel({ onCompleted }: Props) {
       setError(null);
       setSuccess(null);
 
-      await importEmailForward(emailForm);
-      setSuccess("Email import created a draft obligation");
+      const result = await importEmailForward(emailForm);
+      setEmailIngestionResult(result);
+      setSuccess(
+        result.status === "NO_CANDIDATE"
+          ? "Email imported, but confirmation is needed before creating an obligation."
+          : "Email import created an obligation candidate"
+      );
       showToast({
         variant: "success",
         title: "Email imported",
@@ -151,6 +172,10 @@ export default function UploadImportPanel({ onCompleted }: Props) {
 
       {error ? <StatusMessage variant="error">{error}</StatusMessage> : null}
       {success ? <StatusMessage variant="success">{success}</StatusMessage> : null}
+      {uploadIngestionResult ? (
+        <IngestionResultCard result={uploadIngestionResult} />
+      ) : null}
+      {emailIngestionResult ? <IngestionResultCard result={emailIngestionResult} /> : null}
     </SectionCard>
   );
 }

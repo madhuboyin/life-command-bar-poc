@@ -10,7 +10,9 @@ import type {
   FlowSourceContext,
   FlowSourceType,
   GuidedJourney,
+  IngestionResult,
   Obligation,
+  ObligationSourceDetails,
   ObligationHistory,
   ObligationSort,
   ObligationView,
@@ -95,6 +97,15 @@ type DailyPulseProgressApiResponse = DailyPulseProgressResponse;
 type DailyPulseItemUpdateApiResponse = DailyPulseItemUpdateResponse;
 type PersonalizationSummaryApiResponse = PersonalizationSummary;
 type PersonalizationDebugApiResponse = PersonalizationDebug;
+type UploadIngestionApiResponse = {
+  uploadId: string;
+  jobTriggered: boolean;
+  extraction: {
+    status: "EXTRACTED" | "PARTIAL" | "UNSUPPORTED" | "FAILED";
+    note: string | null;
+  };
+  ingestion: IngestionResult;
+};
 
 function isAbsoluteHttpUrl(value: string) {
   return /^https?:\/\//i.test(value);
@@ -406,6 +417,42 @@ export async function updateObligation(
   return handleResponse<ObligationResponse>(res);
 }
 
+export async function getObligationSource(
+  obligationId: string
+): Promise<ObligationSourceDetails> {
+  const res = await apiFetch(`/obligations/${obligationId}/source`, {
+    cache: "no-store"
+  });
+
+  return handleResponse<ObligationSourceDetails>(res);
+}
+
+export async function confirmObligationCandidate(
+  obligationId: string,
+  input: Record<string, unknown>
+): Promise<ObligationResponse> {
+  const res = await apiFetch(`/obligations/${obligationId}/confirm`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+
+  return handleResponse<ObligationResponse>(res);
+}
+
+export async function rejectObligationCandidate(
+  obligationId: string,
+  reason?: string
+): Promise<ObligationResponse> {
+  const res = await apiFetch(`/obligations/${obligationId}/reject`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reason })
+  });
+
+  return handleResponse<ObligationResponse>(res);
+}
+
 export async function getResolution(obligationId: string): Promise<ResolutionResponse> {
   const res = await apiFetch(`/obligations/${obligationId}/resolution`, {
     cache: "no-store"
@@ -562,30 +609,43 @@ export async function createReminder(input: {
   return handleResponse<ReminderResponse>(res);
 }
 
-export async function uploadFile(file: File): Promise<unknown> {
+export async function uploadFile(file: File): Promise<UploadIngestionApiResponse> {
   const formData = new FormData();
   formData.append("file", file);
 
-  const res = await apiFetch("/uploads", {
+  const res = await apiFetch("/uploads/ingest", {
     method: "POST",
     body: formData
   });
 
-  return handleResponse<unknown>(res);
+  return handleResponse<UploadIngestionApiResponse>(res);
 }
 
 export async function importEmailForward(input: {
   subject: string;
   from: string;
   bodyText: string;
-}): Promise<unknown> {
+}): Promise<IngestionResult> {
   const res = await apiFetch("/imports/email-forward", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input)
   });
 
-  return handleResponse<unknown>(res);
+  return handleResponse<IngestionResult>(res);
+}
+
+export async function ingestCommand(input: {
+  input: string;
+  context?: { obligationId?: string };
+}): Promise<IngestionResult> {
+  const res = await apiFetch("/commands/ingest", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+
+  return handleResponse<IngestionResult>(res);
 }
 
 export async function parseCommand(input: {

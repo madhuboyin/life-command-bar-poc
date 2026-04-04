@@ -19,6 +19,7 @@ export function mapObligation(obligation: ObligationWithRelations) {
     dueDate: obligation.dueDate?.toISOString() ?? null,
     recurrence: obligation.recurrence,
     source: obligation.source,
+    importSourceId: obligation.importSourceId,
     confidenceScore: Number(obligation.confidenceScore),
     urgencyScore: Number(obligation.urgencyScore),
     importanceScore: Number(obligation.importanceScore),

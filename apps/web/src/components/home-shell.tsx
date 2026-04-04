@@ -130,7 +130,10 @@ export default function HomeShell({
 
   const capture = (
     <div style={{ display: "grid", gap: 24 }}>
-      <CommandBar onFeedReplace={(items) => setExternalItems(items)} />
+      <CommandBar
+        onFeedReplace={(items) => setExternalItems(items)}
+        onCompleted={refreshFromServer}
+      />
       <AddObligationForm onCreated={refreshFromServer} />
       <UploadImportPanel onCompleted={refreshFromServer} />
     </div>

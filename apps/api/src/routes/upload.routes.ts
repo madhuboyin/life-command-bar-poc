@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { NextFunction, Request, Response, Router } from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -76,7 +76,7 @@ const upload = multer({
 
 export const uploadRouter = Router();
 
-uploadRouter.post("/", (req, res, next) => {
+const uploadHandler = (req: Request, res: Response, next: NextFunction) => {
   upload.single("file")(req, res, (error: unknown) => {
     if (!error) return next();
 
@@ -102,4 +102,7 @@ uploadRouter.post("/", (req, res, next) => {
     console.error(error);
     return fail(res, "INTERNAL_ERROR", "Could not process upload", 500);
   });
-}, createUpload);
+};
+
+uploadRouter.post("/", uploadHandler, createUpload);
+uploadRouter.post("/ingest", uploadHandler, createUpload);

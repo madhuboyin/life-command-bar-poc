@@ -60,6 +60,21 @@ enum ImportSourceType {
   DOCUMENT
 }
 
+enum ImportSourceSubtype {
+  EMAIL_FORWARD
+  FILE_UPLOAD
+  COMMAND_CAPTURE
+}
+
+enum ImportParseStatus {
+  RECEIVED
+  PARTIAL
+  READY
+  NEEDS_CONFIRMATION
+  REJECTED
+  FAILED
+}
+
 enum FeedbackType {
   ACCEPTED
   IGNORED
@@ -197,6 +212,9 @@ model Obligation {
   source ObligationSource
   status ObligationStatus @default(DRAFT)
 
+  importSourceId String?      @map("import_source_id")
+  importSource   ImportSource? @relation(fields: [importSourceId], references: [id], onDelete: SetNull)
+
   confidenceScore Decimal @default(0.0) @map("confidence_score") @db.Decimal(5, 4)
   urgencyScore    Decimal @default(0.0) @map("urgency_score") @db.Decimal(7, 4)
   importanceScore Decimal @default(0.0) @map("importance_score") @db.Decimal(7, 4)
@@ -225,6 +243,7 @@ model Obligation {
   @@index([userId, type], map: "idx_obligations_user_id_type")
   @@index([userId, lastShownAt], map: "idx_obligations_user_id_last_shown_at")
   @@index([userId, vendor], map: "idx_obligations_user_id_vendor")
+  @@index([importSourceId], map: "idx_obligations_import_source_id")
   @@map("obligations")
 }
 
@@ -501,6 +520,8 @@ model Upload {
 
   status UploadStatus @default(UPLOADED)
 
+  importSources ImportSource[]
+
   createdAt DateTime @default(now()) @map("created_at")
 
   @@index([userId, createdAt], map: "idx_uploads_user_id_created_at")
@@ -515,12 +536,29 @@ model ImportSource {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   type    ImportSourceType
-  rawData Json?            @map("raw_data")
+  subtype ImportSourceSubtype? @map("subtype")
+  rawData Json?               @map("raw_data")
+  rawText String?             @map("raw_text") @db.Text
+  normalizedText String?      @map("normalized_text") @db.Text
+  parseStatus ImportParseStatus @default(RECEIVED) @map("parse_status")
+  parseConfidence Decimal @default(0.0) @map("parse_confidence") @db.Decimal(5, 4)
+  parserVersion String? @map("parser_version")
+  extractionSummary Json? @map("extraction_summary")
+  contentHash String? @map("content_hash")
+
+  uploadId String? @map("upload_id")
+  upload   Upload? @relation(fields: [uploadId], references: [id], onDelete: SetNull)
+
+  obligations Obligation[]
 
   createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([userId, createdAt], map: "idx_import_sources_user_id_created_at")
   @@index([type], map: "idx_import_sources_type")
+  @@index([subtype], map: "idx_import_sources_subtype")
+  @@index([parseStatus], map: "idx_import_sources_parse_status")
+  @@index([userId, contentHash], map: "idx_import_sources_user_id_content_hash")
   @@map("import_sources")
 }
 

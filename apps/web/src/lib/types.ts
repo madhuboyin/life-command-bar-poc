@@ -10,6 +10,7 @@ export interface Obligation {
   dueDate?: string | null;
   recurrence?: string | null;
   source: "MANUAL" | "EMAIL" | "DOCUMENT" | "INFERRED";
+  importSourceId?: string | null;
   confidenceScore: number;
   urgencyScore: number;
   importanceScore: number;
@@ -403,18 +404,74 @@ export interface CommandParseResponse {
   question?: string;
 }
 
+export type IngestionConfidenceBand = "HIGH" | "MEDIUM" | "LOW";
+
+export interface IngestionExtractedFields {
+  type: "BILL" | "SUBSCRIPTION" | "RENEWAL" | "COMMITMENT";
+  title: string | null;
+  vendor: string | null;
+  amount: number | null;
+  currency: string | null;
+  dueDate: string | null;
+  recurrence: string | null;
+  description: string | null;
+}
+
+export interface IngestionResult {
+  importSourceId: string;
+  candidateId: string | null;
+  obligationId: string | null;
+  status: "ACTIVE" | "DRAFT" | "NO_CANDIDATE" | "DUPLICATE";
+  parseStatus:
+    | "RECEIVED"
+    | "PARTIAL"
+    | "READY"
+    | "NEEDS_CONFIRMATION"
+    | "REJECTED"
+    | "FAILED";
+  confidence: number;
+  confidenceBand: IngestionConfidenceBand;
+  needsConfirmation: boolean;
+  needsReview: boolean;
+  isDuplicate: boolean;
+  duplicateOfObligationId: string | null;
+  extracted: IngestionExtractedFields;
+}
+
+export interface ObligationSourceDetails {
+  obligationId: string;
+  sourceType: "MANUAL" | "EMAIL" | "DOCUMENT" | "INFERRED";
+  sourceSubtype: "EMAIL_FORWARD" | "FILE_UPLOAD" | "COMMAND_CAPTURE" | null;
+  parseStatus:
+    | "RECEIVED"
+    | "PARTIAL"
+    | "READY"
+    | "NEEDS_CONFIRMATION"
+    | "REJECTED"
+    | "FAILED"
+    | null;
+  parseConfidence: number | null;
+  parserVersion: string | null;
+  importedAt: string | null;
+  extractionSummary?: Record<string, unknown> | null;
+  provenanceLabel: string;
+  rawData?: Record<string, unknown> | null;
+}
+
 export interface CommandExecuteResponse {
   resultType:
     | "today_feed"
     | "obligation_list"
     | "resolution_flow"
     | "new_obligation_candidate"
+    | "ingestion_candidate"
     | "clarification";
   items?: TodayFeedItem[] | Obligation[];
   generatedAt?: string;
   obligationId?: string;
   recommendation?: ResolutionRecommendation;
   title?: string | null;
+  ingestion?: IngestionResult;
   question?: string;
   pagination?: {
     total: number;

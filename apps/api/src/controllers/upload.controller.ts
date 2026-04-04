@@ -15,7 +15,7 @@ export async function createUpload(req: Request, res: Response) {
       return fail(res, "VALIDATION_ERROR", "File is required", 400);
     }
 
-    const upload = await service.createUpload({
+    const { upload, ingestion, extraction } = await service.createUploadAndIngest({
       userId,
       fileName: req.file.originalname,
       fileType: req.file.mimetype,
@@ -27,7 +27,9 @@ export async function createUpload(req: Request, res: Response) {
       res,
       {
         uploadId: upload.id,
-        jobTriggered: false
+        jobTriggered: false,
+        extraction,
+        ingestion
       },
       201
     );
