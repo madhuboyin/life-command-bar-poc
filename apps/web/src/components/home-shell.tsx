@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   DashboardInsightsResponse,
   TodayFeedItem,
@@ -13,8 +13,9 @@ import UploadImportPanel from "./upload-import-panel";
 import RemindersPanel from "./reminders-panel";
 import DashboardTabs from "./dashboard-tabs";
 import DashboardSummaryStrip from "./dashboard-summary-strip";
-import { getDashboardInsights, getTodayFeed } from "../lib/api";
+import { getDailyPulseState, getDashboardInsights, getTodayFeed } from "../lib/api";
 import DashboardInsightsSection from "./dashboard-insights-section";
+import DailyPulseEntryBanner from "./daily-pulse-entry-banner";
 
 type Props = {
   initialData: TodayFeedResponse;
@@ -35,6 +36,28 @@ export default function HomeShell({
     initialInsightsError ?? null
   );
   const [insightsLoading, setInsightsLoading] = useState(false);
+  const [showDailyPulseBanner, setShowDailyPulseBanner] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const state = await getDailyPulseState();
+        if (!cancelled) {
+          setShowDailyPulseBanner(!state.openedToday);
+        }
+      } catch {
+        if (!cancelled) {
+          setShowDailyPulseBanner(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const effectiveFeed: TodayFeedResponse = {
     generatedAt: initialData.generatedAt,
@@ -88,6 +111,7 @@ export default function HomeShell({
 
   const overview = (
     <div style={{ display: "grid", gap: 24 }}>
+      {showDailyPulseBanner ? <DailyPulseEntryBanner /> : null}
       <DashboardInsightsSection
         data={insights}
         loading={insightsLoading}

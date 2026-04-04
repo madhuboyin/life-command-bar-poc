@@ -125,6 +125,7 @@ model User {
   resolutionRuns      ResolutionRun[]
   guidedJourneys      GuidedJourney[]
   guidedJourneyEvents GuidedJourneyEvent[]
+  dailyPulseStates    DailyPulseState[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -259,6 +260,26 @@ model GuidedJourneyEvent {
   @@index([obligationId], map: "idx_guided_journey_events_obligation_id")
   @@index([eventType], map: "idx_guided_journey_events_event_type")
   @@map("guided_journey_events")
+}
+
+model DailyPulseState {
+  id String @id @default(cuid())
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  date String @db.VarChar(10)
+
+  openedAt DateTime? @map("opened_at")
+
+  completedCount Int @default(0) @map("completed_count")
+  dismissedCount Int @default(0) @map("dismissed_count")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, date], map: "uniq_daily_pulse_state_user_id_date")
+  @@index([userId, createdAt], map: "idx_daily_pulse_state_user_id_created_at")
+  @@map("daily_pulse_states")
 }
 
 model Reminder {

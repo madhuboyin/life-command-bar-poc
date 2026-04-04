@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { DashboardInsightsResponse } from "../lib/types";
 import { getObligationViewHref } from "../lib/obligation-filters";
 import { buttonStyles } from "../lib/ui";
@@ -41,7 +42,10 @@ export default function DashboardInsightsSection({
       description="Quiet signals about progress, pressure, and what to handle next."
     >
       {onRefresh ? (
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, gap: 10, flexWrap: "wrap" }}>
+          <Link href="/pulse" style={buttonStyles.link}>
+            Start your day
+          </Link>
           <button
             onClick={onRefresh}
             disabled={loading}

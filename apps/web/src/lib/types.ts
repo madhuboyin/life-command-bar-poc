@@ -133,6 +133,46 @@ export interface Reminder {
   updatedAt: string;
 }
 
+export interface DailyPulseTopInsight {
+  title: string;
+  description: string;
+  tone: "neutral" | "positive" | "warning";
+}
+
+export interface DailyPulseItem {
+  obligationId: string;
+  title: string;
+  whyItMatters: string;
+  actionLabel: string;
+  hookType: "urgent" | "quick_win" | "money" | "postponed" | "important";
+  priorityScore: number;
+}
+
+export interface DailyPulseResponse {
+  generatedAt: string;
+  topInsight: DailyPulseTopInsight;
+  items: DailyPulseItem[];
+  momentum: {
+    handledThisWeek: number;
+    trend: "up" | "down" | "flat";
+  };
+  quickSummary: string;
+  state: {
+    date: string;
+    openedAt?: string | null;
+    completedCount: number;
+    dismissedCount: number;
+  };
+}
+
+export interface DailyPulseState {
+  date: string;
+  openedToday: boolean;
+  openedAt?: string | null;
+  completedCount: number;
+  dismissedCount: number;
+}
+
 export interface ObligationHistory {
   auditEvents: Array<{
     id: string;

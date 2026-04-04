@@ -1,6 +1,8 @@
 import type {
   CommandExecuteResponse,
   CommandParseResponse,
+  DailyPulseResponse,
+  DailyPulseState,
   DashboardInsightsResponse,
   GuidedJourney,
   Obligation,
@@ -73,6 +75,9 @@ type GuidedJourneyCreateResponse = {
 type GuidedJourneyMaybeResponse = {
   journey: GuidedJourney | null;
 };
+
+type DailyPulseApiResponse = DailyPulseResponse;
+type DailyPulseStateApiResponse = DailyPulseState;
 
 function isAbsoluteHttpUrl(value: string) {
   return /^https?:\/\//i.test(value);
@@ -650,4 +655,47 @@ export async function dismissGuidedJourney(journeyId: string): Promise<GuidedJou
   });
 
   return handleResponse<GuidedJourneyResponse>(res);
+}
+
+export async function getDailyPulse(params?: {
+  markOpened?: boolean;
+  refresh?: boolean;
+}): Promise<DailyPulseApiResponse> {
+  const query = new URLSearchParams();
+  if (typeof params?.markOpened === "boolean") {
+    query.set("markOpened", params.markOpened ? "true" : "false");
+  }
+  if (typeof params?.refresh === "boolean") {
+    query.set("refresh", params.refresh ? "true" : "false");
+  }
+
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  const res = await apiFetch(`/daily-pulse${suffix}`, {
+    cache: "no-store"
+  });
+
+  return handleResponse<DailyPulseApiResponse>(res);
+}
+
+export async function getDailyPulseState(): Promise<DailyPulseStateApiResponse> {
+  const res = await apiFetch("/daily-pulse/state", {
+    cache: "no-store"
+  });
+
+  return handleResponse<DailyPulseStateApiResponse>(res);
+}
+
+export async function trackDailyPulseAction(action: "COMPLETED" | "DISMISSED" | "POSTPONED") {
+  const res = await apiFetch("/daily-pulse/track-action", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action })
+  });
+
+  return handleResponse<{
+    date: string;
+    openedAt?: string | null;
+    completedCount: number;
+    dismissedCount: number;
+  }>(res);
 }
