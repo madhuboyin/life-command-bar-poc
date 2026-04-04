@@ -26,11 +26,18 @@ const SUBSCRIPTION_EVIDENCE_PATTERNS = [
   /\bsubscription\b/,
   /\bmembership\b/,
   /\bplan\b/,
+  /\bsubscription plan\b/,
   /\bauto[\s-]?renew\b/,
+  /\brenews on\b/,
   /\bbilled\s+(monthly|annually|yearly|quarterly)\b/,
+  /\bbilling cycle\b/,
   /\brecurring\b/,
   /\btrial\b/,
-  /\bpremium\b/
+  /\bcancel anytime\b/,
+  /\bpremium\b/,
+  /\bmonthly\b/,
+  /\byearly\b/,
+  /\bannual(?:ly)?\b/
 ];
 
 const WELCOME_PATTERNS = [
@@ -52,14 +59,20 @@ const RENEWAL_PATTERNS = [
   /\bupcoming renewal\b/
 ];
 
-const RECEIPT_PATTERNS = [
-  /\breceipt\b/,
+const STRICT_RECEIPT_PATTERNS = [
   /\binvoice\b/,
   /\bpayment received\b/,
   /\bcharged\b/,
   /\bstatement\b/,
   /\bthanks for your payment\b/,
   /\bsuccessful payment\b/
+];
+
+const BROAD_RECEIPT_PATTERNS = [
+  /\breceipt\b/,
+  /\border\b/,
+  /\bbilled\b/,
+  /\bpayment\b/
 ];
 
 const CANCELLATION_PATTERNS = [
@@ -104,7 +117,12 @@ export function classifyGmailSubscriptionLifecycle(
 
   scores.WELCOME += countMatches(text, WELCOME_PATTERNS) * 0.46;
   scores.RENEWAL += countMatches(text, RENEWAL_PATTERNS) * 0.52;
-  scores.RECEIPT += countMatches(text, RECEIPT_PATTERNS) * 0.48;
+  
+  const strictReceiptCount = countMatches(text, STRICT_RECEIPT_PATTERNS);
+  const broadReceiptCount = countMatches(text, BROAD_RECEIPT_PATTERNS);
+  scores.RECEIPT += strictReceiptCount * 0.48;
+  scores.RECEIPT += (subscriptionEvidenceCount > 0 ? broadReceiptCount * 0.35 : broadReceiptCount * 0.15);
+  
   scores.CANCELLATION += countMatches(text, CANCELLATION_PATTERNS) * 0.58;
 
   if (subscriptionEvidenceCount > 0) {

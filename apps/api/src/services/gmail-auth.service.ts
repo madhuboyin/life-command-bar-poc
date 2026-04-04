@@ -4,7 +4,12 @@ import { AppError } from "../utils/app-error";
 import { decryptSecret, encryptSecret } from "../utils/secret-crypto";
 import { ExternalAccountRepository } from "../repositories/external-account.repository";
 
-const GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+const GMAIL_READONLY_SCOPE = [
+  "https://www.googleapis.com/auth/gmail.readonly",
+  "https://www.googleapis.com/auth/userinfo.email",
+  "https://www.googleapis.com/auth/userinfo.profile",
+  "openid"
+].join(" ");
 
 type OAuthStatePayload = {
   userId: string;

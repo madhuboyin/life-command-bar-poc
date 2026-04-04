@@ -11,15 +11,22 @@ import {
   evaluateGmailSubscriptionConfidence,
   type GmailSubscriptionConfidenceResult
 } from "./gmail-subscription-confidence";
+import { ExternalAccountRepository } from "../repositories/external-account.repository";
 
 export type GmailSubscriptionHeuristicResult = {
   lifecycleEmailType: GmailSubscriptionLifecycleEmailType;
   classification: GmailSubscriptionClassificationResult;
   extraction: GmailSubscriptionExtractionResult;
   confidence: GmailSubscriptionConfidenceResult;
+  vendorHistory?: {
+    hasPriorVendor: boolean;
+    isUnknownVendor: boolean;
+    hasRejectedHistory: boolean;
+  };
 };
 
 type HeuristicInput = {
+  userId: string;
   subject: string;
   from: string;
   bodyText: string;
@@ -33,9 +40,9 @@ type HeuristicInput = {
   };
 };
 
-export function runGmailSubscriptionHeuristics(
+export async function runGmailSubscriptionHeuristics(
   input: HeuristicInput
-): GmailSubscriptionHeuristicResult {
+): Promise<GmailSubscriptionHeuristicResult> {
   const classification = classifyGmailSubscriptionLifecycle({
     subject: input.subject,
     from: input.from,
@@ -53,16 +60,23 @@ export function runGmailSubscriptionHeuristics(
     messageDate: input.messageDate
   });
 
+  const repository = new ExternalAccountRepository();
+  const history = await repository.checkVendorHistory(input.userId, extraction.vendor);
+
   const confidence = evaluateGmailSubscriptionConfidence({
     classification,
     extraction,
-    context: input.context
+    context: {
+      ...input.context,
+      history
+    }
   });
 
   return {
     lifecycleEmailType: classification.lifecycleEmailType,
     classification,
     extraction,
-    confidence
+    confidence,
+    vendorHistory: history
   };
 }

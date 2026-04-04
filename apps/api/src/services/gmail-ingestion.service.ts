@@ -5,7 +5,7 @@ import {
   NormalizedGmailMessage
 } from "./gmail-message-normalizer";
 import { GmailDedupeService } from "./gmail-dedupe.service";
-import { runGmailSubscriptionHeuristics } from "./gmail-subscription-heuristics";
+import { runGmailSubscriptionHeuristics, GmailSubscriptionHeuristicResult } from "./gmail-subscription-heuristics";
 
 export type GmailMessageIngestionResult = {
   skippedAsExactDuplicate: boolean;
@@ -24,7 +24,10 @@ export class GmailIngestionService {
     matchedQueryKey: string;
     normalizedMessage: NormalizedGmailMessage;
   }): Promise<GmailMessageIngestionResult> {
-    const lifecycle = runGmailSubscriptionHeuristics({
+    const connection = await this.externalAccountRepository.getGmailConnectionForUser(input.userId);
+    
+    const lifecycle = await runGmailSubscriptionHeuristics({
+      userId: input.userId,
       subject: input.normalizedMessage.subject,
       from: input.normalizedMessage.from,
       bodyText: input.normalizedMessage.bodyText,
@@ -55,6 +58,25 @@ export class GmailIngestionService {
       input.externalConnectionId,
       input.normalizedMessage.gmailMessageId
     );
+    
+    if (connection && !connection.includeRecurringReceipts && lifecycle.lifecycleEmailType === "RECEIPT") {
+      await this.externalAccountRepository.createAuditEvent({
+        userId: input.userId,
+        eventType: "gmail_candidate_skipped",
+        metadata: {
+          externalConnectionId: input.externalConnectionId,
+          gmailMessageId: input.normalizedMessage.gmailMessageId,
+          matchedQueryKey: input.matchedQueryKey,
+          reason: "user_preference_opt_out"
+        }
+      });
+
+      return {
+        skippedAsExactDuplicate: false,
+        messageRecordId: null,
+        ingestion: null
+      };
+    }
 
     if (existing) {
       await this.externalAccountRepository.createAuditEvent({
@@ -92,8 +114,8 @@ export class GmailIngestionService {
       subscriptionLifecycle: lifecycle
     });
 
-    const messageStatus = this.dedupeService.toMessageStatus(ingestion);
-    const dedupeReason = this.dedupeService.buildReason(ingestion);
+    const messageStatus = this.dedupeService.toMessageStatus(ingestion, lifecycle.vendorHistory?.hasRejectedHistory);
+    const dedupeReason = this.dedupeService.buildReason(ingestion, lifecycle.vendorHistory?.hasRejectedHistory);
 
     const messageDate = input.normalizedMessage.messageDate
       ? new Date(input.normalizedMessage.messageDate)
@@ -169,7 +191,7 @@ export class GmailIngestionService {
     },
     ingestion: IngestionResult,
     dedupeReason: string | null,
-    lifecycle: ReturnType<typeof runGmailSubscriptionHeuristics>
+    lifecycle: GmailSubscriptionHeuristicResult
   ) {
     if (ingestion.status === "DUPLICATE" || ingestion.duplicateCandidate) {
       await this.externalAccountRepository.createAuditEvent({

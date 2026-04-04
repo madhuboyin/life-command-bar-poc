@@ -2,7 +2,11 @@ import { ExternalMessageIngestionStatus } from "@prisma/client";
 import { IngestionResult } from "./ingestion.service";
 
 export class GmailDedupeService {
-  toMessageStatus(result: IngestionResult): ExternalMessageIngestionStatus {
+  toMessageStatus(result: IngestionResult, hasRejectedHistory?: boolean): ExternalMessageIngestionStatus {
+    if (hasRejectedHistory) {
+      return ExternalMessageIngestionStatus.DUPLICATE_SUPPRESSED;
+    }
+
     if (result.status === "DUPLICATE" || result.duplicateCandidate) {
       return ExternalMessageIngestionStatus.DUPLICATE_SUPPRESSED;
     }
@@ -18,7 +22,11 @@ export class GmailDedupeService {
     return ExternalMessageIngestionStatus.PROCESSED;
   }
 
-  buildReason(result: IngestionResult): string | null {
+  buildReason(result: IngestionResult, hasRejectedHistory?: boolean): string | null {
+    if (hasRejectedHistory) {
+      return "user_previously_rejected";
+    }
+
     if (result.status === "DUPLICATE") {
       return result.duplicateOfObligationId
         ? `duplicate_of_obligation:${result.duplicateOfObligationId}`

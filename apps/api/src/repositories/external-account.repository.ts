@@ -3,7 +3,8 @@ import {
   ExternalMessageIngestionStatus,
   ExternalProvider,
   ExternalSyncStatus,
-  Prisma
+  Prisma,
+  ObligationStatus
 } from "@prisma/client";
 import { prisma } from "../clients/prisma.client";
 import { createAuditEvent } from "../observability/audit-event";
@@ -197,5 +198,42 @@ export class ExternalAccountRepository {
       eventType: input.eventType,
       metadata: input.metadata
     });
+  }
+
+  async checkVendorHistory(userId: string, vendor: string | null, daysLookback: number = 365) {
+    if (!vendor) {
+      return { hasPriorVendor: false, isUnknownVendor: true, hasRejectedHistory: false };
+    }
+
+    const sinceDate = new Date();
+    sinceDate.setDate(sinceDate.getDate() - daysLookback);
+
+    const obligations = await prisma.obligation.findMany({
+      where: {
+        userId,
+        vendor: {
+          equals: vendor,
+          mode: 'insensitive'
+        },
+        createdAt: {
+          gte: sinceDate
+        }
+      },
+      select: {
+        status: true
+      }
+    });
+
+    const hasPriorVendor = obligations.length > 0;
+    const isUnknownVendor = obligations.length === 0;
+    const hasRejectedHistory = obligations.some(
+      (o) => o.status === ObligationStatus.IGNORED
+    );
+
+    return {
+      hasPriorVendor,
+      isUnknownVendor,
+      hasRejectedHistory
+    };
   }
 }

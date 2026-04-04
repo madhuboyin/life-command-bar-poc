@@ -17,6 +17,11 @@ type ConfidenceInput = {
     hasExistingMatch?: boolean;
     hasLifecycleConflict?: boolean;
     sourceQualityPenalty?: boolean;
+    history?: {
+      hasPriorVendor: boolean;
+      isUnknownVendor: boolean;
+      hasRejectedHistory: boolean;
+    };
   };
 };
 
@@ -109,6 +114,25 @@ export function evaluateGmailSubscriptionConfidence(
     score -= 0.08;
     reviewReasons.push("Email body quality was low, requiring review");
     rationaleSignals.add("source_quality_penalty");
+  }
+
+  const eComSenders = ["amazon", "walmart", "target"];
+  const isEComSender = hasVendor && eComSenders.some(s => extraction.vendor!.toLowerCase().includes(s));
+  if (isEComSender && !rationaleSignals.has("subscription_language_detected")) {
+    reviewReasons.push("Major e-commerce sender without explicit subscription language");
+    score = 0.2;
+    rationaleSignals.add("ecom_sender_penalty");
+  }
+
+  if (input.context?.history?.hasPriorVendor) {
+    score += 0.3;
+    rationaleSignals.add("matched_historical_vendor");
+  }
+
+  if (input.context?.history?.isUnknownVendor && score > 0.6) {
+    reviewReasons.push("First time encountering this vendor");
+    score = 0.6;
+    rationaleSignals.add("unknown_vendor_penalty");
   }
 
   score = clamp(score, 0, 1);
