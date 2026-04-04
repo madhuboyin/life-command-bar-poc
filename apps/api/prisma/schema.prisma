@@ -176,6 +176,34 @@ enum MemoryEventSourceType {
   SYSTEM_REBUILD
 }
 
+enum PredictionType {
+  RECURRING_NEXT_OCCURRENCE
+  UPCOMING_ATTENTION
+  WORKLOAD_WINDOW
+  MISSING_EXPECTED_OBLIGATION
+}
+
+enum PredictionReferenceType {
+  MEMORY_PATTERN
+  MEMORY_ENTITY
+  OBLIGATION
+  VENDOR
+}
+
+enum PredictionStatus {
+  ACTIVE
+  CONFIRMED
+  DISMISSED
+  EXPIRED
+  PROMOTED_TO_OBLIGATION
+}
+
+enum PredictionConfidenceBand {
+  HIGH
+  MEDIUM
+  LOW
+}
+
 enum DailyPulseItemStatus {
   PENDING
   OPENED_GUIDED
@@ -245,6 +273,7 @@ model User {
   memoryPatterns      MemoryPattern[]
   memoryContext       MemoryContext?
   memoryEvents        MemoryEvent[]
+  predictions         Prediction[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -296,6 +325,7 @@ model Obligation {
   outcomeFeedback     OutcomeFeedback[]
   autoFlowStates      AutoFlowState[]
   focusSessionItems   FocusSessionItem[]
+  promotedPredictions Prediction[] @relation("PredictionPromotedObligation")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -502,6 +532,45 @@ model FocusSessionItem {
   @@index([userId, status], map: "idx_focus_session_items_user_status")
   @@index([obligationId], map: "idx_focus_session_items_obligation_id")
   @@map("focus_session_items")
+}
+
+model Prediction {
+  id String @id @default(cuid())
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  predictionType PredictionType @map("prediction_type")
+  referenceType  PredictionReferenceType @map("reference_type")
+  referenceId    String @map("reference_id")
+
+  title       String
+  description String?
+
+  predictedDate DateTime? @map("predicted_date")
+  predictionWindowStart DateTime? @map("prediction_window_start")
+  predictionWindowEnd DateTime? @map("prediction_window_end")
+
+  confidenceScore Decimal @default(0.0) @map("confidence_score") @db.Decimal(5, 4)
+  confidenceBand  PredictionConfidenceBand @default(LOW) @map("confidence_band")
+
+  rationale Json?
+  rationaleSummary String? @map("rationale_summary")
+
+  status PredictionStatus @default(ACTIVE)
+
+  promotedObligationId String? @map("promoted_obligation_id")
+  promotedObligation   Obligation? @relation("PredictionPromotedObligation", fields: [promotedObligationId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, predictionType, referenceType, referenceId], map: "uniq_predictions_user_type_reference")
+  @@index([userId, status, predictedDate], map: "idx_predictions_user_status_predicted_date")
+  @@index([userId, predictionWindowStart, predictionWindowEnd], map: "idx_predictions_user_window")
+  @@index([userId, confidenceBand], map: "idx_predictions_user_confidence_band")
+  @@index([promotedObligationId], map: "idx_predictions_promoted_obligation_id")
+  @@map("predictions")
 }
 
 model MemoryEntity {

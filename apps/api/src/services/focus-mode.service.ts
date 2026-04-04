@@ -20,6 +20,7 @@ import {
 } from "./focus-mode.selector";
 import { PersonalizationService } from "./personalization.service";
 import { HomeMemoryService } from "./home-memory.service";
+import { PredictionEngineService } from "./prediction-engine.service";
 
 const createFocusSessionSchema = z.object({
   userId: z.string().min(1),
@@ -88,6 +89,7 @@ export class FocusModeService {
   private readonly obligationRepository = new ObligationRepository();
   private readonly personalizationService = new PersonalizationService();
   private readonly homeMemoryService = new HomeMemoryService();
+  private readonly predictionEngineService = new PredictionEngineService();
 
   async createSession(payload: unknown) {
     const input = createFocusSessionSchema.parse(payload);
@@ -556,6 +558,12 @@ export class FocusModeService {
     ]);
     const signals = personalizationSummary?.signals ?? getDefaultSignals();
     const mappedItems = rawItems.map((item) => mapObligation(item));
+    const predictionBoostByObligation = await this.predictionEngineService
+      .getBoostForObligationIds(
+        userId,
+        mappedItems.map((item) => item.id)
+      )
+      .catch(() => new Map<string, number>());
 
     const filtered = mappedItems.filter((item) => {
       const feedback = feedbackMap.get(item.id) ?? [];
@@ -577,9 +585,15 @@ export class FocusModeService {
       getPersonalizationDelta: (scoreInput) => {
         const base = this.personalizationService.getTodayFeedScoreAdjustment(signals, scoreInput);
         const memory = this.getMemorySelectionDelta(memorySignals, scoreInput);
+        const predictionBoost = predictionBoostByObligation.get(scoreInput.obligationId) ?? 0;
+        const predictionDelta = predictionBoost > 0 ? Math.min(8, predictionBoost * 0.6) : 0;
         return {
-          delta: base.delta + memory.delta,
-          reasons: [...base.reasons, ...memory.reasons]
+          delta: base.delta + memory.delta + predictionDelta,
+          reasons: [
+            ...base.reasons,
+            ...memory.reasons,
+            ...(predictionBoost > 0 ? ["predicted upcoming attention"] : [])
+          ]
         };
       }
     });
@@ -858,6 +872,7 @@ export class FocusModeService {
   private getMemorySelectionDelta(
     memorySignals: Awaited<ReturnType<HomeMemoryService["getDecisionSignals"]>>,
     input: {
+      obligationId: string;
       obligationType: "BILL" | "SUBSCRIPTION" | "RENEWAL" | "COMMITMENT";
       isUrgent: boolean;
       isQuickWin: boolean;

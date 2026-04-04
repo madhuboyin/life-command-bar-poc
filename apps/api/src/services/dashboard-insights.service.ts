@@ -13,6 +13,7 @@ import type { DecisionTrace, TrustWhy } from "../utils/trust-layer";
 import { toWhyConfidence } from "../utils/trust-layer";
 import { AutoFlowService } from "./auto-flow.service";
 import { HomeMemoryService } from "./home-memory.service";
+import { PredictionEngineService } from "./prediction-engine.service";
 
 const LOOKBACK_DAYS = 7;
 const QUICK_WIN_CONFIDENCE_THRESHOLD = 0.85;
@@ -28,7 +29,8 @@ type CardKey =
   | "quick_wins"
   | "money_exposure"
   | "postponed"
-  | "open_category";
+  | "open_category"
+  | "upcoming_prediction";
 
 type SummaryType = {
   handledThisWeek: number;
@@ -148,6 +150,7 @@ export class DashboardInsightsService {
   private readonly personalizationService = new PersonalizationService();
   private readonly autoFlowService = new AutoFlowService();
   private readonly homeMemoryService = new HomeMemoryService();
+  private readonly predictionEngineService = new PredictionEngineService();
 
   async getInsights(
     userId: string,
@@ -167,7 +170,8 @@ export class DashboardInsightsService {
       remindersDueSoon,
       personalizationSummary,
       autoFlowSummary,
-      memorySummary
+      memorySummary,
+      upcomingPredictions
     ] = await Promise.all([
       prisma.obligation.findMany({
         where: {
@@ -263,7 +267,11 @@ export class DashboardInsightsService {
           suggestedCount: 0
         }
       })),
-      this.homeMemoryService.getSummary(userId).catch(() => null)
+      this.homeMemoryService.getSummary(userId).catch(() => null),
+      this.predictionEngineService
+        .listUpcoming(userId)
+        .then((result) => result.items)
+        .catch(() => [])
     ]);
     const signals = personalizationSummary?.signals ?? getDefaultSignals();
 
@@ -342,6 +350,14 @@ export class DashboardInsightsService {
       postponedStats,
       remindersDueSoon
     }).map((card) => attachCardWhy(card, summary, includeTrace));
+    const upcomingPredictionCard = buildUpcomingPredictionCard(upcomingPredictions);
+    if (upcomingPredictionCard) {
+      cards.unshift(attachCardWhy(upcomingPredictionCard, summary, includeTrace));
+      cards.sort((a, b) => a.priority - b.priority);
+      if (cards.length > 6) {
+        cards.length = 6;
+      }
+    }
     if (memorySummary?.recurringPatterns?.length) {
       const recurringCount = memorySummary.recurringPatterns.length;
       const topVendor = memorySummary.topVendors[0] ?? "your key vendors";
@@ -361,13 +377,22 @@ export class DashboardInsightsService {
       autoFlowSummary.summary.readyCount > 0
         ? buildAutoFlowTopInsight(autoFlowSummary.summary.readyCount)
         : topInsightBase;
+    const predictionAwareTopInsight =
+      overdueOrUrgent === 0 && upcomingPredictionCard
+        ? {
+            title: upcomingPredictionCard.title,
+            description: upcomingPredictionCard.supportingText,
+            tone: "neutral" as const,
+            targetView: upcomingPredictionCard.targetView
+          }
+        : baseWithAutoFlow;
     const memoryAwareTopInsight =
       shouldUseMemoryTopInsight({
         overdueOrUrgent,
         recurringCount: memorySummary?.recurringPatterns?.length ?? 0
       }) && memorySummary
         ? buildMemoryTopInsight(memorySummary)
-        : baseWithAutoFlow;
+        : predictionAwareTopInsight;
 
     const topInsight = attachTopInsightWhy(
       memoryAwareTopInsight,
@@ -753,6 +778,39 @@ function buildAutoFlowTopInsight(readyCount: number): TopInsightBase {
   };
 }
 
+function buildUpcomingPredictionCard(
+  predictions: Array<{
+    title: string;
+    description: string | null;
+    predictedDate: string | null;
+    confidenceBand: "HIGH" | "MEDIUM" | "LOW";
+  }>
+): DashboardCardBase | null {
+  const candidate = predictions.find((item) => item.confidenceBand !== "LOW") ?? predictions[0];
+  if (!candidate) return null;
+
+  const predictedDateLabel = candidate.predictedDate
+    ? new Date(candidate.predictedDate).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric"
+      })
+    : null;
+
+  return {
+    key: "upcoming_prediction",
+    title: "Upcoming signal",
+    value: predictedDateLabel ? `By ${predictedDateLabel}` : "Likely soon",
+    supportingText:
+      candidate.description ??
+      (predictedDateLabel
+        ? `Expected around ${predictedDateLabel} based on prior patterns.`
+        : "Pattern suggests this may need attention soon."),
+    tone: candidate.confidenceBand === "HIGH" ? "positive" : "neutral",
+    priority: candidate.confidenceBand === "HIGH" ? 2 : 4,
+    targetView: "active_now"
+  };
+}
+
 function buildCards(input: {
   summary: SummaryType;
   postponedStats: PostponedStats;
@@ -929,6 +987,7 @@ function deriveSignalsFromCardKey(key: DashboardCardBase["key"]) {
   if (key === "quick_wins") return ["quick win"];
   if (key === "money_exposure") return ["money exposure"];
   if (key === "postponed") return ["recent activity"];
+  if (key === "upcoming_prediction") return ["due soon", "recent activity"];
   return ["high importance"];
 }
 

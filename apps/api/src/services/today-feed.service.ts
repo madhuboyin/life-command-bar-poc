@@ -13,6 +13,7 @@ import type { DecisionTrace, TrustWhy } from "../utils/trust-layer";
 import { toWhyConfidence } from "../utils/trust-layer";
 import { AutoFlowService, type AutoFlowSurfaceItem } from "./auto-flow.service";
 import { HomeMemoryService } from "./home-memory.service";
+import { PredictionEngineService } from "./prediction-engine.service";
 
 type FeedCandidate = {
   obligation: Awaited<ReturnType<ObligationRepository["findActiveForFeed"]>>[number];
@@ -20,6 +21,8 @@ type FeedCandidate = {
   hookType: "urgent" | "money" | "quick_win" | "none";
   personalizationReasons: string[];
   memoryReasons: string[];
+  predictionReason: string | null;
+  predictionBoost: number;
   autoFlow: AutoFlowSurfaceItem | null;
 };
 
@@ -29,6 +32,7 @@ export class TodayFeedService {
   private readonly personalizationService = new PersonalizationService();
   private readonly autoFlowService = new AutoFlowService();
   private readonly homeMemoryService = new HomeMemoryService();
+  private readonly predictionEngineService = new PredictionEngineService();
 
   async getTodayFeed(userId: string, options?: { includeTrace?: boolean }) {
     const includeTrace = options?.includeTrace ?? false;
@@ -60,6 +64,12 @@ export class TodayFeedService {
       userId,
       eligible.map((item) => item.id)
     );
+    const predictionBoostByObligation = await this.predictionEngineService
+      .getBoostForObligationIds(
+        userId,
+        eligible.map((item) => item.id)
+      )
+      .catch(() => new Map<string, number>());
 
     const candidates = eligible.map((obligation) => {
       const urgency = Number(obligation.urgencyScore);
@@ -88,6 +98,7 @@ export class TodayFeedService {
       const autoFlow = autoFlowByObligation.get(obligation.id) ?? null;
       const autoFlowBoost =
         autoFlow?.state === "READY" ? 18 : autoFlow?.state === "SUGGESTED" ? 10 : 0;
+      const predictionBoost = predictionBoostByObligation.get(obligation.id) ?? 0;
 
       const score =
         urgency * 0.3 +
@@ -97,7 +108,8 @@ export class TodayFeedService {
         moneyHook * 0.15 -
         effortPenalty * 0.03 -
         postponedPenalty +
-        autoFlowBoost;
+        autoFlowBoost +
+        predictionBoost;
       const adjustment = this.personalizationService.getTodayFeedScoreAdjustment(signals, {
         obligationType: obligation.type,
         isUrgent: urgency >= 85 || Boolean(obligation.dueDate && obligation.dueDate <= new Date(Date.now() + 48 * 60 * 60 * 1000)),
@@ -123,6 +135,13 @@ export class TodayFeedService {
         hookType,
         personalizationReasons: adjustment.reasons,
         memoryReasons: memory.reasons,
+        predictionReason:
+          predictionBoost >= 10
+            ? "Likely upcoming based on your recurring pattern"
+            : predictionBoost >= 5
+              ? "Pattern suggests this is worth early preparation"
+              : null,
+        predictionBoost,
         autoFlow
       };
     });
@@ -156,16 +175,19 @@ export class TodayFeedService {
         hookType: item.hookType,
         whyItMatters: flow.whyItMatters,
         personalizationReason:
+          item.predictionReason ??
           item.memoryReasons[0] ??
           item.personalizationReasons[0] ??
           null,
-        candidateScore: item.candidateScore
+        candidateScore: item.candidateScore,
+        predictionBoost: item.predictionBoost
       });
       const decisionTrace = buildFeedDecisionTrace({
         obligation: mappedObligation,
         hookType: item.hookType,
         candidateScore: item.candidateScore,
-        memoryReasons: item.memoryReasons
+        memoryReasons: item.memoryReasons,
+        predictionBoost: item.predictionBoost
       });
 
       return {
@@ -254,6 +276,7 @@ function buildFeedWhy(input: {
   whyItMatters: string;
   personalizationReason: string | null;
   candidateScore: number;
+  predictionBoost: number;
 }): TrustWhy {
   const signals = new Set<string>();
 
@@ -262,6 +285,7 @@ function buildFeedWhy(input: {
   if (input.hookType === "quick_win") signals.add("quick win");
   if (input.obligation.importanceScore >= 72) signals.add("high importance");
   if (input.obligation.status === "POSTPONED") signals.add("recent activity");
+  if (input.predictionBoost > 0) signals.add("recent activity");
 
   if (signals.size === 0) {
     signals.add("high importance");
@@ -272,9 +296,11 @@ function buildFeedWhy(input: {
       ? "Due soon"
       : input.hookType === "quick_win"
         ? "Low effort, high impact"
-        : input.hookType === "money"
-          ? "Money exposure"
-          : input.whyItMatters;
+      : input.hookType === "money"
+        ? "Money exposure"
+        : input.predictionBoost > 0
+          ? "Likely coming soon"
+        : input.whyItMatters;
 
   const confidence = toWhyConfidence(
     input.obligation.confidenceScore * 0.65 + normalizeCandidateScore(input.candidateScore) * 0.35
@@ -293,6 +319,7 @@ function buildFeedDecisionTrace(input: {
   hookType: FeedCandidate["hookType"];
   candidateScore: number;
   memoryReasons: string[];
+  predictionBoost: number;
 }): DecisionTrace {
   const sourceSignals = [
     `source_type:${input.obligation.sourceType.toLowerCase()}`,
@@ -304,6 +331,9 @@ function buildFeedDecisionTrace(input: {
     `importance:${Math.round(input.obligation.importanceScore)}`,
     `candidate_score:${Math.round(input.candidateScore)}`
   ];
+  if (input.predictionBoost > 0) {
+    rankingFactors.push(`prediction_boost:${Math.round(input.predictionBoost)}`);
+  }
 
   const suppressionFactors = [];
   if (input.obligation.effortLevel === "HIGH") {
@@ -317,6 +347,9 @@ function buildFeedDecisionTrace(input: {
     `confidence_band:${input.obligation.confidenceBand.toLowerCase()}`,
     `hook_type:${input.hookType}`
   ];
+  if (input.predictionBoost > 0) {
+    confidenceDrivers.push(`prediction_boost:${Math.round(input.predictionBoost)}`);
+  }
   if (input.memoryReasons.length > 0) {
     confidenceDrivers.push(`memory:${normalizeMemoryReason(input.memoryReasons[0] as string)}`);
   }

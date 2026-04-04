@@ -26,6 +26,7 @@ import DailyPulseEntryBanner from "./daily-pulse-entry-banner";
 import ReadyToActBanner from "./ready-to-act-banner";
 import AutoFlowCard from "./auto-flow-card";
 import MemoryContextCard from "./memory-context-card";
+import UpcomingPredictionsPanel from "./upcoming-predictions-panel";
 
 type Props = {
   initialData: TodayFeedResponse;
@@ -136,6 +137,7 @@ export default function HomeShell({
       </div>
       <ReadyToActBanner autoFlow={autoFlow} />
       <MemoryContextCard />
+      <UpcomingPredictionsPanel />
       <section
         style={{
           border: "1px solid #e5e7eb",

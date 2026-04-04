@@ -228,7 +228,14 @@ export type ObligationSort = "due_date" | "importance" | "urgency" | "created_at
 export type SortDirection = "asc" | "desc";
 
 export interface DashboardInsightCard {
-  key: "attention" | "relief" | "quick_wins" | "money_exposure" | "postponed" | "open_category";
+  key:
+    | "attention"
+    | "relief"
+    | "quick_wins"
+    | "money_exposure"
+    | "postponed"
+    | "open_category"
+    | "upcoming_prediction";
   title: string;
   value: string;
   supportingText: string;
@@ -393,6 +400,7 @@ export interface DailyPulseMomentum {
 export interface DailyPulseResponse {
   generatedAt: string;
   topInsight: DailyPulseTopInsight;
+  upcomingPredictions?: PredictionSummaryItem[];
   items: DailyPulseItem[];
   momentum: DailyPulseMomentum;
   progress: DailyPulseProgress;
@@ -534,6 +542,65 @@ export interface MemorySummary {
   };
   currentContext: MemoryContext;
   topVendors: string[];
+}
+
+export type PredictionType =
+  | "RECURRING_NEXT_OCCURRENCE"
+  | "UPCOMING_ATTENTION"
+  | "WORKLOAD_WINDOW"
+  | "MISSING_EXPECTED_OBLIGATION";
+
+export type PredictionReferenceType = "MEMORY_PATTERN" | "MEMORY_ENTITY" | "OBLIGATION" | "VENDOR";
+export type PredictionStatus =
+  | "ACTIVE"
+  | "CONFIRMED"
+  | "DISMISSED"
+  | "EXPIRED"
+  | "PROMOTED_TO_OBLIGATION";
+
+export interface PredictionSummaryItem {
+  id: string;
+  title: string;
+  description: string | null;
+  predictedDate: string | null;
+  confidenceBand: ConfidenceBand;
+  rationaleSummary: string | null;
+}
+
+export interface PredictionItem extends PredictionSummaryItem {
+  predictionType: PredictionType;
+  referenceType: PredictionReferenceType;
+  referenceId: string;
+  predictionWindowStart: string | null;
+  predictionWindowEnd: string | null;
+  confidenceScore: number;
+  status: PredictionStatus;
+  rationale: Record<string, unknown> | null;
+  sourceReference: {
+    referenceType: PredictionReferenceType;
+    referenceId: string;
+    matchedVendor: string | null;
+    obligationType: string | null;
+  };
+  promotedObligationId: string | null;
+  promotedObligation: Obligation | null;
+  needsConfirmation: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PredictionListResponse {
+  items: PredictionItem[];
+}
+
+export interface PredictionUpcomingResponse {
+  windows: Array<{
+    windowDays: number;
+    start: string;
+    end: string;
+    items: PredictionItem[];
+  }>;
+  items: PredictionItem[];
 }
 
 export interface ObligationHistory {

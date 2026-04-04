@@ -7,6 +7,7 @@ export type FocusSelectionInput = {
   durationMinutes: FocusDurationMinutes;
   obligations: Array<ReturnType<typeof mapObligation>>;
   getPersonalizationDelta: (input: {
+    obligationId: string;
     obligationType: "BILL" | "SUBSCRIPTION" | "RENEWAL" | "COMMITMENT";
     isUrgent: boolean;
     isQuickWin: boolean;
@@ -124,6 +125,7 @@ function toCandidate(
   const reviewPenalty = obligation.needsReview ? -6 : 0;
 
   const personalization = input.getPersonalizationDelta({
+    obligationId: obligation.id,
     obligationType: obligation.type,
     isUrgent,
     isQuickWin,
@@ -176,6 +178,10 @@ function buildWhyIncluded(candidate: Candidate) {
 
   if (candidate.isUrgent) {
     return "Due soon, but manageable in this session.";
+  }
+
+  if (candidate.personalizationReasons.some((reason) => reason.includes("predicted"))) {
+    return "Likely upcoming soon, so preparing now keeps things calm.";
   }
 
   if (candidate.obligation.status === ObligationStatus.POSTPONED) {

@@ -7,6 +7,7 @@ import { mapObligation } from "../utils/obligation.mapper";
 import { AppError } from "../utils/app-error";
 import { AutoFlowService } from "./auto-flow.service";
 import { HomeMemoryService } from "./home-memory.service";
+import { PredictionEngineService } from "./prediction-engine.service";
 
 const createObligationSchema = z.object({
   userId: z.string().min(1),
@@ -67,6 +68,7 @@ export class ObligationService {
   private readonly repository = new ObligationRepository();
   private readonly autoFlowService = new AutoFlowService();
   private readonly homeMemoryService = new HomeMemoryService();
+  private readonly predictionEngineService = new PredictionEngineService();
 
   async list(userId: string, query: Record<string, unknown>) {
     const limit = parseIntegerQuery(query.limit, 20, 1, 100);
@@ -122,6 +124,16 @@ export class ObligationService {
       eventType: "obligation_created"
     });
 
+    await this.predictionEngineService
+      .resolveWithObligation({
+        userId: mapped.userId,
+        obligationId: mapped.id,
+        obligationType: mapped.type,
+        vendor: mapped.vendor,
+        dueDate: mapped.dueDate ? new Date(mapped.dueDate) : null
+      })
+      .catch(() => null);
+
     return mapped;
   }
 
@@ -159,6 +171,16 @@ export class ObligationService {
         updatedFields: Object.keys(input)
       }
     });
+
+    await this.predictionEngineService
+      .resolveWithObligation({
+        userId,
+        obligationId: mapped.id,
+        obligationType: mapped.type,
+        vendor: mapped.vendor,
+        dueDate: mapped.dueDate ? new Date(mapped.dueDate) : null
+      })
+      .catch(() => null);
 
     return mapped;
   }
@@ -322,6 +344,16 @@ export class ObligationService {
         dismissPermanently: Boolean(input.dismissPermanently)
       }
     });
+
+    await this.predictionEngineService
+      .resolveWithObligation({
+        userId,
+        obligationId: mapped.id,
+        obligationType: mapped.type,
+        vendor: mapped.vendor,
+        dueDate: mapped.dueDate ? new Date(mapped.dueDate) : null
+      })
+      .catch(() => null);
 
     return mapped;
   }

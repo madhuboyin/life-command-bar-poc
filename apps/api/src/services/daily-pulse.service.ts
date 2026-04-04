@@ -16,6 +16,7 @@ import { AppError } from "../utils/app-error";
 import type { DecisionTrace, TrustWhy } from "../utils/trust-layer";
 import { toWhyConfidence } from "../utils/trust-layer";
 import { HomeMemoryService } from "./home-memory.service";
+import { PredictionEngineService } from "./prediction-engine.service";
 
 type PulseHookType = "urgent" | "quick_win" | "money" | "postponed" | "important";
 type PulseTrend = "up" | "down" | "flat";
@@ -40,6 +41,15 @@ type PulseItem = {
     priorityScore: number;
     ctaLabel: string;
   } | null;
+};
+
+type PulsePredictionPreview = {
+  id: string;
+  title: string;
+  description: string | null;
+  predictedDate: string | null;
+  confidenceBand: "HIGH" | "MEDIUM" | "LOW";
+  rationaleSummary: string | null;
 };
 
 type PulseProgress = {
@@ -81,6 +91,8 @@ type PulseCandidate = {
     priorityScore: number;
     ctaLabel: string;
   } | null;
+  predictionBoost: number;
+  predictionReason: string | null;
 };
 
 const MAX_ITEMS = 5;
@@ -93,6 +105,7 @@ export class DailyPulseService {
   private readonly personalizationService = new PersonalizationService();
   private readonly repository = new DailyPulseRepository();
   private readonly homeMemoryService = new HomeMemoryService();
+  private readonly predictionEngineService = new PredictionEngineService();
 
   async getPulse(
     userId: string,
@@ -109,7 +122,8 @@ export class DailyPulseService {
       activeObligations,
       recentlyPostponedIds,
       personalizationSummary,
-      memorySignals
+      memorySignals,
+      preparationPredictions
     ] =
       await Promise.all([
         this.dashboardInsightsService.getInsights(userId, { includeTrace }),
@@ -125,9 +139,18 @@ export class DailyPulseService {
           recurringVendors: [],
           recurringVendorKeys: [],
           recurringVendorTypeKeys: []
-        }))
+        })),
+        this.predictionEngineService
+          .getPreparationItems(userId, { days: 7, limit: 3 })
+          .catch(() => [])
       ]);
     const signals = personalizationSummary?.signals ?? getDefaultSignals();
+    const predictionBoostByObligation = await this.predictionEngineService
+      .getBoostForObligationIds(
+        userId,
+        activeObligations.map((item) => item.id)
+      )
+      .catch(() => new Map<string, number>());
 
     const feedByObligationId = new Map(todayFeed.items.map((item) => [item.obligationId, item]));
 
@@ -144,6 +167,13 @@ export class DailyPulseService {
       const autoFlow = feedByObligationId.get(obligation.id)?.autoFlow ?? null;
       const autoFlowBoost =
         autoFlow?.state === "READY" ? 20 : autoFlow?.state === "SUGGESTED" ? 12 : 0;
+      const predictionBoost = predictionBoostByObligation.get(obligation.id) ?? 0;
+      const predictionReason =
+        predictionBoost >= 10
+          ? "Predicted to need attention soon"
+          : predictionBoost >= 5
+            ? "Pattern suggests upcoming attention"
+            : null;
 
       const personalization = this.personalizationService.getDailyPulseScoreAdjustment(signals, {
         obligationType: obligation.type,
@@ -173,13 +203,20 @@ export class DailyPulseService {
         confidenceBand: obligation.confidenceBand,
         sourceType: obligation.sourceType,
         needsReview: obligation.needsReview,
-        priorityScore: basePriorityScore + personalization.delta + autoFlowBoost + memory.delta,
+        priorityScore:
+          basePriorityScore +
+          personalization.delta +
+          autoFlowBoost +
+          memory.delta +
+          predictionBoost,
         isUrgent,
         isQuickWin,
         isMoney,
         isPostponed,
         hookType,
-        autoFlow
+        autoFlow,
+        predictionBoost,
+        predictionReason
       } satisfies PulseCandidate;
     });
 
@@ -213,6 +250,14 @@ export class DailyPulseService {
         why: insights.topInsight.why,
         decisionTrace: includeTrace ? insights.topInsight.decisionTrace : undefined
       },
+      upcomingPredictions: preparationPredictions.map((item) => ({
+        id: item.id,
+        title: item.title,
+        description: item.description,
+        predictedDate: item.predictedDate,
+        confidenceBand: item.confidenceBand,
+        rationaleSummary: item.rationaleSummary
+      })) satisfies PulsePredictionPreview[],
       items,
       momentum: {
         ...momentum,
@@ -608,7 +653,8 @@ export class DailyPulseService {
                   hookType
                 ),
               confidenceBand: candidate?.confidenceBand ?? "LOW",
-              needsReview: candidate?.needsReview ?? true
+              needsReview: candidate?.needsReview ?? true,
+              predictionReason: candidate?.predictionReason ?? null
             }),
           whyItMatters:
             feed?.whyItMatters ??
@@ -973,6 +1019,7 @@ function buildPulseWhy(input: {
   whyItMatters: string;
   confidenceBand: "HIGH" | "MEDIUM" | "LOW";
   needsReview: boolean;
+  predictionReason: string | null;
 }): TrustWhy {
   const signals = new Set<string>();
   if (input.hookType === "urgent") signals.add("due soon");
@@ -980,6 +1027,7 @@ function buildPulseWhy(input: {
   if (input.hookType === "money") signals.add("money exposure");
   if (input.hookType === "postponed") signals.add("recent activity");
   if (input.hookType === "important") signals.add("high importance");
+  if (input.predictionReason) signals.add("recent activity");
 
   const confidenceFromBand =
     input.confidenceBand === "HIGH" ? 0.88 : input.confidenceBand === "MEDIUM" ? 0.64 : 0.38;
@@ -992,10 +1040,12 @@ function buildPulseWhy(input: {
           ? "Low effort, high impact"
           : input.hookType === "money"
             ? "Money exposure"
+            : input.predictionReason
+              ? "Likely coming soon"
             : input.whyItMatters,
     signals: Array.from(signals),
     confidence: toWhyConfidence(input.needsReview ? confidenceFromBand - 0.08 : confidenceFromBand),
-    personalizationReason: null
+    personalizationReason: input.predictionReason
   };
 }
 
@@ -1026,6 +1076,9 @@ function buildPulseDecisionTrace(input: {
     `confidence_band:${input.candidate?.confidenceBand?.toLowerCase() ?? "low"}`,
     input.candidate?.needsReview ? "needs_review" : "ready"
   ];
+  if ((input.candidate?.predictionBoost ?? 0) > 0) {
+    confidenceDrivers.push(`prediction_boost:${Math.round(input.candidate?.predictionBoost ?? 0)}`);
+  }
 
   return {
     sourceSignals,

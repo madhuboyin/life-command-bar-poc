@@ -27,6 +27,9 @@ import type {
   OutcomeType,
   PersonalizationDebug,
   PersonalizationSummary,
+  PredictionItem,
+  PredictionListResponse,
+  PredictionUpcomingResponse,
   ReviewQueueResponse,
   Reminder,
   ResolutionResponse,
@@ -121,6 +124,10 @@ type MemoryEntitiesResponse = {
 
 type MemoryPatternsResponse = {
   items: MemoryPattern[];
+};
+
+type PredictionByIdResponse = {
+  prediction: PredictionItem;
 };
 
 function isAbsoluteHttpUrl(value: string) {
@@ -715,6 +722,109 @@ export async function deleteMemoryPattern(patternId: string) {
     method: "DELETE"
   });
   return handleResponse<{ deleted: boolean }>(res);
+}
+
+export async function getPredictions(params?: {
+  status?: Array<"ACTIVE" | "CONFIRMED" | "DISMISSED" | "EXPIRED" | "PROMOTED_TO_OBLIGATION">;
+  predictionType?: Array<
+    | "RECURRING_NEXT_OCCURRENCE"
+    | "UPCOMING_ATTENTION"
+    | "WORKLOAD_WINDOW"
+    | "MISSING_EXPECTED_OBLIGATION"
+  >;
+  limit?: number;
+}): Promise<PredictionListResponse> {
+  const query = new URLSearchParams();
+  for (const status of params?.status ?? []) {
+    query.append("status", status);
+  }
+  for (const predictionType of params?.predictionType ?? []) {
+    query.append("predictionType", predictionType);
+  }
+  if (typeof params?.limit === "number") {
+    query.set("limit", String(params.limit));
+  }
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+
+  const res = await apiFetch(`/predictions${suffix}`, {
+    cache: "no-store"
+  });
+  return handleResponse<PredictionListResponse>(res);
+}
+
+export async function getUpcomingPredictions(): Promise<PredictionUpcomingResponse> {
+  const res = await apiFetch("/predictions/upcoming", {
+    cache: "no-store"
+  });
+  return handleResponse<PredictionUpcomingResponse>(res);
+}
+
+export async function getPredictionById(predictionId: string): Promise<PredictionByIdResponse> {
+  const res = await apiFetch(`/predictions/${predictionId}`, {
+    cache: "no-store"
+  });
+  return handleResponse<PredictionByIdResponse>(res);
+}
+
+export async function confirmPrediction(predictionId: string, promote?: boolean) {
+  const res = await apiFetch(`/predictions/${predictionId}/confirm`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ promote })
+  });
+  return handleResponse<{ prediction: PredictionItem; promotedObligation: Obligation | null }>(res);
+}
+
+export async function dismissPrediction(predictionId: string, reason?: string) {
+  const res = await apiFetch(`/predictions/${predictionId}/dismiss`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reason })
+  });
+  return handleResponse<{ prediction: PredictionItem }>(res);
+}
+
+export async function patchPrediction(
+  predictionId: string,
+  input: {
+    title?: string;
+    description?: string | null;
+    predictedDate?: string | null;
+    status?: "ACTIVE" | "CONFIRMED" | "DISMISSED" | "EXPIRED" | "PROMOTED_TO_OBLIGATION";
+    confidenceScore?: number;
+  }
+) {
+  const res = await apiFetch(`/predictions/${predictionId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  return handleResponse<{ prediction: PredictionItem }>(res);
+}
+
+export async function deletePrediction(predictionId: string) {
+  const res = await apiFetch(`/predictions/${predictionId}`, {
+    method: "DELETE"
+  });
+  return handleResponse<{ deleted: boolean }>(res);
+}
+
+export async function rebuildPredictions() {
+  const res = await apiFetch("/predictions/rebuild", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
+  return handleResponse<{
+    rebuiltAt: string;
+    count: number;
+    summary: {
+      recurringCount: number;
+      upcomingCount: number;
+      workloadCount: number;
+      missingExpectedCount: number;
+    };
+  }>(res);
 }
 
 export async function createObligation(input: {

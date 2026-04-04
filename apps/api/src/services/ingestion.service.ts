@@ -36,6 +36,7 @@ import {
 } from "./ingestion-normalizers";
 import { AutoFlowService } from "./auto-flow.service";
 import { HomeMemoryService } from "./home-memory.service";
+import { PredictionEngineService } from "./prediction-engine.service";
 
 const PARSER_VERSION = "ingestion-v1-rule-2026-04-04";
 
@@ -113,6 +114,7 @@ export class IngestionService {
   private readonly repository = new IngestionRepository();
   private readonly autoFlowService = new AutoFlowService();
   private readonly homeMemoryService = new HomeMemoryService();
+  private readonly predictionEngineService = new PredictionEngineService();
 
   async ingestEmailForward(payload: unknown): Promise<IngestionResult> {
     const input = emailForwardSchema.parse(payload);
@@ -240,6 +242,16 @@ export class IngestionService {
         confidenceScore: Number(updated.confidenceScore)
       }
     });
+
+    await this.predictionEngineService
+      .resolveWithObligation({
+        userId,
+        obligationId,
+        obligationType: updated.type,
+        vendor: updated.vendor,
+        dueDate: updated.dueDate
+      })
+      .catch(() => null);
 
     return mapObligation(updated as Obligation);
   }
@@ -677,6 +689,16 @@ export class IngestionService {
           ? "Ready now from new capture"
           : "New capture needs confirmation"
     });
+
+    await this.predictionEngineService
+      .resolveWithObligation({
+        userId: normalized.userId,
+        obligationId: obligation.id,
+        obligationType: obligation.type,
+        vendor: obligation.vendor,
+        dueDate: obligation.dueDate
+      })
+      .catch(() => null);
 
     return {
       importSourceId: importSource.id,

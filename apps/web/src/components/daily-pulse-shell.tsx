@@ -18,6 +18,7 @@ import PulseMomentumCard from "./pulse-momentum-card";
 import WhyThisExplanation from "./why-this-explanation";
 import ReadyToActBanner from "./ready-to-act-banner";
 import AutoFlowCard from "./auto-flow-card";
+import PredictionCard from "./prediction-card";
 
 type Props = {
   initialPulse: DailyPulseResponse | null;
@@ -161,6 +162,19 @@ export default function DailyPulseShell({
 
           <DailyPulseProgress progress={pulse.progress} />
           <PulseMomentumCard momentum={pulse.momentum} quickSummary={pulse.quickSummary} />
+
+          {pulse.upcomingPredictions && pulse.upcomingPredictions.length > 0 ? (
+            <section style={cardStyles.section}>
+              <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 10 }}>
+                Prepare Soon
+              </div>
+              <div style={{ display: "grid", gap: 10 }}>
+                {pulse.upcomingPredictions.slice(0, 2).map((prediction) => (
+                  <PredictionCard key={prediction.id} item={prediction} compact />
+                ))}
+              </div>
+            </section>
+          ) : null}
 
           {pulse.progress.totalItems === 0 ? (
             <EmptyState

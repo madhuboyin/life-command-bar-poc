@@ -15,6 +15,7 @@ import { AppError } from "../utils/app-error";
 import type { DecisionTrace, TrustWhy } from "../utils/trust-layer";
 import { toWhyConfidence } from "../utils/trust-layer";
 import { HomeMemoryService } from "./home-memory.service";
+import { PredictionEngineService } from "./prediction-engine.service";
 
 const MAX_DAILY_AUTO_FLOW_ITEMS = 8;
 const RECENT_DUPLICATE_WINDOW_HOURS = 12;
@@ -67,6 +68,7 @@ export class AutoFlowService {
   private readonly repository = new AutoFlowRepository();
   private readonly personalizationService = new PersonalizationService();
   private readonly homeMemoryService = new HomeMemoryService();
+  private readonly predictionEngineService = new PredictionEngineService();
 
   async list(userId: string, options?: { limit?: number; includeAccepted?: boolean }) {
     await this.processDueReminderTriggers(userId);
@@ -183,11 +185,16 @@ export class AutoFlowService {
       recurringVendorKeys: [],
       recurringVendorTypeKeys: []
     }));
+    const predictionWeight = await this.predictionEngineService
+      .getBoostForObligationIds(input.userId, [input.obligationId])
+      .then((result) => result.get(input.obligationId) ?? 0)
+      .catch(() => 0);
     const evaluation = evaluateAutoFlowPriority({
       obligation: mapObligation(obligation),
       triggerType: input.triggerType,
       signals,
       memorySignals,
+      predictionWeight,
       reasonHint: input.reasonHint ?? null
     });
 
@@ -215,6 +222,7 @@ export class AutoFlowService {
       reason: evaluation.primaryReason,
       metadata: {
         signals: evaluation.signals,
+        predictionWeight: evaluation.predictionWeight,
         reasonHint: input.reasonHint ?? null,
         personalizationApplied: Boolean(signals)
       }
@@ -410,6 +418,7 @@ function evaluateAutoFlowPriority(input: {
   triggerType: AutoFlowTriggerType;
   signals: Awaited<ReturnType<PersonalizationService["getSignals"]>> | null;
   memorySignals: Awaited<ReturnType<HomeMemoryService["getDecisionSignals"]>>;
+  predictionWeight: number;
   reasonHint: string | null;
 }) {
   const confidence = input.obligation.confidenceScore;
@@ -427,9 +436,15 @@ function evaluateAutoFlowPriority(input: {
   const impactWeight = importance * 0.28 + impactBonus;
   const personalizationWeight = getPersonalizationWeight(input);
   const memoryWeight = getMemoryWeight(input);
+  const predictionWeight = clamp(input.predictionWeight, 0, 16);
 
   let priorityScore = clamp(
-    urgencyWeight + impactWeight + confidenceWeight + personalizationWeight + memoryWeight,
+    urgencyWeight +
+      impactWeight +
+      confidenceWeight +
+      personalizationWeight +
+      memoryWeight +
+      predictionWeight * 0.6,
     0,
     100
   );
@@ -449,6 +464,9 @@ function evaluateAutoFlowPriority(input: {
   if (moneyExposure && dueSoon) {
     priorityScore = clamp(priorityScore + 6, 0, 100);
   }
+  if (predictionWeight >= 8) {
+    priorityScore = clamp(priorityScore + 4, 0, 100);
+  }
 
   const signals: string[] = [];
   if (dueSoon) signals.push("due soon");
@@ -457,6 +475,7 @@ function evaluateAutoFlowPriority(input: {
   if (input.obligation.status === "POSTPONED") signals.push("recent activity");
   if (signals.length === 0) signals.push("high importance");
   if (memoryWeight > 0) signals.push("recent activity");
+  if (predictionWeight > 0) signals.push("due soon");
 
   const shouldTrigger = confidence >= 0.45 && priorityScore >= 58;
 
@@ -473,6 +492,8 @@ function evaluateAutoFlowPriority(input: {
         ? "Needs attention soon"
         : quickWin
           ? "Quick win opportunity"
+          : predictionWeight > 0
+            ? "Likely coming soon"
           : "Recommended next step");
 
   return {
@@ -481,6 +502,7 @@ function evaluateAutoFlowPriority(input: {
     confidenceScore: confidence,
     urgencyScore: urgency,
     priorityScore,
+    predictionWeight,
     primaryReason,
     signals
   };
