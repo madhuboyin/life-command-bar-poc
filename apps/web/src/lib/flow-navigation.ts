@@ -10,6 +10,8 @@ export function getSourceLabel(sourceType: FlowSourceType) {
       return "From Dashboard";
     case "AUTO_FLOW":
       return "From Auto-Flow";
+    case "FOCUS_MODE":
+      return "From Focus Mode";
     default:
       return "From Obligation Detail";
   }

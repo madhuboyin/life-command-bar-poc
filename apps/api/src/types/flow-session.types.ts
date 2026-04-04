@@ -3,7 +3,8 @@ export type FlowSourceType =
   | "TODAY_FEED"
   | "DASHBOARD"
   | "OBLIGATION_DETAIL"
-  | "AUTO_FLOW";
+  | "AUTO_FLOW"
+  | "FOCUS_MODE";
 
 export type FlowSessionState = "ACTIVE" | "COMPLETED" | "ABANDONED";
 

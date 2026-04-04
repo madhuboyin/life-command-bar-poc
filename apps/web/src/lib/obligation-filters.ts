@@ -132,7 +132,15 @@ export function getViewSortSummary(
 
 export function getObligationViewHref(
   view: ObligationView,
-  options?: { flowSource?: "DAILY_PULSE" | "TODAY_FEED" | "DASHBOARD" | "OBLIGATION_DETAIL" }
+  options?: {
+    flowSource?:
+      | "DAILY_PULSE"
+      | "TODAY_FEED"
+      | "DASHBOARD"
+      | "OBLIGATION_DETAIL"
+      | "AUTO_FLOW"
+      | "FOCUS_MODE";
+  }
 ) {
   const query = new URLSearchParams();
   query.set("view", view);

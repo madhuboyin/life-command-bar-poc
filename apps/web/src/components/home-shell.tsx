@@ -134,6 +134,25 @@ export default function HomeShell({
         </Link>
       </div>
       <ReadyToActBanner autoFlow={autoFlow} />
+      <section
+        style={{
+          border: "1px solid #e5e7eb",
+          borderRadius: 14,
+          background: "#ffffff",
+          padding: 14
+        }}
+      >
+        <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}>Short on time?</div>
+        <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>
+          Use Focus Mode for a quick burst
+        </div>
+        <div style={{ color: "#6b7280", marginBottom: 10 }}>
+          Pick 5, 10, or 15 minutes and we will queue the best items to clear now.
+        </div>
+        <Link href="/focus" style={{ textDecoration: "none", color: "#2563eb", fontWeight: 600 }}>
+          I have a few minutes →
+        </Link>
+      </section>
       {autoFlow.items.length > 0 ? (
         <section style={{ display: "grid", gap: 10 }}>
           {autoFlow.items.slice(0, 1).map((item) => (

@@ -130,12 +130,28 @@ enum FlowSourceType {
   DASHBOARD
   OBLIGATION_DETAIL
   AUTO_FLOW
+  FOCUS_MODE
 }
 
 enum FlowSessionState {
   ACTIVE
   COMPLETED
   ABANDONED
+}
+
+enum FocusSessionState {
+  ACTIVE
+  COMPLETED
+  ABANDONED
+}
+
+enum FocusSessionItemStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  POSTPONED
+  DISMISSED
+  SKIPPED
 }
 
 enum DailyPulseItemStatus {
@@ -201,6 +217,8 @@ model User {
   flowSessions        FlowSession[]
   outcomeFeedback     OutcomeFeedback[]
   autoFlowStates      AutoFlowState[]
+  focusSessions       FocusSession[]
+  focusSessionItems   FocusSessionItem[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -251,6 +269,7 @@ model Obligation {
   flowSessionsAsCurrent FlowSession[] @relation("FlowSessionCurrentObligation")
   outcomeFeedback     OutcomeFeedback[]
   autoFlowStates      AutoFlowState[]
+  focusSessionItems   FocusSessionItem[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -399,6 +418,64 @@ model FlowSession {
   @@index([currentObligationId], map: "idx_flow_sessions_current_obligation_id")
   @@index([currentJourneyId], map: "idx_flow_sessions_current_journey_id")
   @@map("flow_sessions")
+}
+
+model FocusSession {
+  id String @id @default(cuid())
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  durationMinutes Int @map("duration_minutes")
+  sourceType FlowSourceType? @map("source_type")
+  state FocusSessionState @default(ACTIVE)
+
+  totalItems Int @default(0) @map("total_items")
+  completedCount Int @default(0) @map("completed_count")
+  postponedCount Int @default(0) @map("postponed_count")
+  dismissedCount Int @default(0) @map("dismissed_count")
+  skippedCount Int @default(0) @map("skipped_count")
+
+  startedAt DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  abandonedAt DateTime? @map("abandoned_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  items FocusSessionItem[]
+
+  @@index([userId, state, updatedAt], map: "idx_focus_sessions_user_state_updated_at")
+  @@index([userId, createdAt], map: "idx_focus_sessions_user_created_at")
+  @@map("focus_sessions")
+}
+
+model FocusSessionItem {
+  id String @id @default(cuid())
+
+  focusSessionId String @map("focus_session_id")
+  focusSession   FocusSession @relation(fields: [focusSessionId], references: [id], onDelete: Cascade)
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  obligationId String @map("obligation_id")
+  obligation   Obligation @relation(fields: [obligationId], references: [id], onDelete: Cascade)
+
+  position Int
+  status FocusSessionItemStatus @default(PENDING)
+  whyIncluded String? @map("why_included")
+  estimatedMinutes Int? @map("estimated_minutes")
+  priorityScore Decimal? @db.Decimal(7, 4) @map("priority_score")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([focusSessionId, obligationId], map: "uniq_focus_session_items_session_obligation")
+  @@unique([focusSessionId, position], map: "uniq_focus_session_items_session_position")
+  @@index([userId, status], map: "idx_focus_session_items_user_status")
+  @@index([obligationId], map: "idx_focus_session_items_obligation_id")
+  @@map("focus_session_items")
 }
 
 model AutoFlowState {

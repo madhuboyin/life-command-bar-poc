@@ -123,7 +123,8 @@ export type FlowSourceType =
   | "TODAY_FEED"
   | "DASHBOARD"
   | "OBLIGATION_DETAIL"
-  | "AUTO_FLOW";
+  | "AUTO_FLOW"
+  | "FOCUS_MODE";
 
 export type FlowSessionState = "ACTIVE" | "COMPLETED" | "ABANDONED";
 
@@ -155,6 +156,60 @@ export interface FlowSession {
   } | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export type FocusSessionState = "ACTIVE" | "COMPLETED" | "ABANDONED";
+export type FocusSessionItemStatus =
+  | "PENDING"
+  | "IN_PROGRESS"
+  | "COMPLETED"
+  | "POSTPONED"
+  | "DISMISSED"
+  | "SKIPPED";
+
+export interface FocusSessionItem {
+  id: string;
+  obligationId: string;
+  title: string;
+  whyIncluded: string;
+  estimatedMinutes: number;
+  priorityScore: number;
+  status: FocusSessionItemStatus;
+  sourceType: TrustSourceType;
+  confidenceBand: ConfidenceBand;
+  needsReview: boolean;
+  obligation: Obligation;
+}
+
+export interface FocusSession {
+  id: string;
+  durationMinutes: number;
+  state: FocusSessionState;
+  totalItems: number;
+  completedCount: number;
+  postponedCount: number;
+  dismissedCount: number;
+  skippedCount: number;
+  remainingCount: number;
+  progressPercent: number;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  summary: {
+    line: string;
+    completionMessage: string | null;
+  };
+  currentItem: FocusSessionItem | null;
+  items: FocusSessionItem[];
+}
+
+export interface FocusSessionResponse {
+  session: FocusSession;
+}
+
+export interface FocusSessionCreateResponse extends FocusSessionResponse {
+  resumedExisting: boolean;
 }
 
 export type ObligationView =

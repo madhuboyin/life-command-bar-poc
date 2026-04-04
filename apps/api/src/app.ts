@@ -17,6 +17,7 @@ import { outcomeFeedbackRouter } from "./routes/outcome-feedback.routes";
 import { personalizationRouter } from "./routes/personalization.routes";
 import { flowSessionRouter } from "./routes/flow-session.routes";
 import { autoFlowRouter } from "./routes/auto-flow.routes";
+import { focusModeRouter } from "./routes/focus-mode.routes";
 
 export function createApp() {
   const app = express();
@@ -36,6 +37,7 @@ export function createApp() {
   app.use("/api/dashboard", dashboardRouter);
   app.use("/api/daily-pulse", dailyPulseRouter);
   app.use("/api/flow-sessions", flowSessionRouter);
+  app.use("/api/focus-sessions", focusModeRouter);
   app.use("/api/auto-flow", autoFlowRouter);
   app.use("/api/guided-journeys", guidedJourneyRouter);
   app.use("/api/outcome-feedback", outcomeFeedbackRouter);

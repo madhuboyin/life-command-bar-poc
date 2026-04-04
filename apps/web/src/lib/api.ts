@@ -7,6 +7,8 @@ import type {
   DailyPulseResponse,
   DailyPulseState,
   DashboardInsightsResponse,
+  FocusSessionCreateResponse,
+  FocusSessionResponse,
   FlowSession,
   FlowSourceContext,
   FlowSourceType,
@@ -856,6 +858,132 @@ export async function abandonFlowSession(sessionId: string): Promise<FlowSession
   });
 
   return handleResponse<FlowSessionResponse>(res);
+}
+
+export async function createFocusSession(input: {
+  durationMinutes: 5 | 10 | 15;
+  sourceType?: FlowSourceType;
+}): Promise<FocusSessionCreateResponse> {
+  const res = await apiFetch("/focus-sessions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+
+  return handleResponse<FocusSessionCreateResponse>(res);
+}
+
+export async function getActiveFocusSession(): Promise<FocusSessionResponse> {
+  const res = await apiFetch("/focus-sessions/active", {
+    cache: "no-store"
+  });
+
+  return handleResponse<FocusSessionResponse>(res);
+}
+
+export async function getFocusSessionById(sessionId: string): Promise<FocusSessionResponse> {
+  const res = await apiFetch(`/focus-sessions/${sessionId}`, {
+    cache: "no-store"
+  });
+
+  return handleResponse<FocusSessionResponse>(res);
+}
+
+export async function startFocusSession(sessionId: string): Promise<FocusSessionResponse> {
+  const res = await apiFetch(`/focus-sessions/${sessionId}/start`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
+
+  return handleResponse<FocusSessionResponse>(res);
+}
+
+export async function completeFocusSessionItem(
+  sessionId: string,
+  obligationId: string
+): Promise<FocusSessionResponse> {
+  const res = await apiFetch(`/focus-sessions/${sessionId}/items/${obligationId}/complete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
+
+  return handleResponse<FocusSessionResponse>(res);
+}
+
+export async function postponeFocusSessionItem(
+  sessionId: string,
+  obligationId: string,
+  input?: {
+    until?: string;
+    reason?: string;
+  }
+): Promise<FocusSessionResponse> {
+  const res = await apiFetch(`/focus-sessions/${sessionId}/items/${obligationId}/postpone`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input ?? {})
+  });
+
+  return handleResponse<FocusSessionResponse>(res);
+}
+
+export async function dismissFocusSessionItem(
+  sessionId: string,
+  obligationId: string,
+  reason?: string
+): Promise<FocusSessionResponse> {
+  const res = await apiFetch(`/focus-sessions/${sessionId}/items/${obligationId}/dismiss`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reason })
+  });
+
+  return handleResponse<FocusSessionResponse>(res);
+}
+
+export async function skipFocusSessionItem(
+  sessionId: string,
+  obligationId: string
+): Promise<FocusSessionResponse> {
+  const res = await apiFetch(`/focus-sessions/${sessionId}/items/${obligationId}/skip`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
+
+  return handleResponse<FocusSessionResponse>(res);
+}
+
+export async function nextFocusSessionItem(sessionId: string): Promise<FocusSessionResponse> {
+  const res = await apiFetch(`/focus-sessions/${sessionId}/next`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
+
+  return handleResponse<FocusSessionResponse>(res);
+}
+
+export async function completeFocusSession(sessionId: string): Promise<FocusSessionResponse> {
+  const res = await apiFetch(`/focus-sessions/${sessionId}/complete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
+
+  return handleResponse<FocusSessionResponse>(res);
+}
+
+export async function abandonFocusSession(sessionId: string): Promise<FocusSessionResponse> {
+  const res = await apiFetch(`/focus-sessions/${sessionId}/abandon`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
+
+  return handleResponse<FocusSessionResponse>(res);
 }
 
 export async function getActiveGuidedJourneyForObligation(

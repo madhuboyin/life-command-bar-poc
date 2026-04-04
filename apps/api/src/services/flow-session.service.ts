@@ -19,7 +19,8 @@ const createFlowSessionSchema = z.object({
     "TODAY_FEED",
     "DASHBOARD",
     "OBLIGATION_DETAIL",
-    "AUTO_FLOW"
+    "AUTO_FLOW",
+    "FOCUS_MODE"
   ]),
   sourceContext: z.record(z.string(), z.unknown()).optional(),
   currentObligationId: z.string().min(1),

@@ -45,6 +45,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/obligations" style={{ textDecoration: "none", color: colors.textMuted }}>
                 Obligations
               </Link>
+              <Link href="/focus" style={{ textDecoration: "none", color: colors.textMuted }}>
+                Focus Mode
+              </Link>
             </div>
             </nav>
 

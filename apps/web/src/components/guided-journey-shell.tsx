@@ -62,6 +62,7 @@ export default function GuidedJourneyShell({
     if (journey) return `/obligations/${journey.obligationId}`;
     return "/obligations";
   }, [flowSession, journey]);
+  const isFocusFlow = flowSession?.sourceType === "FOCUS_MODE";
 
   async function syncFlowCompletion(nextJourney: GuidedJourney) {
     if (!flowSessionId) return;
@@ -347,12 +348,17 @@ export default function GuidedJourneyShell({
               <p style={{ color: colors.textMuted, marginBottom: 0 }}>
                 {flowSession?.state === "COMPLETED"
                   ? "You are done for now in this flow."
-                  : "You can move to the next item or return to your previous context."}
+                  : isFocusFlow
+                    ? "Return to Focus Mode to continue the session."
+                    : "You can move to the next item or return to your previous context."}
               </p>
             </section>
           )}
 
-          {journey.status !== "ACTIVE" && flowSession?.state === "ACTIVE" && flowSession.nextItem ? (
+          {journey.status !== "ACTIVE" &&
+          flowSession?.state === "ACTIVE" &&
+          flowSession.nextItem &&
+          !isFocusFlow ? (
             <section style={cardStyles.bordered}>
               <div style={text.label}>Next item</div>
               <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 10 }}>
@@ -388,6 +394,26 @@ export default function GuidedJourneyShell({
                   View obligations
                 </Link>
               </div>
+            </section>
+          ) : null}
+
+          {journey.status !== "ACTIVE" && isFocusFlow ? (
+            <section style={cardStyles.bordered}>
+              <div style={text.label}>Focus Mode</div>
+              <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 10 }}>
+                Return to your focus session to continue with the next item.
+              </div>
+              <Link
+                href={backHref}
+                style={{
+                  ...buttonStyles.primary,
+                  textDecoration: "none",
+                  display: "inline-flex",
+                  alignItems: "center"
+                }}
+              >
+                Back to Focus Mode
+              </Link>
             </section>
           ) : null}
 
