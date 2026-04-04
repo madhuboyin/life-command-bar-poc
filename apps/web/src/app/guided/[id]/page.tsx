@@ -1,20 +1,24 @@
 import GuidedJourneyShell from "../../../components/guided-journey-shell";
-import { getGuidedJourneyById } from "../../../lib/api";
-import type { GuidedJourney } from "../../../lib/types";
+import { getFlowSessionById, getGuidedJourneyById } from "../../../lib/api";
+import type { FlowSession, GuidedJourney } from "../../../lib/types";
 
 type Props = {
   params?: Promise<{ id?: string } | undefined>;
+  searchParams?: Promise<{ flowSessionId?: string | string[] } | undefined>;
 };
 
-export default async function GuidedJourneyPage({ params }: Props) {
+export default async function GuidedJourneyPage({ params, searchParams }: Props) {
   const resolvedParams = (await params) ?? {};
+  const resolvedSearchParams = (await searchParams) ?? {};
   const journeyId = resolvedParams.id;
+  const flowSessionId = readFirstParam(resolvedSearchParams.flowSessionId) ?? null;
 
   if (!journeyId) {
     return <GuidedJourneyShell initialJourney={null} initialError="Journey id is missing." />;
   }
 
   let journey: GuidedJourney | null = null;
+  let flowSession: FlowSession | null = null;
   let error: string | null = null;
 
   try {
@@ -27,5 +31,26 @@ export default async function GuidedJourneyPage({ params }: Props) {
         : "Could not load guided journey right now.";
   }
 
-  return <GuidedJourneyShell initialJourney={journey} initialError={error} />;
+  if (flowSessionId) {
+    try {
+      const data = await getFlowSessionById(flowSessionId);
+      flowSession = data.session;
+    } catch {
+      flowSession = null;
+    }
+  }
+
+  return (
+    <GuidedJourneyShell
+      initialJourney={journey}
+      initialFlowSession={flowSession}
+      flowSessionId={flowSessionId}
+      initialError={error}
+    />
+  );
+}
+
+function readFirstParam(value: string | string[] | undefined) {
+  if (Array.isArray(value)) return value[0];
+  return value;
 }

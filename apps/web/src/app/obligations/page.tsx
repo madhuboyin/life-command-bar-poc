@@ -9,6 +9,7 @@ import {
   parseSortDirection
 } from "../../lib/obligation-filters";
 import type {
+  FlowSourceType,
   Obligation,
   ObligationSort,
   ObligationView,
@@ -24,6 +25,7 @@ type Props = {
     view?: string | string[];
     sort?: string | string[];
     direction?: string | string[];
+    flowSource?: string | string[];
   } | undefined>;
 };
 
@@ -32,10 +34,12 @@ export default async function ObligationsPage({ searchParams }: Props) {
   const rawView = readFirstParam(params.view);
   const rawSort = readFirstParam(params.sort);
   const rawDirection = readFirstParam(params.direction);
+  const rawFlowSource = readFirstParam(params.flowSource);
 
   const view: ObligationView | null = parseObligationView(rawView);
   const sort: ObligationSort | null = parseObligationSort(rawSort);
   const direction: SortDirection | null = parseSortDirection(rawDirection);
+  const flowSourceType = parseFlowSourceType(rawFlowSource);
 
   const invalidView = typeof rawView === "string" && rawView.length > 0 && !view;
   const invalidSort = typeof rawSort === "string" && rawSort.length > 0 && !sort;
@@ -61,6 +65,13 @@ export default async function ObligationsPage({ searchParams }: Props) {
 
   const selectedMeta = view ? obligationViewMeta[view] : null;
   const sortSummary = getViewSortSummary(view, sort, direction);
+  const flowReturnPath = buildReturnPath({
+    view,
+    sort,
+    direction,
+    flowSourceType
+  });
+  const flowLabel = view ? obligationViewMeta[view].label : "All obligations";
 
   return (
     <main style={pageStyles.shell}>
@@ -147,7 +158,16 @@ export default async function ObligationsPage({ searchParams }: Props) {
         ) : null}
 
         {!loadError
-          ? items.map((item) => <ObligationListItemCard key={item.id} item={item} />)
+          ? items.map((item) => (
+              <ObligationListItemCard
+                key={item.id}
+                item={item}
+                flowSourceType={flowSourceType ?? "DASHBOARD"}
+                flowLabel={flowLabel}
+                flowReturnPath={flowReturnPath}
+                flowObligationIds={items.map((obligation) => obligation.id)}
+              />
+            ))
           : null}
       </div>
     </main>
@@ -157,4 +177,27 @@ export default async function ObligationsPage({ searchParams }: Props) {
 function readFirstParam(value: string | string[] | undefined) {
   if (Array.isArray(value)) return value[0];
   return value;
+}
+
+function parseFlowSourceType(value: string | undefined): FlowSourceType | null {
+  if (value === "DAILY_PULSE") return "DAILY_PULSE";
+  if (value === "TODAY_FEED") return "TODAY_FEED";
+  if (value === "DASHBOARD") return "DASHBOARD";
+  if (value === "OBLIGATION_DETAIL") return "OBLIGATION_DETAIL";
+  return null;
+}
+
+function buildReturnPath(input: {
+  view: ObligationView | null;
+  sort: ObligationSort | null;
+  direction: SortDirection | null;
+  flowSourceType: FlowSourceType | null;
+}) {
+  const query = new URLSearchParams();
+  if (input.view) query.set("view", input.view);
+  if (input.sort) query.set("sort", input.sort);
+  if (input.direction) query.set("direction", input.direction);
+  if (input.flowSourceType) query.set("flowSource", input.flowSourceType);
+  const suffix = query.toString();
+  return suffix ? `/obligations?${suffix}` : "/obligations";
 }

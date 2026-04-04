@@ -46,6 +46,44 @@ export interface TodayFeedResponse {
   items: TodayFeedItem[];
 }
 
+export type FlowSourceType =
+  | "DAILY_PULSE"
+  | "TODAY_FEED"
+  | "DASHBOARD"
+  | "OBLIGATION_DETAIL";
+
+export type FlowSessionState = "ACTIVE" | "COMPLETED" | "ABANDONED";
+
+export interface FlowSourceContext {
+  label?: string;
+  returnPath?: string;
+  filterView?: string;
+  obligationIds?: string[];
+  handledObligationIds?: string[];
+}
+
+export interface FlowSession {
+  id: string;
+  sourceType: FlowSourceType;
+  sourceContext: FlowSourceContext | null;
+  state: FlowSessionState;
+  currentObligationId?: string | null;
+  currentJourneyId?: string | null;
+  currentObligationTitle?: string | null;
+  summary: {
+    totalItems: number;
+    handledCount: number;
+    remainingCount: number;
+    progressPercent: number;
+  };
+  nextItem: {
+    obligationId: string;
+    title: string;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type ObligationView =
   | "urgent"
   | "quick_wins"

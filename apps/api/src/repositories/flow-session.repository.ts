@@ -1,4 +1,4 @@
-import { FlowSessionState, Prisma } from "@prisma/client";
+import { FlowSessionState, FlowSourceType, Prisma } from "@prisma/client";
 import { prisma } from "../clients/prisma.client";
 
 const flowSessionInclude = {
@@ -38,7 +38,7 @@ export class FlowSessionRepository {
     });
   }
 
-  async findLatestActiveForSource(userId: string, sourceType: Prisma.FlowSessionCreateInput["sourceType"]) {
+  async findLatestActiveForSource(userId: string, sourceType: FlowSourceType) {
     return prisma.flowSession.findFirst({
       where: {
         userId,
@@ -55,7 +55,7 @@ export class FlowSessionRepository {
   async create(
     input: {
       userId: string;
-      sourceType: Prisma.FlowSessionCreateInput["sourceType"];
+      sourceType: FlowSourceType;
       sourceContext?: Prisma.InputJsonValue | null;
       currentObligationId: string;
       currentJourneyId?: string | null;
@@ -67,7 +67,7 @@ export class FlowSessionRepository {
       data: {
         userId: input.userId,
         sourceType: input.sourceType,
-        sourceContext: input.sourceContext ?? null,
+        sourceContext: input.sourceContext ?? Prisma.JsonNull,
         currentObligationId: input.currentObligationId,
         currentJourneyId: input.currentJourneyId ?? null,
         state: FlowSessionState.ACTIVE
@@ -78,7 +78,7 @@ export class FlowSessionRepository {
 
   async update(
     id: string,
-    data: Prisma.FlowSessionUpdateInput,
+    data: Prisma.FlowSessionUncheckedUpdateInput,
     tx?: Prisma.TransactionClient
   ) {
     const db = getDb(tx);

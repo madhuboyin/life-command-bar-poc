@@ -6,6 +6,9 @@ import type {
   DailyPulseResponse,
   DailyPulseState,
   DashboardInsightsResponse,
+  FlowSession,
+  FlowSourceContext,
+  FlowSourceType,
   GuidedJourney,
   Obligation,
   ObligationHistory,
@@ -80,6 +83,10 @@ type GuidedJourneyCreateResponse = {
 
 type GuidedJourneyMaybeResponse = {
   journey: GuidedJourney | null;
+};
+
+type FlowSessionResponse = {
+  session: FlowSession;
 };
 
 type DailyPulseApiResponse = DailyPulseResponse;
@@ -617,6 +624,72 @@ export async function createOrResumeGuidedJourney(
   });
 
   return handleResponse<GuidedJourneyCreateResponse>(res);
+}
+
+export async function createOrResumeFlowSession(input: {
+  sessionId?: string;
+  sourceType: FlowSourceType;
+  sourceContext?: FlowSourceContext;
+  currentObligationId: string;
+  currentJourneyId?: string;
+  reuseLatest?: boolean;
+}): Promise<FlowSessionResponse> {
+  const res = await apiFetch("/flow-sessions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+
+  return handleResponse<FlowSessionResponse>(res);
+}
+
+export async function getFlowSessionById(sessionId: string): Promise<FlowSessionResponse> {
+  const res = await apiFetch(`/flow-sessions/${sessionId}`, {
+    cache: "no-store"
+  });
+
+  return handleResponse<FlowSessionResponse>(res);
+}
+
+export async function completeFlowSessionStep(
+  sessionId: string,
+  input?: {
+    obligationId?: string;
+    journeyId?: string;
+  }
+): Promise<FlowSessionResponse> {
+  const res = await apiFetch(`/flow-sessions/${sessionId}/complete-step`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input ?? {})
+  });
+
+  return handleResponse<FlowSessionResponse>(res);
+}
+
+export async function moveFlowSessionNext(
+  sessionId: string,
+  input?: {
+    preferredObligationId?: string;
+  }
+): Promise<FlowSessionResponse> {
+  const res = await apiFetch(`/flow-sessions/${sessionId}/next`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input ?? {})
+  });
+
+  return handleResponse<FlowSessionResponse>(res);
+}
+
+export async function abandonFlowSession(sessionId: string): Promise<FlowSessionResponse> {
+  const res = await apiFetch(`/flow-sessions/${sessionId}/abandon`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
+
+  return handleResponse<FlowSessionResponse>(res);
 }
 
 export async function getActiveGuidedJourneyForObligation(

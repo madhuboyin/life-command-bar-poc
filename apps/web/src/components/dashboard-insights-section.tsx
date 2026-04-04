@@ -27,9 +27,15 @@ export default function DashboardInsightsSection({
   onRefresh
 }: Props) {
   const isMobile = useIsMobile();
-  const resolvedRecentlyHref = getObligationViewHref("resolved_recently");
-  const activeNowHref = getObligationViewHref("active_now");
-  const quickWinsHref = getObligationViewHref("quick_wins");
+  const resolvedRecentlyHref = getObligationViewHref("resolved_recently", {
+    flowSource: "DASHBOARD"
+  });
+  const activeNowHref = getObligationViewHref("active_now", {
+    flowSource: "DASHBOARD"
+  });
+  const quickWinsHref = getObligationViewHref("quick_wins", {
+    flowSource: "DASHBOARD"
+  });
 
   const hasActivity =
     (data?.summary.activeNow ?? 0) > 0 ||
@@ -76,7 +82,13 @@ export default function DashboardInsightsSection({
         <div style={{ display: "grid", gap: 14 }}>
           <TopInsightCard
             insight={data.topInsight}
-            href={data.topInsight.targetView ? getObligationViewHref(data.topInsight.targetView) : null}
+            href={
+              data.topInsight.targetView
+                ? getObligationViewHref(data.topInsight.targetView, {
+                    flowSource: "DASHBOARD"
+                  })
+                : null
+            }
           />
 
           {!hasActivity ? (
@@ -131,7 +143,11 @@ export default function DashboardInsightsSection({
                   <InsightCard
                     key={card.key}
                     card={card}
-                    href={card.targetView ? getObligationViewHref(card.targetView) : null}
+                    href={
+                      card.targetView
+                        ? getObligationViewHref(card.targetView, { flowSource: "DASHBOARD" })
+                        : null
+                    }
                   />
                 ))}
               </div>

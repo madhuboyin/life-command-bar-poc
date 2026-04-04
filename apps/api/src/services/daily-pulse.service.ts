@@ -514,7 +514,7 @@ export class DailyPulseService {
               },
               hookType
             ),
-          actionLabel: "Guide me",
+          actionLabel: "Start",
           hookType,
           priorityScore: candidate?.priorityScore ?? 0,
           status:

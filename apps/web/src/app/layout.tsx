@@ -2,6 +2,7 @@ import React from "react";
 import Link from "next/link";
 import { colors, spacing } from "../lib/ui";
 import { ToastProvider } from "../components/ui/toast-provider";
+import { FlowSessionProvider } from "../components/flow-session-provider";
 
 export const metadata = {
   title: "Life Command Bar POC",
@@ -19,8 +20,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           color: colors.text
         }}
       >
-        <ToastProvider>
-          <nav
+        <FlowSessionProvider>
+          <ToastProvider>
+            <nav
             style={{
               borderBottom: `1px solid ${colors.border}`,
               background: colors.surface,
@@ -44,10 +46,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 Obligations
               </Link>
             </div>
-          </nav>
+            </nav>
 
-          {children}
-        </ToastProvider>
+            {children}
+          </ToastProvider>
+        </FlowSessionProvider>
       </body>
     </html>
   );

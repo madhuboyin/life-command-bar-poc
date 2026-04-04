@@ -1,49 +1,81 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   abandonGuidedJourney,
   advanceGuidedJourney,
+  createOrResumeGuidedJourney,
   backGuidedJourney,
   completeGuidedJourney,
   createOutcomeFeedback,
   dismissGuidedJourney,
   selectGuidedJourneyOption
 } from "../lib/api";
-import type { GuidedJourney } from "../lib/types";
-import {
-  buttonStyles,
-  cardStyles,
-  colors,
-  pageStyles,
-  text
-} from "../lib/ui";
+import { buildGuidedHref, getFlowReturnPath, getSourceLabel } from "../lib/flow-navigation";
+import type { FlowSession, GuidedJourney } from "../lib/types";
+import { buttonStyles, cardStyles, colors, pageStyles, text } from "../lib/ui";
+import { useFlowSession } from "./flow-session-provider";
 import GuidedProgress from "./guided-progress";
 import GuidedStepCard from "./guided-step-card";
+import OutcomeFeedbackPrompt from "./outcome-feedback-prompt";
 import EmptyState from "./ui/empty-state";
 import StatusMessage from "./ui/status-message";
 import { useToast } from "./ui/toast-provider";
-import OutcomeFeedbackPrompt from "./outcome-feedback-prompt";
 
 type Props = {
   initialJourney: GuidedJourney | null;
+  initialFlowSession?: FlowSession | null;
+  flowSessionId?: string | null;
   initialError?: string | null;
 };
 
 export default function GuidedJourneyShell({
   initialJourney,
+  initialFlowSession = null,
+  flowSessionId = null,
   initialError = null
 }: Props) {
   const [journey, setJourney] = useState<GuidedJourney | null>(initialJourney);
+  const [flowSession, setFlowSession] = useState<FlowSession | null>(initialFlowSession);
   const [error, setError] = useState<string | null>(initialError);
   const [loading, setLoading] = useState<string | null>(null);
   const [helpfulnessSubmitted, setHelpfulnessSubmitted] = useState(false);
   const { showToast } = useToast();
+  const router = useRouter();
+  const flow = useFlowSession();
 
   useEffect(() => {
     setHelpfulnessSubmitted(false);
   }, [journey?.id]);
+
+  useEffect(() => {
+    if (initialFlowSession) {
+      flow.setActiveSession(initialFlowSession);
+    }
+  }, [flow, initialFlowSession]);
+
+  const backHref = useMemo(() => {
+    if (flowSession) return getFlowReturnPath(flowSession);
+    if (journey) return `/obligations/${journey.obligationId}`;
+    return "/obligations";
+  }, [flowSession, journey]);
+
+  async function syncFlowCompletion(nextJourney: GuidedJourney) {
+    if (!flowSessionId) return;
+    if (nextJourney.status !== "COMPLETED") return;
+
+    try {
+      const nextSession = await flow.completeStep(flowSessionId, {
+        obligationId: nextJourney.obligationId,
+        journeyId: nextJourney.id
+      });
+      setFlowSession(nextSession);
+    } catch {
+      // Keep journey flow usable even if flow-session sync fails.
+    }
+  }
 
   async function handleSelectOption(optionKey: string) {
     if (!journey) return;
@@ -70,6 +102,8 @@ export default function GuidedJourneyShell({
       setError(null);
       const data = await advanceGuidedJourney(journey.id, true);
       setJourney(data.journey);
+      await syncFlowCompletion(data.journey);
+
       showToast({
         variant: "success",
         title: data.journey.status === "COMPLETED" ? "Journey completed" : "Moved to next step"
@@ -108,6 +142,7 @@ export default function GuidedJourneyShell({
       setError(null);
       const data = await completeGuidedJourney(journey.id);
       setJourney(data.journey);
+      await syncFlowCompletion(data.journey);
       showToast({ variant: "success", title: "Journey completed" });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not complete journey";
@@ -126,6 +161,10 @@ export default function GuidedJourneyShell({
       setError(null);
       const data = await abandonGuidedJourney(journey.id);
       setJourney(data.journey);
+      if (flowSessionId) {
+        const nextSession = await flow.abandon(flowSessionId);
+        setFlowSession(nextSession);
+      }
       showToast({ variant: "success", title: "Journey abandoned" });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not abandon journey";
@@ -144,6 +183,10 @@ export default function GuidedJourneyShell({
       setError(null);
       const data = await dismissGuidedJourney(journey.id);
       setJourney(data.journey);
+      if (flowSessionId) {
+        const nextSession = await flow.abandon(flowSessionId);
+        setFlowSession(nextSession);
+      }
       showToast({ variant: "success", title: "Journey dismissed" });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not dismiss journey";
@@ -186,11 +229,45 @@ export default function GuidedJourneyShell({
     }
   }
 
+  async function handleNextItem() {
+    if (!flowSessionId) return;
+
+    try {
+      setLoading("next-item");
+      setError(null);
+
+      const moved = await flow.moveNext(flowSessionId);
+      setFlowSession(moved);
+
+      if (!moved.currentObligationId) {
+        showToast({ variant: "info", title: "You are done for now" });
+        return;
+      }
+
+      const journeyData = await createOrResumeGuidedJourney(moved.currentObligationId);
+      await flow.startSession({
+        sessionId: moved.id,
+        sourceType: moved.sourceType,
+        sourceContext: moved.sourceContext ?? undefined,
+        currentObligationId: moved.currentObligationId,
+        currentJourneyId: journeyData.journey.id
+      });
+
+      router.push(buildGuidedHref(journeyData.journey.id, moved.id));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not load next item";
+      setError(message);
+      showToast({ variant: "error", title: "Next item failed", description: message });
+    } finally {
+      setLoading(null);
+    }
+  }
+
   return (
     <main style={pageStyles.shell}>
       <div style={{ marginBottom: 18 }}>
-        <Link href={journey ? `/obligations/${journey.obligationId}` : "/obligations"} style={{ color: "#2563eb", textDecoration: "none" }}>
-          ← Back to obligation
+        <Link href={backHref} style={{ color: "#2563eb", textDecoration: "none" }}>
+          ← Back
         </Link>
       </div>
 
@@ -215,6 +292,20 @@ export default function GuidedJourneyShell({
         />
       ) : (
         <div style={{ display: "grid", gap: 16 }}>
+          {flowSession ? (
+            <section style={cardStyles.bordered}>
+              <div style={text.label}>{getSourceLabel(flowSession.sourceType)}</div>
+              <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>
+                {flowSession.summary.handledCount} of {flowSession.summary.totalItems} handled
+              </div>
+              <div style={{ fontSize: 13, color: colors.textMuted }}>
+                {flowSession.summary.remainingCount > 0
+                  ? `${flowSession.summary.remainingCount} item${flowSession.summary.remainingCount === 1 ? "" : "s"} remaining in this flow.`
+                  : "No remaining items in this flow."}
+              </div>
+            </section>
+          ) : null}
+
           <section style={cardStyles.bordered}>
             <div style={text.label}>Journey summary</div>
             <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>
@@ -250,10 +341,51 @@ export default function GuidedJourneyShell({
                     : "Journey dismissed"}
               </h2>
               <p style={{ color: colors.textMuted, marginBottom: 0 }}>
-                You can return to the obligation details for next actions.
+                {flowSession?.state === "COMPLETED"
+                  ? "You are done for now in this flow."
+                  : "You can move to the next item or return to your previous context."}
               </p>
             </section>
           )}
+
+          {journey.status !== "ACTIVE" && flowSession?.state === "ACTIVE" && flowSession.nextItem ? (
+            <section style={cardStyles.bordered}>
+              <div style={text.label}>Next item</div>
+              <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 10 }}>
+                Next: {flowSession.nextItem.title}
+              </div>
+              <button
+                type="button"
+                onClick={handleNextItem}
+                disabled={loading !== null}
+                style={buttonStyles.primary}
+              >
+                {loading === "next-item" ? "Loading..." : "Continue to next item"}
+              </button>
+            </section>
+          ) : null}
+
+          {journey.status !== "ACTIVE" && flowSession?.state === "COMPLETED" ? (
+            <section style={cardStyles.bordered}>
+              <div style={text.label}>Done for now</div>
+              <h3 style={{ marginTop: 0 }}>You&apos;re done for now.</h3>
+              <p style={{ color: colors.textMuted }}>
+                You handled {flowSession.summary.handledCount} item
+                {flowSession.summary.handledCount === 1 ? "" : "s"} in this flow.
+              </p>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <Link href={getFlowReturnPath(flowSession)} style={buttonStyles.link}>
+                  Return to source
+                </Link>
+                <Link href="/" style={buttonStyles.link}>
+                  Dashboard
+                </Link>
+                <Link href="/obligations" style={buttonStyles.link}>
+                  View obligations
+                </Link>
+              </div>
+            </section>
+          ) : null}
 
           {journey.status !== "ACTIVE" ? (
             <OutcomeFeedbackPrompt
@@ -319,8 +451,8 @@ export default function GuidedJourneyShell({
                   </button>
                 </>
               ) : (
-                <Link href={`/obligations/${journey.obligationId}`} style={buttonStyles.link}>
-                  Return to obligation
+                <Link href={backHref} style={buttonStyles.link}>
+                  Return
                 </Link>
               )}
             </div>

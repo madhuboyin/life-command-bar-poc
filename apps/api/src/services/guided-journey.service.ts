@@ -20,6 +20,7 @@ import {
 } from "./guided-journey.builder";
 import { PersonalizationService } from "./personalization.service";
 import { DailyPulseService } from "./daily-pulse.service";
+import { ObligationRepository } from "../repositories/obligation.repository";
 import type { PersonalizationSignals } from "../types/personalization.types";
 import type {
   GuidedJourneyOption,
@@ -39,6 +40,7 @@ export class GuidedJourneyService {
   private readonly repository = new GuidedJourneyRepository();
   private readonly personalizationService = new PersonalizationService();
   private readonly dailyPulseService = new DailyPulseService();
+  private readonly obligationRepository = new ObligationRepository();
 
   async createOrResume(userId: string, obligationId: string) {
     const obligation = await this.repository.findObligationById(userId, obligationId);
@@ -247,12 +249,6 @@ export class GuidedJourneyService {
 
     });
 
-    if (journey.currentStepIndex >= journey.steps.length - 1) {
-      await this.dailyPulseService
-        .markCompletedFromGuidedJourney(userId, journey.obligationId)
-        .catch(() => null);
-    }
-
     const updated = await this.requireJourney(userId, journeyId);
     return {
       journey: this.toJourneyPayload(updated)
@@ -274,6 +270,8 @@ export class GuidedJourneyService {
         409
       );
     }
+
+    const isFinalStep = journey.currentStepIndex >= journey.steps.length - 1;
 
     await this.repository.runInTransaction(async (tx) => {
       if (completeCurrentStep) {
@@ -373,9 +371,9 @@ export class GuidedJourneyService {
 
     });
 
-    await this.dailyPulseService
-      .markCompletedFromGuidedJourney(userId, journey.obligationId)
-      .catch(() => null);
+    if (isFinalStep) {
+      await this.markObligationResolvedFromGuided(userId, journey.obligationId);
+    }
 
     const updated = await this.requireJourney(userId, journeyId);
     return {
@@ -434,6 +432,8 @@ export class GuidedJourneyService {
       );
 
     });
+
+    await this.markObligationResolvedFromGuided(userId, journey.obligationId);
 
     const updated = await this.requireJourney(userId, journeyId);
     return {
@@ -677,6 +677,16 @@ export class GuidedJourneyService {
       throw new AppError("NOT_FOUND", "Guided journey not found", 404);
     }
     return journey;
+  }
+
+  private async markObligationResolvedFromGuided(userId: string, obligationId: string) {
+    await this.obligationRepository
+      .markDone(obligationId, userId, "Completed via Guided Mode")
+      .catch(() => null);
+
+    await this.dailyPulseService
+      .markCompletedFromGuidedJourney(userId, obligationId)
+      .catch(() => null);
   }
 
   private ensureJourneyEditable(

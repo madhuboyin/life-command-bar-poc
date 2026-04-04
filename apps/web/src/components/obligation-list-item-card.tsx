@@ -4,24 +4,48 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createOrResumeGuidedJourney } from "../lib/api";
-import type { Obligation } from "../lib/types";
+import { buildGuidedHref } from "../lib/flow-navigation";
+import type { FlowSourceType, Obligation } from "../lib/types";
 import { buttonStyles, cardStyles, colors, formatDateTime } from "../lib/ui";
+import { useFlowSession } from "./flow-session-provider";
 import { useToast } from "./ui/toast-provider";
 
 type Props = {
   item: Obligation;
+  flowSourceType?: FlowSourceType;
+  flowLabel?: string;
+  flowReturnPath?: string;
+  flowObligationIds?: string[];
 };
 
-export default function ObligationListItemCard({ item }: Props) {
+export default function ObligationListItemCard({
+  item,
+  flowSourceType = "DASHBOARD",
+  flowLabel = "Filtered obligations",
+  flowReturnPath = "/obligations",
+  flowObligationIds = [item.id]
+}: Props) {
   const [startingGuide, setStartingGuide] = useState(false);
   const router = useRouter();
   const { showToast } = useToast();
+  const flow = useFlowSession();
 
   async function handleGuideMe() {
     try {
       setStartingGuide(true);
       const data = await createOrResumeGuidedJourney(item.id);
-      router.push(`/guided/${data.journey.id}`);
+      const session = await flow.startSession({
+        sourceType: flowSourceType,
+        sourceContext: {
+          label: flowLabel,
+          returnPath: flowReturnPath,
+          obligationIds: flowObligationIds
+        },
+        currentObligationId: item.id,
+        currentJourneyId: data.journey.id
+      });
+
+      router.push(buildGuidedHref(data.journey.id, session.id));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not start Guided Mode";
       showToast({

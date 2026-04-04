@@ -16,18 +16,22 @@ import {
   postponeObligation,
 } from "../lib/api";
 import type { DailyPulseItem, DailyPulseItemUpdateResponse } from "../lib/types";
+import { buildGuidedHref } from "../lib/flow-navigation";
 import { buttonStyles, cardStyles, colors } from "../lib/ui";
+import { useFlowSession } from "./flow-session-provider";
 import { useToast } from "./ui/toast-provider";
 
 type Props = {
   item: DailyPulseItem;
+  flowObligationIds: string[];
   onItemUpdated: (payload: DailyPulseItemUpdateResponse) => void;
 };
 
-export default function PulseItemCard({ item, onItemUpdated }: Props) {
+export default function PulseItemCard({ item, flowObligationIds, onItemUpdated }: Props) {
   const [loading, setLoading] = useState<string | null>(null);
   const router = useRouter();
   const { showToast } = useToast();
+  const flow = useFlowSession();
   const guideLabel = item.status === "OPENED_GUIDED" ? "Resume guided" : item.actionLabel;
 
   async function reportOutcome(input: {
@@ -58,8 +62,20 @@ export default function PulseItemCard({ item, onItemUpdated }: Props) {
       if (pulseUpdate) {
         onItemUpdated(pulseUpdate);
       }
+
       const data = await createOrResumeGuidedJourney(item.obligationId);
-      router.push(`/guided/${data.journey.id}`);
+      const session = await flow.startSession({
+        sourceType: "DAILY_PULSE",
+        sourceContext: {
+          label: "Today's Pulse",
+          returnPath: "/pulse",
+          obligationIds: flowObligationIds
+        },
+        currentObligationId: item.obligationId,
+        currentJourneyId: data.journey.id
+      });
+
+      router.push(buildGuidedHref(data.journey.id, session.id));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not start Guided Mode";
       showToast({ variant: "error", title: "Guided Mode failed", description: message });

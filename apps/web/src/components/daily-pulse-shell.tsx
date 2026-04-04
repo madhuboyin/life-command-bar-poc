@@ -150,6 +150,7 @@ export default function DailyPulseShell({
               <PulseItemCard
                 key={item.obligationId}
                 item={item}
+                flowObligationIds={pulse.items.map((pulseItem) => pulseItem.obligationId)}
                 onItemUpdated={handleItemUpdated}
               />
             ))

@@ -15,6 +15,7 @@ import { guidedJourneyRouter } from "./routes/guided-journey.routes";
 import { dailyPulseRouter } from "./routes/daily-pulse.routes";
 import { outcomeFeedbackRouter } from "./routes/outcome-feedback.routes";
 import { personalizationRouter } from "./routes/personalization.routes";
+import { flowSessionRouter } from "./routes/flow-session.routes";
 
 export function createApp() {
   const app = express();
@@ -33,6 +34,7 @@ export function createApp() {
   app.use("/api/reminders", reminderRouter);
   app.use("/api/dashboard", dashboardRouter);
   app.use("/api/daily-pulse", dailyPulseRouter);
+  app.use("/api/flow-sessions", flowSessionRouter);
   app.use("/api/guided-journeys", guidedJourneyRouter);
   app.use("/api/outcome-feedback", outcomeFeedbackRouter);
   app.use("/api/personalization", personalizationRouter);

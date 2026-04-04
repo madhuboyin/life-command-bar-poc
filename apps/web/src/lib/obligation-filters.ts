@@ -130,8 +130,16 @@ export function getViewSortSummary(
   return describeSort(resolvedSort, resolvedDirection);
 }
 
-export function getObligationViewHref(view: ObligationView) {
-  return `/obligations?view=${encodeURIComponent(view)}`;
+export function getObligationViewHref(
+  view: ObligationView,
+  options?: { flowSource?: "DAILY_PULSE" | "TODAY_FEED" | "DASHBOARD" | "OBLIGATION_DETAIL" }
+) {
+  const query = new URLSearchParams();
+  query.set("view", view);
+  if (options?.flowSource) {
+    query.set("flowSource", options.flowSource);
+  }
+  return `/obligations?${query.toString()}`;
 }
 
 function describeSort(sort: ObligationSort, direction: SortDirection) {

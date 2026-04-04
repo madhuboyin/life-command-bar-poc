@@ -13,6 +13,7 @@ import {
   postponeObligation
 } from "../lib/api";
 import type { GuidedJourney, Obligation, ResolutionResponse } from "../lib/types";
+import { buildGuidedHref } from "../lib/flow-navigation";
 import ResolutionModal from "./resolution-modal";
 import {
   buttonStyles,
@@ -31,6 +32,7 @@ import ObligationHistoryPanel from "./obligation-history-panel";
 import ResumeGuidedJourneyCard from "./resume-guided-journey-card";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { useFlowSession } from "./flow-session-provider";
 
 type Props = {
   obligation: Obligation;
@@ -46,6 +48,7 @@ export default function ObligationDetailClient({ obligation }: Props) {
   const isMobile = useIsMobile();
   const { showToast } = useToast();
   const router = useRouter();
+  const flow = useFlowSession();
 
   async function reportOutcome(input: {
     selectedActionKey: string;
@@ -198,7 +201,18 @@ export default function ObligationDetailClient({ obligation }: Props) {
       setLoading("guide");
       setError(null);
       const data = await createOrResumeGuidedJourney(current.id);
-      router.push(`/guided/${data.journey.id}`);
+      const session = await flow.startSession({
+        sourceType: "OBLIGATION_DETAIL",
+        sourceContext: {
+          label: "Obligation detail",
+          returnPath: `/obligations/${current.id}`,
+          obligationIds: [current.id]
+        },
+        currentObligationId: current.id,
+        currentJourneyId: data.journey.id
+      });
+
+      router.push(buildGuidedHref(data.journey.id, session.id));
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to start Guided Mode";
       setError(message);

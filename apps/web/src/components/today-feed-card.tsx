@@ -11,6 +11,7 @@ import {
   markObligationDone,
   postponeObligation
 } from "../lib/api";
+import { buildGuidedHref } from "../lib/flow-navigation";
 import type { ResolutionResponse, TodayFeedItem } from "../lib/types";
 import {
   buttonStyles,
@@ -22,15 +23,17 @@ import {
 import { useIsMobile } from "../lib/use-is-mobile";
 import { useRouter } from "next/navigation";
 import ResolutionModal from "./resolution-modal";
+import { useFlowSession } from "./flow-session-provider";
 import StatusMessage from "./ui/status-message";
 import { useToast } from "./ui/toast-provider";
 
 type Props = {
   item: TodayFeedItem;
+  flowObligationIds: string[];
   onRefresh: () => Promise<void>;
 };
 
-export default function TodayFeedCard({ item, onRefresh }: Props) {
+export default function TodayFeedCard({ item, flowObligationIds, onRefresh }: Props) {
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [resolution, setResolution] = useState<ResolutionResponse | null>(null);
@@ -38,6 +41,7 @@ export default function TodayFeedCard({ item, onRefresh }: Props) {
   const { showToast } = useToast();
   const isMobile = useIsMobile();
   const router = useRouter();
+  const flow = useFlowSession();
 
   async function reportOutcome(input: {
     recommendationKey?: string;
@@ -177,7 +181,18 @@ export default function TodayFeedCard({ item, onRefresh }: Props) {
       setError(null);
 
       const data = await createOrResumeGuidedJourney(item.obligationId);
-      router.push(`/guided/${data.journey.id}`);
+      const session = await flow.startSession({
+        sourceType: "TODAY_FEED",
+        sourceContext: {
+          label: "Today Feed",
+          returnPath: "/",
+          obligationIds: flowObligationIds
+        },
+        currentObligationId: item.obligationId,
+        currentJourneyId: data.journey.id
+      });
+
+      router.push(buildGuidedHref(data.journey.id, session.id));
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not start Guided Mode";
       setError(message);
@@ -233,19 +248,19 @@ export default function TodayFeedCard({ item, onRefresh }: Props) {
           }}
         >
           <button
-            onClick={handleShowResolution}
+            onClick={handleGuideMe}
             disabled={loading !== null}
             style={buttonStyles.primary}
           >
-            {loading === "resolution" ? "Loading..." : item.primaryAction.label}
+            {loading === "guide" ? "Starting..." : "Start"}
           </button>
 
           <button
-            onClick={handleGuideMe}
+            onClick={handleShowResolution}
             disabled={loading !== null}
             style={buttonStyles.secondary}
           >
-            {loading === "guide" ? "Starting..." : "Guide me"}
+            {loading === "resolution" ? "Loading..." : item.primaryAction.label}
           </button>
 
           <Link href={`/obligations/${item.obligationId}`} style={buttonStyles.link}>

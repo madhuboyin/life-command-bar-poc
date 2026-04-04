@@ -89,7 +89,12 @@ export default function TodayFeedClient({
       ) : (
         <div style={{ display: "grid", gap: 16 }}>
           {data.items.map((item) => (
-            <TodayFeedCard key={item.id} item={item} onRefresh={refresh} />
+            <TodayFeedCard
+              key={item.id}
+              item={item}
+              flowObligationIds={data.items.map((feedItem) => feedItem.obligationId)}
+              onRefresh={refresh}
+            />
           ))}
         </div>
       )}
