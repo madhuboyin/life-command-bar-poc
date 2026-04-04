@@ -34,6 +34,32 @@ spec:
                 secretKeyRef:
                   name: lcb-secrets
                   key: LLM_API_KEY
+            - name: GOOGLE_OAUTH_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: lcb-secrets
+                  key: GOOGLE_OAUTH_CLIENT_ID
+            - name: GOOGLE_OAUTH_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lcb-secrets
+                  key: GOOGLE_OAUTH_CLIENT_SECRET
+            - name: TOKEN_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: lcb-secrets
+                  key: TOKEN_ENCRYPTION_KEY
+            - name: GMAIL_OAUTH_STATE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lcb-secrets
+                  key: GMAIL_OAUTH_STATE_SECRET
+            - name: APP_URL
+              value: "https://lcb.contracttocozy.com"
+            - name: GMAIL_OAUTH_REDIRECT_URI
+              value: "https://api-lcb.contracttocozy.com/api/gmail/oauth/callback"
+            - name: GMAIL_OAUTH_SUCCESS_REDIRECT
+              value: "https://lcb.contracttocozy.com/settings"
           resources:
             requests:
               cpu: "100m"
