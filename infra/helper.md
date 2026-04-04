@@ -39,8 +39,8 @@ docker buildx build --platform "${PLATFORM}" \
   -t ${REG}/web:${TAG} \
   --push .
 
-kubectl -n life-command set image deploy/lcb-api lcb-api=${REG}/api:${TAG}
-kubectl -n life-command set image deploy/lcb-web lcb-web=${REG}/web:${TAG}
+kubectl -n life-command set image deploy/lcb-api api=${REG}/api:${TAG}
+kubectl -n life-command set image deploy/lcb-web web=${REG}/web:${TAG}
 
 kubectl -n life-command rollout status deploy/lcb-api
 kubectl -n life-command rollout status deploy/lcb-web
