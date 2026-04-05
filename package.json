@@ -18,5 +18,11 @@
   },
   "dependencies": {
     "@prisma/client": "^6.4.1"
+  },
+  "pnpm": {
+    "overrides": {
+      "@prisma/client": "6.4.1",
+      "prisma": "6.4.1"
+    }
   }
 }

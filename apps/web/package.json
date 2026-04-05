@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000",
-    "build": "next build",
+    "build": "pnpm --filter @lcb/api prisma:generate && next build",
     "typecheck": "next typegen && tsc --noEmit",
     "lint": "eslint . --max-warnings=0"
   },
@@ -24,6 +24,7 @@
     "@types/react-dom": "^19.0.2",
     "eslint": "^9.18.0",
     "eslint-config-next": "^15.1.0",
+    "prisma": "6.4.1",
     "typescript": "^5.7.2"
   }
 }
