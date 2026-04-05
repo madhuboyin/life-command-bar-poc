@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { auth } from "./auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getToken } from "next-auth/jwt";
 
 const PROTECTED_PREFIXES = [
   "/obligations",
@@ -34,7 +34,7 @@ function parseCsv(value: string | undefined) {
     .filter(Boolean);
 }
 
-export default auth((req) => {
+export default async function middleware(req: NextRequest) {
   const { nextUrl } = req;
   const pathname = nextUrl.pathname;
 
@@ -47,7 +47,12 @@ export default auth((req) => {
     return NextResponse.next();
   }
 
-  if (!req.auth?.user?.id) {
+  const token = await getToken({
+    req,
+    secret: process.env.AUTH_SECRET
+  });
+
+  if (!token?.sub) {
     const signInUrl = new URL("/signin", nextUrl.origin);
     signInUrl.searchParams.set("callbackUrl", `${pathname}${nextUrl.search}`);
     signInUrl.searchParams.set("reason", "protected");
@@ -57,7 +62,7 @@ export default auth((req) => {
   if (isAdminPath(pathname)) {
     const allowEmails = parseCsv(process.env.ADMIN_USER_EMAILS);
     if (allowEmails.length > 0) {
-      const email = req.auth.user.email?.toLowerCase() ?? "";
+      const email = typeof token.email === "string" ? token.email.toLowerCase() : "";
       if (!allowEmails.includes(email)) {
         return NextResponse.redirect(new URL("/", nextUrl.origin));
       }
@@ -65,7 +70,7 @@ export default auth((req) => {
   }
 
   return NextResponse.next();
-});
+}
 
 export const config = {
   matcher: ["/((?!api/auth|_next/static|_next/image|favicon.ico).*)"]

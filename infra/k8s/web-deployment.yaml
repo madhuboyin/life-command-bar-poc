@@ -24,6 +24,11 @@ spec:
               value: "https://api-lcb.contracttocozy.com/api"
             - name: API_BASE_URL
               value: "https://api-lcb.contracttocozy.com/api"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: lcb-secrets
+                  key: DATABASE_URL
             - name: NEXTAUTH_URL
               value: "https://lcb.contracttocozy.com"
             - name: AUTH_SECRET
