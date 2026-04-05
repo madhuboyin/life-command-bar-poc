@@ -256,6 +256,18 @@ export default function ObligationDetailClient({ obligation }: Props) {
     gmailLifecycle?.extraction && typeof gmailLifecycle.extraction === "object"
       ? (gmailLifecycle.extraction as Record<string, unknown>)
       : null;
+  const gmailLifecycleV2 =
+    gmailLifecycle?.intelligenceV2 && typeof gmailLifecycle.intelligenceV2 === "object"
+      ? (gmailLifecycle.intelligenceV2 as Record<string, unknown>)
+      : null;
+  const gmailLifecycleVendor =
+    gmailLifecycleV2?.vendor && typeof gmailLifecycleV2.vendor === "object"
+      ? (gmailLifecycleV2.vendor as Record<string, unknown>)
+      : null;
+  const gmailLifecycleRouting =
+    gmailLifecycleV2?.routing && typeof gmailLifecycleV2.routing === "object"
+      ? (gmailLifecycleV2.routing as Record<string, unknown>)
+      : null;
   const gmailLifecycleType =
     typeof gmailLifecycle?.lifecycleEmailType === "string"
       ? gmailLifecycle.lifecycleEmailType
@@ -272,6 +284,18 @@ export default function ObligationDetailClient({ obligation }: Props) {
     typeof gmailLifecycleConfidence?.confidenceBand === "string"
       ? gmailLifecycleConfidence.confidenceBand
       : null;
+  const gmailVendorName =
+    typeof gmailLifecycleVendor?.canonicalName === "string"
+      ? gmailLifecycleVendor.canonicalName
+      : typeof gmailLifecycleExtraction?.vendor === "string"
+        ? gmailLifecycleExtraction.vendor
+        : null;
+  const gmailVendorCategory =
+    typeof gmailLifecycleVendor?.category === "string" ? gmailLifecycleVendor.category : null;
+  const gmailVendorScore =
+    typeof gmailLifecycleVendor?.score === "number" ? gmailLifecycleVendor.score : null;
+  const gmailRoutingReason =
+    typeof gmailLifecycleRouting?.reason === "string" ? gmailLifecycleRouting.reason : null;
 
   const overview = (
     <div style={{ display: "grid", gap: 14 }}>
@@ -315,6 +339,14 @@ export default function ObligationDetailClient({ obligation }: Props) {
             <strong>Gmail lifecycle:</strong> {gmailLifecycleType}
             {gmailLifecyclePlan ? ` · Plan ${gmailLifecyclePlan}` : ""}
             {gmailLifecycleConfidenceBand ? ` · Confidence ${gmailLifecycleConfidenceBand}` : ""}
+          </div>
+        ) : null}
+        {gmailVendorName ? (
+          <div>
+            <strong>Vendor intelligence:</strong> {gmailVendorName}
+            {gmailVendorCategory ? ` (${gmailVendorCategory})` : ""}
+            {gmailVendorScore !== null ? ` · score ${Math.round(gmailVendorScore * 100)}%` : ""}
+            {gmailRoutingReason ? ` · routing: ${gmailRoutingReason.replace(/_/g, " ")}` : ""}
           </div>
         ) : null}
         <div><strong>Recurrence:</strong> {current.recurrence ?? "—"}</div>

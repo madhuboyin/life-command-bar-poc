@@ -620,8 +620,12 @@ export class ControlTowerService {
               "gmail_subscription_matched_existing",
               "gmail_subscription_conflict_detected",
               "gmail_subscription_cancellation_detected",
+              "gmail_lifecycle_linked",
+              "gmail_extraction_review",
+              "gmail_suppressed",
               "subscription_registry_created",
               "subscription_registry_updated",
+              "subscription_registry_update_skipped",
               "subscription_registry_merged",
               "subscription_lifecycle_transitioned",
               "subscription_price_changed",
@@ -632,6 +636,8 @@ export class ControlTowerService {
               "subscription_decision_taken",
               "subscription_kept",
               "subscription_marked_for_cancel",
+              "vendor_profile_conflict",
+              "vendor_profile_suppressed",
               "gmail_sync_error",
               "auto_flow_triggered",
               "prediction_rebuilt",
@@ -1064,6 +1070,63 @@ function toSystemDecisionFromAudit(
     };
   }
 
+  if (event.eventType === "gmail_lifecycle_linked") {
+    return {
+      id: event.id,
+      decisionType: "PREDICTION",
+      title: "Gmail lifecycle linked to canonical subscription",
+      explanation:
+        "A Gmail message was linked to an existing subscription lifecycle, reducing duplicate fragmentation.",
+      sourceSignals: [
+        event.eventType,
+        typeof metadata?.matchScore === "number"
+          ? `match:${Math.round(Number(metadata.matchScore) * 100)}`
+          : "match:linked"
+      ],
+      createdAt: event.createdAt.toISOString(),
+      obligationId: event.obligationId,
+      referenceId:
+        typeof metadata?.linkedSubscriptionId === "string" ? metadata.linkedSubscriptionId : null
+    };
+  }
+
+  if (event.eventType === "gmail_extraction_review") {
+    return {
+      id: event.id,
+      decisionType: "ROUTING",
+      title: "Gmail extraction needs review",
+      explanation:
+        "Pricing or lifecycle extraction contained conflicts and was routed conservatively for confirmation.",
+      sourceSignals: [
+        event.eventType,
+        ...(Array.isArray(metadata?.conflicts)
+          ? metadata.conflicts.filter((entry): entry is string => typeof entry === "string")
+          : [])
+      ],
+      createdAt: event.createdAt.toISOString(),
+      obligationId: event.obligationId,
+      referenceId:
+        typeof metadata?.gmailMessageId === "string" ? metadata.gmailMessageId : null
+    };
+  }
+
+  if (event.eventType === "gmail_suppressed") {
+    return {
+      id: event.id,
+      decisionType: "SUPPRESSION",
+      title: "Low-signal Gmail message suppressed",
+      explanation: "The signal did not meet trust thresholds and was suppressed to avoid noise.",
+      sourceSignals: [
+        event.eventType,
+        typeof metadata?.reason === "string" ? metadata.reason : "low_signal"
+      ],
+      createdAt: event.createdAt.toISOString(),
+      obligationId: event.obligationId,
+      referenceId:
+        typeof metadata?.gmailMessageId === "string" ? metadata.gmailMessageId : null
+    };
+  }
+
   if (event.eventType === "gmail_subscription_cancellation_detected") {
     return {
       id: event.id,
@@ -1118,6 +1181,24 @@ function toSystemDecisionFromAudit(
       createdAt: event.createdAt.toISOString(),
       obligationId: event.obligationId,
       referenceId: typeof metadata?.subscriptionId === "string" ? metadata.subscriptionId : null
+    };
+  }
+
+  if (event.eventType === "subscription_registry_update_skipped") {
+    return {
+      id: event.id,
+      decisionType: "ROUTING",
+      title: "Subscription registry update skipped",
+      explanation:
+        "A lifecycle signal was skipped because vendor/category evidence did not meet subscription compatibility safeguards.",
+      sourceSignals: [
+        event.eventType,
+        typeof metadata?.reason === "string" ? metadata.reason : "safeguard_skip"
+      ],
+      createdAt: event.createdAt.toISOString(),
+      obligationId: event.obligationId,
+      referenceId:
+        typeof metadata?.externalMessageId === "string" ? metadata.externalMessageId : null
     };
   }
 
@@ -1320,6 +1401,28 @@ function toSystemDecisionFromAudit(
       obligationId: event.obligationId,
       referenceId:
         typeof metadata?.gmailMessageId === "string" ? metadata.gmailMessageId : null
+    };
+  }
+
+  if (event.eventType === "vendor_profile_conflict" || event.eventType === "vendor_profile_suppressed") {
+    return {
+      id: event.id,
+      decisionType: "CONFIDENCE",
+      title:
+        event.eventType === "vendor_profile_conflict"
+          ? "Vendor profile conflict detected"
+          : "Vendor profile match suppressed",
+      explanation:
+        "Vendor intelligence flagged ambiguous or negative signals and lowered automation confidence.",
+      sourceSignals: [
+        event.eventType,
+        typeof metadata?.category === "string"
+          ? `category:${String(metadata.category).toLowerCase()}`
+          : "category:unknown"
+      ],
+      createdAt: event.createdAt.toISOString(),
+      obligationId: event.obligationId,
+      referenceId: typeof metadata?.referenceId === "string" ? metadata.referenceId : null
     };
   }
 

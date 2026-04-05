@@ -1614,7 +1614,8 @@ function summarizeGmailLifecycle(lifecycle: GmailSubscriptionHeuristicResult | n
     confidenceBand: lifecycle.confidence.confidenceBand,
     rationaleSignals: lifecycle.confidence.rationaleSignals,
     reviewReasons: lifecycle.confidence.reviewReasons,
-    extraction: lifecycle.extraction
+    extraction: lifecycle.extraction,
+    intelligenceV2: lifecycle.intelligenceV2 ?? null
   };
 }
 

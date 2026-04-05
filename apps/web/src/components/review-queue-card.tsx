@@ -38,6 +38,18 @@ export default function ReviewQueueCard({ item, onUpdated }: Props) {
     gmailLifecycle?.extraction && typeof gmailLifecycle.extraction === "object"
       ? (gmailLifecycle.extraction as Record<string, unknown>)
       : null;
+  const lifecycleV2 =
+    gmailLifecycle?.intelligenceV2 && typeof gmailLifecycle.intelligenceV2 === "object"
+      ? (gmailLifecycle.intelligenceV2 as Record<string, unknown>)
+      : null;
+  const v2Vendor =
+    lifecycleV2?.vendor && typeof lifecycleV2.vendor === "object"
+      ? (lifecycleV2.vendor as Record<string, unknown>)
+      : null;
+  const v2Routing =
+    lifecycleV2?.routing && typeof lifecycleV2.routing === "object"
+      ? (lifecycleV2.routing as Record<string, unknown>)
+      : null;
   const lifecyclePlan =
     typeof lifecycleExtraction?.planName === "string" ? lifecycleExtraction.planName : null;
   const lifecycleRecurringPrice =
@@ -48,6 +60,17 @@ export default function ReviewQueueCard({ item, onUpdated }: Props) {
     typeof lifecycleExtraction?.amountCharged === "number"
       ? lifecycleExtraction.amountCharged
       : null;
+  const lifecycleVendorName =
+    typeof v2Vendor?.canonicalName === "string"
+      ? v2Vendor.canonicalName
+      : typeof lifecycleExtraction?.vendor === "string"
+        ? lifecycleExtraction.vendor
+        : null;
+  const lifecycleVendorCategory =
+    typeof v2Vendor?.category === "string" ? v2Vendor.category : null;
+  const lifecycleVendorScore = typeof v2Vendor?.score === "number" ? v2Vendor.score : null;
+  const lifecycleRoutingReason =
+    typeof v2Routing?.reason === "string" ? v2Routing.reason : null;
 
   async function handleConfirm() {
     try {
@@ -124,6 +147,17 @@ export default function ReviewQueueCard({ item, onUpdated }: Props) {
           {lifecycleAmountCharged !== null
             ? `Charged: ${lifecycleAmountCharged}${item.currency ? ` ${item.currency}` : ""}`
             : ""}
+        </div>
+      ) : null}
+
+      {lifecycleVendorName || lifecycleRoutingReason ? (
+        <div style={{ fontSize: 12, color: colors.textMuted }}>
+          {lifecycleVendorName ? `Vendor intelligence: ${lifecycleVendorName}` : ""}
+          {lifecycleVendorName && lifecycleVendorCategory ? ` (${lifecycleVendorCategory})` : ""}
+          {lifecycleVendorName && lifecycleVendorScore !== null
+            ? ` · score ${Math.round(lifecycleVendorScore * 100)}%`
+            : ""}
+          {lifecycleRoutingReason ? ` · Why review: ${lifecycleRoutingReason.replace(/_/g, " ")}` : ""}
         </div>
       ) : null}
 

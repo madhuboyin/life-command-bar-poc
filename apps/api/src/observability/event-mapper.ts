@@ -124,6 +124,12 @@ function mapEventType(
       return OBSERVABILITY_EVENT_TYPES.GMAIL_SYNC_ERROR;
     case "gmail_subscription_lifecycle_classified":
       return OBSERVABILITY_EVENT_TYPES.GMAIL_SUBSCRIPTION_LIFECYCLE_CLASSIFIED;
+    case "gmail_subscription_lifecycle_detected":
+      return OBSERVABILITY_EVENT_TYPES.GMAIL_SUBSCRIPTION_LIFECYCLE_DETECTED;
+    case "gmail_subscription_auto_updated":
+      return OBSERVABILITY_EVENT_TYPES.GMAIL_SUBSCRIPTION_AUTO_UPDATED;
+    case "gmail_subscription_cancellation_processed":
+      return OBSERVABILITY_EVENT_TYPES.GMAIL_SUBSCRIPTION_CANCELLATION_PROCESSED;
     case "gmail_subscription_candidate_created":
       return OBSERVABILITY_EVENT_TYPES.GMAIL_SUBSCRIPTION_CANDIDATE_CREATED;
     case "gmail_subscription_matched_existing":
@@ -136,6 +142,27 @@ function mapEventType(
       return OBSERVABILITY_EVENT_TYPES.GMAIL_SUBSCRIPTION_REVIEW_CONFIRMED;
     case "gmail_subscription_review_rejected":
       return OBSERVABILITY_EVENT_TYPES.GMAIL_SUBSCRIPTION_REVIEW_REJECTED;
+    case "gmail_message_classified_v2":
+      return OBSERVABILITY_EVENT_TYPES.GMAIL_MESSAGE_CLASSIFIED_V2;
+    case "gmail_vendor_matched":
+      return OBSERVABILITY_EVENT_TYPES.GMAIL_VENDOR_MATCHED;
+    case "gmail_lifecycle_linked":
+      return OBSERVABILITY_EVENT_TYPES.GMAIL_LIFECYCLE_LINKED;
+    case "gmail_extraction_review":
+      return OBSERVABILITY_EVENT_TYPES.GMAIL_EXTRACTION_REVIEW;
+    case "gmail_llm_fallback_used":
+      return OBSERVABILITY_EVENT_TYPES.GMAIL_LLM_FALLBACK_USED;
+    case "gmail_suppressed":
+      return OBSERVABILITY_EVENT_TYPES.GMAIL_SUPPRESSED;
+
+    case "vendor_profile_matched":
+      return OBSERVABILITY_EVENT_TYPES.VENDOR_PROFILE_MATCHED;
+    case "vendor_profile_unknown":
+      return OBSERVABILITY_EVENT_TYPES.VENDOR_PROFILE_UNKNOWN;
+    case "vendor_profile_conflict":
+      return OBSERVABILITY_EVENT_TYPES.VENDOR_PROFILE_CONFLICT;
+    case "vendor_profile_suppressed":
+      return OBSERVABILITY_EVENT_TYPES.VENDOR_PROFILE_SUPPRESSED;
     case "subscription_registry_created":
       return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_REGISTRY_CREATED;
     case "subscription_registry_updated":
@@ -168,6 +195,8 @@ function mapEventType(
       return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_KEPT;
     case "subscription_marked_for_cancel":
       return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_MARKED_FOR_CANCEL;
+    case "subscription_registry_update_skipped":
+      return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_REGISTRY_UPDATE_SKIPPED;
 
     case "prediction_rebuilt":
     case "prediction_updated":

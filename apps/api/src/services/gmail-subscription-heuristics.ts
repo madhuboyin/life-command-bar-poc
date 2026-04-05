@@ -1,17 +1,13 @@
-import {
-  classifyGmailSubscriptionLifecycle,
-  type GmailSubscriptionClassificationResult,
-  type GmailSubscriptionLifecycleEmailType
+import type {
+  GmailSubscriptionClassificationResult,
+  GmailSubscriptionLifecycleEmailType
 } from "./gmail-subscription-classifier";
+import type { GmailSubscriptionExtractionResult } from "./gmail-subscription-extractor";
+import type { GmailSubscriptionConfidenceResult } from "./gmail-subscription-confidence";
 import {
-  extractGmailSubscriptionDetails,
-  type GmailSubscriptionExtractionResult
-} from "./gmail-subscription-extractor";
-import {
-  evaluateGmailSubscriptionConfidence,
-  type GmailSubscriptionConfidenceResult
-} from "./gmail-subscription-confidence";
-import { ExternalAccountRepository } from "../repositories/external-account.repository";
+  GmailIntelligenceService,
+  type GmailIntelligenceV2Details
+} from "./gmail-intelligence.service";
 
 export type GmailSubscriptionHeuristicResult = {
   lifecycleEmailType: GmailSubscriptionLifecycleEmailType;
@@ -23,6 +19,7 @@ export type GmailSubscriptionHeuristicResult = {
     isUnknownVendor: boolean;
     hasRejectedHistory: boolean;
   };
+  intelligenceV2?: GmailIntelligenceV2Details;
 };
 
 type HeuristicInput = {
@@ -43,40 +40,14 @@ type HeuristicInput = {
 export async function runGmailSubscriptionHeuristics(
   input: HeuristicInput
 ): Promise<GmailSubscriptionHeuristicResult> {
-  const classification = classifyGmailSubscriptionLifecycle({
+  const service = new GmailIntelligenceService();
+  return service.analyzeMessage({
+    userId: input.userId,
     subject: input.subject,
     from: input.from,
     bodyText: input.bodyText,
     snippet: input.snippet,
+    messageDate: input.messageDate,
     matchedQueryKey: input.matchedQueryKey
   });
-
-  const extraction = extractGmailSubscriptionDetails({
-    lifecycleEmailType: classification.lifecycleEmailType,
-    subject: input.subject,
-    from: input.from,
-    bodyText: input.bodyText,
-    snippet: input.snippet,
-    messageDate: input.messageDate
-  });
-
-  const repository = new ExternalAccountRepository();
-  const history = await repository.checkVendorHistory(input.userId, extraction.vendor);
-
-  const confidence = evaluateGmailSubscriptionConfidence({
-    classification,
-    extraction,
-    context: {
-      ...input.context,
-      history
-    }
-  });
-
-  return {
-    lifecycleEmailType: classification.lifecycleEmailType,
-    classification,
-    extraction,
-    confidence,
-    vendorHistory: history
-  };
 }

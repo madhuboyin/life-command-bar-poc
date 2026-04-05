@@ -37,6 +37,8 @@ export class GmailIngestionService {
       messageDate: input.normalizedMessage.messageDate,
       matchedQueryKey: input.matchedQueryKey
     });
+    const lifecycleV2 = lifecycle.intelligenceV2;
+    const routingAction = lifecycleV2?.routing.action ?? null;
 
     await this.externalAccountRepository.createAuditEvent({
       userId: input.userId,
@@ -52,7 +54,12 @@ export class GmailIngestionService {
         confidenceScore: lifecycle.confidence.confidenceScore,
         confidenceBand: lifecycle.confidence.confidenceBand,
         rationaleSignals: lifecycle.confidence.rationaleSignals,
-        reviewReasons: lifecycle.confidence.reviewReasons
+        reviewReasons: lifecycle.confidence.reviewReasons,
+        v2ClassType: lifecycleV2?.classifier.classType ?? null,
+        v2VendorCategory: lifecycleV2?.vendor.category ?? null,
+        v2VendorScore: lifecycleV2?.vendor.score ?? null,
+        v2Route: lifecycleV2?.routing.route ?? null,
+        v2RoutingAction: routingAction
       }
     });
 
@@ -60,6 +67,52 @@ export class GmailIngestionService {
       input.externalConnectionId,
       input.normalizedMessage.gmailMessageId
     );
+
+    if (routingAction === "SUPPRESS") {
+      const messageDate = input.normalizedMessage.messageDate
+        ? new Date(input.normalizedMessage.messageDate)
+        : null;
+      const internalDate = input.normalizedMessage.internalDate
+        ? new Date(input.normalizedMessage.internalDate)
+        : null;
+
+      const record = await this.externalAccountRepository.createMessageIngestion({
+        userId: input.userId,
+        externalConnectionId: input.externalConnectionId,
+        externalMessageId: input.normalizedMessage.gmailMessageId,
+        externalThreadId: input.normalizedMessage.gmailThreadId,
+        messageDate,
+        messageInternalDate: internalDate,
+        matchedQueryKey: input.matchedQueryKey,
+        status: "SKIPPED",
+        dedupeReason: lifecycleV2?.routing.reason ?? "suppressed_low_signal",
+        metadata: {
+          from: input.normalizedMessage.from,
+          subject: input.normalizedMessage.subject,
+          lifecycleEmailType: lifecycle.lifecycleEmailType,
+          confidenceScore: lifecycle.confidence.confidenceScore,
+          confidenceBand: lifecycle.confidence.confidenceBand,
+          v2: lifecycleV2
+        }
+      });
+
+      await this.externalAccountRepository.createAuditEvent({
+        userId: input.userId,
+        eventType: "gmail_candidate_skipped",
+        metadata: {
+          externalConnectionId: input.externalConnectionId,
+          gmailMessageId: input.normalizedMessage.gmailMessageId,
+          matchedQueryKey: input.matchedQueryKey,
+          reason: lifecycleV2?.routing.reason ?? "suppressed_low_signal"
+        }
+      });
+
+      return {
+        skippedAsExactDuplicate: false,
+        messageRecordId: record.id,
+        ingestion: null
+      };
+    }
     
     if (
       connection &&
@@ -154,7 +207,8 @@ export class GmailIngestionService {
           lifecycleEmailType: lifecycle.lifecycleEmailType,
           subscriptionLikelihood: lifecycle.classification.subscriptionLikelihood,
           lifecycleConfidence: lifecycle.confidence.confidenceScore,
-          lifecycleConfidenceBand: lifecycle.confidence.confidenceBand
+          lifecycleConfidenceBand: lifecycle.confidence.confidenceBand,
+          v2: lifecycleV2
         }
       });
 

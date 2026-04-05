@@ -28,6 +28,8 @@ import { AppError } from "../utils/app-error";
 import { SubscriptionInsightService } from "./subscription-insight.service";
 import { buildSubscriptionGuidedFlow } from "./subscription-guided-flow";
 import { SubscriptionDecisionEngine } from "./subscription-decision-engine";
+import { VendorIntelligenceService } from "./vendor-intelligence.service";
+import type { VendorCategory } from "./vendor-profiles";
 
 const listQuerySchema = z.object({
   limit: z.number().int().min(1).max(100).default(25),
@@ -113,6 +115,7 @@ export class SubscriptionRegistryService {
   private readonly predictionEngineService = new PredictionEngineService();
   private readonly insightService = new SubscriptionInsightService();
   private readonly decisionEngine = new SubscriptionDecisionEngine();
+  private readonly vendorIntelligenceService = new VendorIntelligenceService();
 
   async list(userId: string, rawQuery: unknown) {
     const query = listQuerySchema.parse(rawQuery ?? {});
@@ -363,12 +366,47 @@ export class SubscriptionRegistryService {
     }
 
     const confidenceScore = lifecycle.confidence.confidenceScore;
-    const vendorName = resolveVendorName(lifecycle.extraction.vendor, input.provenance.sender);
+    const vendorIdentity = await this.vendorIntelligenceService.resolveVendorIdentity({
+      userId: input.userId,
+      candidateVendorName: lifecycle.extraction.vendor,
+      sender: input.provenance.sender,
+      subject: input.provenance.subject,
+      bodyText: "",
+      snippet: null,
+      lifecycleTypeHint: toVendorLifecycleHint(lifecycle.lifecycleEmailType),
+      expectedCategoryHint: toExpectedVendorCategory(lifecycle.lifecycleEmailType),
+      source: "subscription_registry_gmail_ingest",
+      referenceId: input.provenance.externalMessageId,
+      emitAudit: false
+    });
+
+    const vendorName = normalizeNullableString(
+      vendorIdentity.vendorName,
+      resolveVendorName(lifecycle.extraction.vendor, input.provenance.sender)
+    );
     if (!vendorName) {
       return null;
     }
 
-    const vendorNormalizedKey = normalizeVendorKey(vendorName);
+    if (!isSubscriptionCompatibleVendorCategory(vendorIdentity.vendorCategory)) {
+      await this.repository.createAuditEvent({
+        userId: input.userId,
+        obligationId: input.provenance.obligationId ?? null,
+        eventType: "subscription_registry_update_skipped",
+        metadata: {
+          reason: "vendor_category_not_subscription_compatible",
+          vendorName,
+          vendorCategory: vendorIdentity.vendorCategory,
+          externalMessageId: input.provenance.externalMessageId
+        }
+      });
+      return null;
+    }
+
+    const vendorNormalizedKey =
+      vendorIdentity.vendorNormalizedKey ?? normalizeVendorKey(vendorName);
+    const normalizedVendorCategory =
+      vendorIdentity.vendorCategory === "UNKNOWN" ? null : vendorIdentity.vendorCategory;
     const planName = normalizeNullableString(lifecycle.extraction.planName, null);
     const subscriptionTitle = resolveSubscriptionTitle({
       subscriptionName: lifecycle.extraction.subscriptionName,
@@ -445,6 +483,7 @@ export class SubscriptionRegistryService {
           vendorNormalizedKey,
           planName,
           subscriptionTitle,
+          category: normalizedVendorCategory,
           lifecycleState: transition.nextState,
           billingPeriod: pricing.billingPeriod,
           recurringPrice: pricing.recurringPrice,
@@ -490,6 +529,22 @@ export class SubscriptionRegistryService {
               sender: input.provenance.sender,
               subject: input.provenance.subject,
               lifecycleEmailType: lifecycle.lifecycleEmailType,
+              vendorMatch: {
+                outcome: vendorIdentity.match.outcome,
+                vendorKey: vendorIdentity.match.vendorKey,
+                canonicalName: vendorIdentity.match.canonicalName,
+                category: vendorIdentity.match.category,
+                score: vendorIdentity.match.score,
+                suppressedReason: vendorIdentity.match.suppressedReason,
+                signals: vendorIdentity.match.matchedSignals,
+                conflicts: vendorIdentity.match.conflicts.map((entry) => ({
+                  vendorKey: entry.vendorKey,
+                  canonicalName: entry.canonicalName,
+                  category: entry.category,
+                  score: entry.score
+                }))
+              },
+              vendorRationale: vendorIdentity.rationale,
               extraction: lifecycle.extraction,
               rationaleSignals: lifecycle.confidence.rationaleSignals
             }
@@ -507,6 +562,7 @@ export class SubscriptionRegistryService {
           vendorNormalizedKey,
           planName: planName ?? subscription.planName,
           subscriptionTitle,
+          category: normalizedVendorCategory ?? subscription.category,
           lifecycleState: transition.nextState,
           billingPeriod: pricing.billingPeriod,
           recurringPrice: pricing.recurringPrice,
@@ -593,7 +649,11 @@ export class SubscriptionRegistryService {
         nextState: result.nextState,
         confidenceScore,
         confidenceBand: toConfidenceBand(confidenceScore),
-        matchedQueryKey: input.provenance.matchedQueryKey
+        matchedQueryKey: input.provenance.matchedQueryKey,
+        vendorCategory: vendorIdentity.vendorCategory,
+        vendorKey: vendorIdentity.vendorKey,
+        vendorMatchScore: vendorIdentity.match.score,
+        vendorMatchOutcome: vendorIdentity.match.outcome
       }
     });
 
@@ -969,4 +1029,31 @@ function toConfidenceBand(score: number): SubscriptionConfidenceBand {
   if (score >= 0.78) return SubscriptionConfidenceBand.HIGH;
   if (score >= 0.48) return SubscriptionConfidenceBand.MEDIUM;
   return SubscriptionConfidenceBand.LOW;
+}
+
+function toVendorLifecycleHint(
+  value: string
+): "WELCOME" | "RENEWAL" | "RECEIPT" | "CANCELLATION" | "BILLING" | "STATEMENT" {
+  if (value === "WELCOME") return "WELCOME";
+  if (value === "RENEWAL") return "RENEWAL";
+  if (value === "RECEIPT") return "RECEIPT";
+  if (value === "CANCELLATION") return "CANCELLATION";
+  return "RECEIPT";
+}
+
+function toExpectedVendorCategory(value: string): VendorCategory | null {
+  if (value === "WELCOME" || value === "RENEWAL" || value === "CANCELLATION") {
+    return "SUBSCRIPTION";
+  }
+  return null;
+}
+
+function isSubscriptionCompatibleVendorCategory(category: VendorCategory) {
+  return (
+    category === "SUBSCRIPTION" ||
+    category === "SOFTWARE" ||
+    category === "TELECOM" ||
+    category === "RETAIL" ||
+    category === "UNKNOWN"
+  );
 }
