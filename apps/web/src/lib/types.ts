@@ -1510,6 +1510,21 @@ export interface AdminPeriodMetrics {
     overriddenRate: number;
     requiringApprovalRate: number;
   };
+  llmOptimization: {
+    totalRequests: number;
+    executedCalls: number;
+    cacheHitRate: number;
+    gateSkipRate: number;
+    failureRate: number;
+    avgLatencyMs: number;
+    estimatedCostUsd: number;
+    asyncEnqueued: number;
+    resolvedWithoutProviderRate: number;
+    lowCostTierRate: number;
+    reasoningTierRate: number;
+    premiumTierRate: number;
+    gmailFallbackRate: number;
+  };
   qualityScores: {
     ingestionQualityScore: number;
     predictionAccuracyScore: number;

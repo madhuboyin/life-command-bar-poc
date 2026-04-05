@@ -29,6 +29,7 @@ import { SubscriptionInsightService } from "./subscription-insight.service";
 import { buildSubscriptionGuidedFlow } from "./subscription-guided-flow";
 import { SubscriptionDecisionEngine } from "./subscription-decision-engine";
 import { VendorIntelligenceService } from "./vendor-intelligence.service";
+import { LlmCacheService } from "./llm-cache.service";
 import type { VendorCategory } from "./vendor-profiles";
 
 const listQuerySchema = z.object({
@@ -116,6 +117,7 @@ export class SubscriptionRegistryService {
   private readonly insightService = new SubscriptionInsightService();
   private readonly decisionEngine = new SubscriptionDecisionEngine();
   private readonly vendorIntelligenceService = new VendorIntelligenceService();
+  private readonly llmCacheService = new LlmCacheService();
 
   async list(userId: string, rawQuery: unknown) {
     const query = listQuerySchema.parse(rawQuery ?? {});
@@ -231,6 +233,7 @@ export class SubscriptionRegistryService {
     await this.insightService.refreshForSubscriptions(userId, [id], {
       emitEvents: true
     });
+    await this.invalidateLlmCaches(userId, updated.householdId ?? null, "subscription_registry_patch");
 
     return this.getById(userId, id);
   }
@@ -354,6 +357,11 @@ export class SubscriptionRegistryService {
       userId,
       [primary.id, duplicate.id],
       { emitEvents: true }
+    );
+    await this.invalidateLlmCaches(
+      userId,
+      primary.householdId ?? duplicate.householdId ?? null,
+      "subscription_registry_merge"
     );
 
     return this.getById(userId, primary.id);
@@ -732,6 +740,15 @@ export class SubscriptionRegistryService {
       [result.subscriptionId],
       { emitEvents: true }
     );
+    await this.invalidateLlmCaches(
+      input.userId,
+      null,
+      result.created
+        ? "subscription_registry_created"
+        : result.priceChanged
+          ? "subscription_registry_price_changed"
+          : "subscription_registry_state_update"
+    );
 
     return result;
   }
@@ -796,6 +813,7 @@ export class SubscriptionRegistryService {
       remindAt: payload.remindAt,
       note: payload.note
     });
+    await this.invalidateLlmCaches(userId, null, "subscription_decision_applied");
     const subscription = await this.getById(userId, id);
     return {
       result,
@@ -825,6 +843,20 @@ export class SubscriptionRegistryService {
     if (input.rebuild) {
       await this.predictionEngineService.rebuild(input.userId).catch(() => null);
     }
+  }
+
+  private async invalidateLlmCaches(
+    userId: string,
+    householdId: string | null,
+    reason: string
+  ) {
+    await this.llmCacheService
+      .invalidate({
+        userId,
+        householdId,
+        reason
+      })
+      .catch(() => null);
   }
 }
 

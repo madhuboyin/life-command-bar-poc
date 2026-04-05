@@ -42,6 +42,7 @@ import { AutoFlowService } from "./auto-flow.service";
 import { HomeMemoryService } from "./home-memory.service";
 import { PredictionEngineService } from "./prediction-engine.service";
 import { ZeroInputService } from "./zero-input.service";
+import { LlmCacheService } from "./llm-cache.service";
 
 const PARSER_VERSION = "ingestion-v1-rule-2026-04-04";
 
@@ -138,6 +139,7 @@ export class IngestionService {
   private readonly homeMemoryService = new HomeMemoryService();
   private readonly predictionEngineService = new PredictionEngineService();
   private readonly zeroInputService = new ZeroInputService();
+  private readonly llmCacheService = new LlmCacheService();
 
   async ingestEmailForward(payload: unknown): Promise<IngestionResult> {
     const input = emailForwardSchema.parse(payload);
@@ -328,6 +330,14 @@ export class IngestionService {
       })
       .catch(() => null);
 
+    await this.llmCacheService
+      .invalidate({
+        userId,
+        householdId: updated.householdId ?? null,
+        reason: "ingestion_candidate_confirmed"
+      })
+      .catch(() => null);
+
     return mapObligation(updated as Obligation);
   }
 
@@ -418,6 +428,14 @@ export class IngestionService {
         reason: input.reason ?? null
       }
     });
+
+    await this.llmCacheService
+      .invalidate({
+        userId,
+        householdId: updated.householdId ?? null,
+        reason: "ingestion_candidate_rejected"
+      })
+      .catch(() => null);
 
     return mapObligation(updated as Obligation);
   }

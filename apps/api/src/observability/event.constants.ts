@@ -38,6 +38,17 @@ export const OBSERVABILITY_EVENT_TYPES = {
   GMAIL_LLM_FALLBACK_USED: "gmail_llm_fallback_used",
   GMAIL_SUPPRESSED: "gmail_suppressed",
 
+  LLM_CALL_REQUESTED: "llm_call_requested",
+  LLM_CALL_SKIPPED_BY_GATE: "llm_call_skipped_by_gate",
+  LLM_CACHE_HIT: "llm_cache_hit",
+  LLM_CACHE_MISS: "llm_cache_miss",
+  LLM_PROVIDER_PROMPT_CACHE_HIT_IF_AVAILABLE: "llm_provider_prompt_cache_hit_if_available",
+  LLM_CALL_COMPLETED: "llm_call_completed",
+  LLM_CALL_FAILED: "llm_call_failed",
+  LLM_BUDGET_SOFT_LIMIT_HIT: "llm_budget_soft_limit_hit",
+  LLM_MODEL_ROUTED: "llm_model_routed",
+  LLM_ASYNC_TASK_ENQUEUED: "llm_async_task_enqueued",
+
   VENDOR_PROFILE_MATCHED: "vendor_profile_matched",
   VENDOR_PROFILE_UNKNOWN: "vendor_profile_unknown",
   VENDOR_PROFILE_CONFLICT: "vendor_profile_conflict",

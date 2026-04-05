@@ -27,6 +27,8 @@ export default async function AdminObservabilityPage() {
           "ingestion.low_confidence_rate",
           "prediction.confirmed_rate",
           "auto_flow.dismissed_rate",
+          "llm.cache_hit_rate",
+          "llm.cost_usd",
           "scores.trust"
         ],
         timeBucket: "DAY",
@@ -128,6 +130,26 @@ export default async function AdminObservabilityPage() {
               value={toPct(day.executionLayer.guidedCompletionRate)}
               subtitle="Execution Layer"
             />
+            <MetricsCard
+              title="LLM Requests"
+              value={day.llmOptimization.totalRequests}
+              subtitle="LLM Optimization"
+            />
+            <MetricsCard
+              title="LLM Cache Hit Rate"
+              value={toPct(day.llmOptimization.cacheHitRate)}
+              subtitle="LLM Optimization"
+            />
+            <MetricsCard
+              title="LLM Gate Skip Rate"
+              value={toPct(day.llmOptimization.gateSkipRate)}
+              subtitle="LLM Optimization"
+            />
+            <MetricsCard
+              title="LLM Estimated Cost (Day)"
+              value={`$${formatNumber(day.llmOptimization.estimatedCostUsd)}`}
+              subtitle="LLM Optimization"
+            />
           </section>
 
           <section style={{ ...cardStyles.section, marginBottom: 16 }}>
@@ -220,6 +242,14 @@ export default async function AdminObservabilityPage() {
               <MetricsCard
                 title="Assignment Mismatch"
                 value={toPct(day.householdMetrics.assignmentMismatchRate)}
+              />
+              <MetricsCard
+                title="LLM Resolved Without Provider"
+                value={toPct(day.llmOptimization.resolvedWithoutProviderRate)}
+              />
+              <MetricsCard
+                title="Gmail LLM Fallback Rate"
+                value={toPct(day.llmOptimization.gmailFallbackRate)}
               />
             </div>
           </section>

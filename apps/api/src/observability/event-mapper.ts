@@ -155,6 +155,27 @@ function mapEventType(
     case "gmail_suppressed":
       return OBSERVABILITY_EVENT_TYPES.GMAIL_SUPPRESSED;
 
+    case "llm_call_requested":
+      return OBSERVABILITY_EVENT_TYPES.LLM_CALL_REQUESTED;
+    case "llm_call_skipped_by_gate":
+      return OBSERVABILITY_EVENT_TYPES.LLM_CALL_SKIPPED_BY_GATE;
+    case "llm_cache_hit":
+      return OBSERVABILITY_EVENT_TYPES.LLM_CACHE_HIT;
+    case "llm_cache_miss":
+      return OBSERVABILITY_EVENT_TYPES.LLM_CACHE_MISS;
+    case "llm_provider_prompt_cache_hit_if_available":
+      return OBSERVABILITY_EVENT_TYPES.LLM_PROVIDER_PROMPT_CACHE_HIT_IF_AVAILABLE;
+    case "llm_call_completed":
+      return OBSERVABILITY_EVENT_TYPES.LLM_CALL_COMPLETED;
+    case "llm_call_failed":
+      return OBSERVABILITY_EVENT_TYPES.LLM_CALL_FAILED;
+    case "llm_budget_soft_limit_hit":
+      return OBSERVABILITY_EVENT_TYPES.LLM_BUDGET_SOFT_LIMIT_HIT;
+    case "llm_model_routed":
+      return OBSERVABILITY_EVENT_TYPES.LLM_MODEL_ROUTED;
+    case "llm_async_task_enqueued":
+      return OBSERVABILITY_EVENT_TYPES.LLM_ASYNC_TASK_ENQUEUED;
+
     case "vendor_profile_matched":
       return OBSERVABILITY_EVENT_TYPES.VENDOR_PROFILE_MATCHED;
     case "vendor_profile_unknown":

@@ -440,6 +440,44 @@ enum MetricTimeBucket {
   MONTH
 }
 
+enum LlmTaskType {
+  GMAIL_COMPLEX_EXTRACTION
+  GMAIL_LIFECYCLE_CONFLICT_RESOLUTION
+  SUBSCRIPTION_PLAN_NORMALIZATION
+  RECOMMENDATION_REASONING
+  GUIDED_FLOW_COPY_ENRICHMENT
+  REVIEW_SUMMARY_GENERATION
+  CONTROL_TOWER_SUMMARY
+  GENERAL_UNKNOWN
+}
+
+enum LlmModelTier {
+  TIER_LOW_COST
+  TIER_REASONING
+  TIER_PREMIUM
+}
+
+enum LlmCacheStrategy {
+  EXACT_INPUT
+  TEMPLATE_VENDOR
+  PROMPT_PREFIX
+}
+
+enum LlmCallStatus {
+  REQUESTED
+  SKIPPED
+  COMPLETED
+  FAILED
+}
+
+enum LlmAsyncTaskStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELED
+}
+
 model User {
   id       String  @id @default(cuid())
   email    String  @unique
@@ -489,6 +527,9 @@ model User {
   lastHandledSubscriptions   SubscriptionRegistry[] @relation("SubscriptionLastHandledBy")
   subscriptionInsights       SubscriptionInsight[]
   subscriptionRecommendations SubscriptionRecommendation[]
+  llmCacheEntries            LlmCacheEntry[]
+  llmUsageRecords            LlmUsageRecord[]
+  llmAsyncTasks              LlmAsyncTask[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -562,6 +603,9 @@ model Household {
   predictions       Prediction[]
   reminders         Reminder[]
   autonomyDecisions AutonomyDecision[]
+  llmCacheEntries   LlmCacheEntry[]
+  llmUsageRecords   LlmUsageRecord[]
+  llmAsyncTasks     LlmAsyncTask[]
   auditEvents       AuditEvent[]
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -1488,6 +1532,126 @@ model ObservabilityEvent {
   @@index([correlationId], map: "idx_observability_events_correlation_id")
   @@index([entityType, entityId], map: "idx_observability_events_entity")
   @@map("observability_events")
+}
+
+model LlmCacheEntry {
+  id String @id @default(cuid())
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  householdId String? @map("household_id")
+  household Household? @relation(fields: [householdId], references: [id], onDelete: SetNull)
+
+  taskType LlmTaskType @map("task_type")
+  cacheStrategy LlmCacheStrategy @default(EXACT_INPUT) @map("cache_strategy")
+  cacheKey String @map("cache_key")
+  inputHash String @map("input_hash")
+  modelKey String @map("model_key")
+  providerKey String @map("provider_key")
+  modelTier LlmModelTier @map("model_tier")
+
+  promptVersion String @default("v1") @map("prompt_version")
+  parserVersion String @default("v1") @map("parser_version")
+
+  output Json @map("output_json")
+  confidenceScore Decimal? @map("confidence_score") @db.Decimal(5, 4)
+  metadata Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  expiresAt DateTime @map("expires_at")
+  invalidatedAt DateTime? @map("invalidated_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  usageRecords LlmUsageRecord[]
+
+  @@unique([taskType, cacheKey, modelKey, promptVersion, parserVersion], map: "uniq_llm_cache_task_cache_model_prompt_parser")
+  @@index([userId, taskType, expiresAt], map: "idx_llm_cache_user_task_expires")
+  @@index([householdId, taskType, expiresAt], map: "idx_llm_cache_household_task_expires")
+  @@index([inputHash], map: "idx_llm_cache_input_hash")
+  @@index([invalidatedAt], map: "idx_llm_cache_invalidated_at")
+  @@map("llm_cache_entries")
+}
+
+model LlmUsageRecord {
+  id String @id @default(cuid())
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  householdId String? @map("household_id")
+  household Household? @relation(fields: [householdId], references: [id], onDelete: SetNull)
+
+  taskType LlmTaskType @map("task_type")
+  status LlmCallStatus @default(REQUESTED)
+
+  providerKey String @map("provider_key")
+  modelKey String @map("model_key")
+  modelTier LlmModelTier @map("model_tier")
+
+  cacheHit Boolean @default(false) @map("cache_hit")
+  promptCacheHit Boolean? @map("prompt_cache_hit")
+  gateSkipped Boolean @default(false) @map("gate_skipped")
+
+  promptTokens Int? @map("prompt_tokens")
+  completionTokens Int? @map("completion_tokens")
+  totalTokens Int? @map("total_tokens")
+  estimatedCostUsd Decimal @default(0.0) @map("estimated_cost_usd") @db.Decimal(14, 6)
+  latencyMs Int? @map("latency_ms")
+
+  rationale Json?
+  metadata Json?
+
+  cacheEntryId String? @map("cache_entry_id")
+  cacheEntry LlmCacheEntry? @relation(fields: [cacheEntryId], references: [id], onDelete: SetNull)
+  asyncTasks LlmAsyncTask[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt], map: "idx_llm_usage_user_created_at")
+  @@index([householdId, createdAt], map: "idx_llm_usage_household_created_at")
+  @@index([taskType, createdAt], map: "idx_llm_usage_task_created_at")
+  @@index([status, createdAt], map: "idx_llm_usage_status_created_at")
+  @@index([modelTier, createdAt], map: "idx_llm_usage_model_tier_created_at")
+  @@index([cacheHit, createdAt], map: "idx_llm_usage_cache_hit_created_at")
+  @@index([gateSkipped, createdAt], map: "idx_llm_usage_gate_skipped_created_at")
+  @@map("llm_usage_records")
+}
+
+model LlmAsyncTask {
+  id String @id @default(cuid())
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  householdId String? @map("household_id")
+  household Household? @relation(fields: [householdId], references: [id], onDelete: SetNull)
+
+  taskType LlmTaskType @map("task_type")
+  status LlmAsyncTaskStatus @default(PENDING)
+  priority Int @default(100)
+
+  payload Json
+  dedupeKey String? @unique @map("dedupe_key")
+  metadata Json?
+
+  attempts Int @default(0)
+  maxAttempts Int @default(3) @map("max_attempts")
+  scheduledFor DateTime @default(now()) @map("scheduled_for")
+  startedAt DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  lastError String? @map("last_error") @db.Text
+
+  usageRecordId String? @map("usage_record_id")
+  usageRecord LlmUsageRecord? @relation(fields: [usageRecordId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([status, scheduledFor], map: "idx_llm_async_tasks_status_schedule")
+  @@index([userId, createdAt], map: "idx_llm_async_tasks_user_created_at")
+  @@index([taskType, status], map: "idx_llm_async_tasks_task_status")
+  @@map("llm_async_tasks")
 }
 
 model MetricSnapshot {

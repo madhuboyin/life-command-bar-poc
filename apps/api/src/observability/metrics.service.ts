@@ -71,6 +71,21 @@ type PeriodMetrics = {
     overriddenRate: number;
     requiringApprovalRate: number;
   };
+  llmOptimization: {
+    totalRequests: number;
+    executedCalls: number;
+    cacheHitRate: number;
+    gateSkipRate: number;
+    failureRate: number;
+    avgLatencyMs: number;
+    estimatedCostUsd: number;
+    asyncEnqueued: number;
+    resolvedWithoutProviderRate: number;
+    lowCostTierRate: number;
+    reasoningTierRate: number;
+    premiumTierRate: number;
+    gmailFallbackRate: number;
+  };
   qualityScores: {
     ingestionQualityScore: number;
     predictionAccuracyScore: number;
@@ -233,7 +248,9 @@ export class MetricsService {
       householdAssignmentStats,
       autonomyStats,
       flowSessionCount,
-      focusSessionCount
+      focusSessionCount,
+      llmUsageSummary,
+      gmailClassifiedCount
     ] = await Promise.all([
       this.repository.countImportSources({
         start: window.start,
@@ -408,6 +425,17 @@ export class MetricsService {
         start: window.start,
         end: window.end,
         filters
+      }),
+      this.repository.getLlmUsageSummary({
+        start: window.start,
+        end: window.end,
+        filters
+      }),
+      this.repository.countObservabilityEvents({
+        eventType: "gmail_message_classified_v2",
+        start: window.start,
+        end: window.end,
+        filters
       })
     ]);
 
@@ -473,6 +501,29 @@ export class MetricsService {
         queueHealthScore * 0.25 +
         assignmentBalance * 0.2
     );
+
+    const llmTotalRequests = llmUsageSummary.totalRequests;
+    const llmExecutedCalls = llmUsageSummary.completedCount + llmUsageSummary.failedCount;
+    const llmCacheHitRate = safePct(llmUsageSummary.cacheHitCount, Math.max(llmTotalRequests, 1));
+    const llmGateSkipRate = safePct(llmUsageSummary.gateSkippedCount, Math.max(llmTotalRequests, 1));
+    const llmFailureRate = safePct(llmUsageSummary.failedCount, Math.max(llmExecutedCalls, 1));
+    const llmResolvedWithoutProviderRate = safePct(
+      llmUsageSummary.cacheHitCount + llmUsageSummary.gateSkippedCount,
+      Math.max(llmTotalRequests, 1)
+    );
+    const lowCostTierRate = safePct(
+      llmUsageSummary.tierCounts.TIER_LOW_COST,
+      Math.max(llmTotalRequests, 1)
+    );
+    const reasoningTierRate = safePct(
+      llmUsageSummary.tierCounts.TIER_REASONING,
+      Math.max(llmTotalRequests, 1)
+    );
+    const premiumTierRate = safePct(
+      llmUsageSummary.tierCounts.TIER_PREMIUM,
+      Math.max(llmTotalRequests, 1)
+    );
+    const gmailFallbackRate = safePct(llmUsageSummary.gmailTaskCount, Math.max(gmailClassifiedCount, 1));
 
     const periodMetrics: PeriodMetrics = {
       bucket,
@@ -544,6 +595,21 @@ export class MetricsService {
           Math.max(autonomyStats.total, 1)
         )
       },
+      llmOptimization: {
+        totalRequests: llmTotalRequests,
+        executedCalls: llmExecutedCalls,
+        cacheHitRate: llmCacheHitRate,
+        gateSkipRate: llmGateSkipRate,
+        failureRate: llmFailureRate,
+        avgLatencyMs: round(llmUsageSummary.avgLatencyMs, 2),
+        estimatedCostUsd: round(llmUsageSummary.estimatedCostUsd, 4),
+        asyncEnqueued: llmUsageSummary.asyncEnqueuedCount,
+        resolvedWithoutProviderRate: llmResolvedWithoutProviderRate,
+        lowCostTierRate,
+        reasoningTierRate,
+        premiumTierRate,
+        gmailFallbackRate
+      },
       qualityScores: {
         ingestionQualityScore,
         predictionAccuracyScore,
@@ -610,7 +676,8 @@ const DEFAULT_TREND_METRICS = [
   "ingestion.low_confidence_rate",
   "prediction.confirmed_rate",
   "auto_flow.dismissed_rate",
-  "trust.rejection_rate",
+  "llm.cache_hit_rate",
+  "llm.cost_usd",
   "scores.trust"
 ];
 
@@ -655,6 +722,20 @@ function flattenMetricValues(metrics: PeriodMetrics) {
     "autonomy.undone_rate": metrics.autonomySafety.undoneRate,
     "autonomy.overridden_rate": metrics.autonomySafety.overriddenRate,
     "autonomy.requiring_approval_rate": metrics.autonomySafety.requiringApprovalRate,
+
+    "llm.total_requests": metrics.llmOptimization.totalRequests,
+    "llm.executed_calls": metrics.llmOptimization.executedCalls,
+    "llm.cache_hit_rate": metrics.llmOptimization.cacheHitRate,
+    "llm.gate_skip_rate": metrics.llmOptimization.gateSkipRate,
+    "llm.failure_rate": metrics.llmOptimization.failureRate,
+    "llm.avg_latency_ms": metrics.llmOptimization.avgLatencyMs,
+    "llm.cost_usd": metrics.llmOptimization.estimatedCostUsd,
+    "llm.async_enqueued": metrics.llmOptimization.asyncEnqueued,
+    "llm.resolved_without_provider_rate": metrics.llmOptimization.resolvedWithoutProviderRate,
+    "llm.low_cost_tier_rate": metrics.llmOptimization.lowCostTierRate,
+    "llm.reasoning_tier_rate": metrics.llmOptimization.reasoningTierRate,
+    "llm.premium_tier_rate": metrics.llmOptimization.premiumTierRate,
+    "llm.gmail_fallback_rate": metrics.llmOptimization.gmailFallbackRate,
 
     "scores.ingestion_quality": metrics.qualityScores.ingestionQualityScore,
     "scores.prediction_accuracy": metrics.qualityScores.predictionAccuracyScore,

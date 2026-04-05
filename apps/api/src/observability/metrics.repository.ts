@@ -1,4 +1,5 @@
 import {
+  LlmCallStatus,
   MetricTimeBucket,
   ObligationStatus,
   Prisma,
@@ -316,6 +317,121 @@ export class MetricsRepository {
           : undefined
       }
     });
+  }
+
+  async getLlmUsageSummary(input: {
+    start: Date;
+    end: Date;
+    filters?: ScopeFilters;
+  }) {
+    const where: Prisma.LlmUsageRecordWhereInput = {
+      createdAt: {
+        gte: input.start,
+        lt: input.end
+      },
+      userId: input.filters?.userId,
+      householdId: input.filters?.householdId
+    };
+
+    const [
+      totalRequests,
+      completedCount,
+      failedCount,
+      skippedCount,
+      cacheHitCount,
+      gateSkippedCount,
+      aggregate,
+      tierGroups,
+      asyncEnqueuedCount,
+      gmailTaskCount
+    ] = await Promise.all([
+      prismaClient.llmUsageRecord.count({ where }),
+      prismaClient.llmUsageRecord.count({
+        where: {
+          ...where,
+          status: LlmCallStatus.COMPLETED
+        }
+      }),
+      prismaClient.llmUsageRecord.count({
+        where: {
+          ...where,
+          status: LlmCallStatus.FAILED
+        }
+      }),
+      prismaClient.llmUsageRecord.count({
+        where: {
+          ...where,
+          status: LlmCallStatus.SKIPPED
+        }
+      }),
+      prismaClient.llmUsageRecord.count({
+        where: {
+          ...where,
+          cacheHit: true
+        }
+      }),
+      prismaClient.llmUsageRecord.count({
+        where: {
+          ...where,
+          gateSkipped: true
+        }
+      }),
+      prismaClient.llmUsageRecord.aggregate({
+        where,
+        _sum: {
+          estimatedCostUsd: true
+        },
+        _avg: {
+          latencyMs: true
+        }
+      }),
+      prismaClient.llmUsageRecord.groupBy({
+        by: ["modelTier"],
+        where,
+        _count: {
+          _all: true
+        }
+      }),
+      prismaClient.llmAsyncTask.count({
+        where: {
+          createdAt: {
+            gte: input.start,
+            lt: input.end
+          },
+          userId: input.filters?.userId,
+          householdId: input.filters?.householdId
+        }
+      }),
+      prismaClient.llmUsageRecord.count({
+        where: {
+          ...where,
+          taskType: {
+            in: ["GMAIL_COMPLEX_EXTRACTION", "GMAIL_LIFECYCLE_CONFLICT_RESOLUTION"]
+          }
+        }
+      })
+    ]);
+
+    return {
+      totalRequests,
+      completedCount,
+      failedCount,
+      skippedCount,
+      cacheHitCount,
+      gateSkippedCount,
+      asyncEnqueuedCount,
+      gmailTaskCount,
+      estimatedCostUsd: Number(aggregate._sum.estimatedCostUsd ?? 0),
+      avgLatencyMs: Number(aggregate._avg.latencyMs ?? 0),
+      tierCounts: {
+        TIER_LOW_COST:
+          tierGroups.find((entry) => entry.modelTier === "TIER_LOW_COST")?._count._all ?? 0,
+        TIER_REASONING:
+          tierGroups.find((entry) => entry.modelTier === "TIER_REASONING")?._count._all ?? 0,
+        TIER_PREMIUM:
+          tierGroups.find((entry) => entry.modelTier === "TIER_PREMIUM")?._count._all ?? 0
+      }
+    };
   }
 
   async countReviewQueue(filters?: ScopeFilters) {
