@@ -50,7 +50,7 @@ export interface CreateObligationInput {
   importanceScore?: number;
   effortLevel?: "LOW" | "MEDIUM" | "HIGH";
   impactLevel?: "LOW" | "MEDIUM" | "HIGH";
-  status?: "DRAFT" | "ACTIVE" | "POSTPONED" | "RESOLVED" | "IGNORED";
+  status?: "DRAFT" | "ACTIVE" | "POSTPONED" | "RESOLVED" | "IGNORED" | "DISCOVERED" | "ENDING";
 }
 
 export interface UpdateObligationInput {
@@ -73,5 +73,5 @@ export interface UpdateObligationInput {
   importanceScore?: number;
   effortLevel?: "LOW" | "MEDIUM" | "HIGH";
   impactLevel?: "LOW" | "MEDIUM" | "HIGH";
-  status?: "DRAFT" | "ACTIVE" | "POSTPONED" | "RESOLVED" | "IGNORED";
+  status?: "DRAFT" | "ACTIVE" | "POSTPONED" | "RESOLVED" | "IGNORED" | "DISCOVERED" | "ENDING";
 }

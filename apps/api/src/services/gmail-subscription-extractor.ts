@@ -59,10 +59,11 @@ export function extractGmailSubscriptionDetails(
 
   const moneyMentions = collectMoneyMentions(normalized);
   const introPrice = selectPriceByContext(moneyMentions, /(trial|first|intro|starting)/i);
-  const recurringPrice = selectPriceByContext(
-    moneyMentions,
-    /(monthly|annual|yearly|quarterly|every\s+(month|year|quarter)|auto[\s-]?renew|renews?)/i
-  );
+  const recurringPriceRegex = input.lifecycleEmailType === "WELCOME"
+    ? /(monthly|annual|yearly|quarterly|every\s+(month|year|quarter)|auto[\s-]?renew|renews?|subscription|plan|membership)/i
+    : /(monthly|annual|yearly|quarterly|every\s+(month|year|quarter)|auto[\s-]?renew|renews?)/i;
+
+  const recurringPrice = selectPriceByContext(moneyMentions, recurringPriceRegex);
   const amountCharged = selectPriceByContext(
     moneyMentions,
     /(charged|receipt|invoice|payment(?:\s+received)?|you paid|paid)/i
@@ -80,7 +81,11 @@ export function extractGmailSubscriptionDetails(
   const trialStatus = extractTrialStatus(lower);
   if (trialStatus !== "UNKNOWN" && trialStatus !== "NONE") extractionSignals.push("trial_detected");
 
-  const trialEndDate = findDateNearKeywords(normalized, ["trial ends", "trial end", "end of trial"]);
+  const trialKeywords = input.lifecycleEmailType === "WELCOME"
+    ? ["trial ends", "trial end", "end of trial", "first charge on", "billing begins on", "free until"]
+    : ["trial ends", "trial end", "end of trial"];
+  const trialEndDate = findDateNearKeywords(normalized, trialKeywords);
+
   const renewalDate = findDateNearKeywords(normalized, [
     "renews on",
     "renewal on",
@@ -91,13 +96,11 @@ export function extractGmailSubscriptionDetails(
   const receiptDate =
     findDateNearKeywords(normalized, ["receipt date", "charged on", "payment date"]) ??
     (input.lifecycleEmailType === "RECEIPT" ? input.messageDate : null);
-  const cancellationEffectiveDate = findDateNearKeywords(normalized, [
-    "ends on",
-    "end date",
-    "effective",
-    "will expire on",
-    "expires on"
-  ]);
+
+  const cancellationKeywords = input.lifecycleEmailType === "CANCELLATION"
+    ? ["ends on", "end date", "effective", "will expire on", "expires on", "canceled on", "cancelled on", "active until", "valid until"]
+    : ["ends on", "end date", "effective", "will expire on", "expires on"];
+  const cancellationEffectiveDate = findDateNearKeywords(normalized, cancellationKeywords);
 
   const autoRenewStatus = extractAutoRenewStatus(lower, input.lifecycleEmailType);
   if (autoRenewStatus !== "UNKNOWN") extractionSignals.push(`auto_renew_${autoRenewStatus.toLowerCase()}`);

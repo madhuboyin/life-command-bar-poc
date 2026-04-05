@@ -27,6 +27,8 @@ enum ObligationStatus {
   POSTPONED
   RESOLVED
   IGNORED
+  DISCOVERED
+  ENDING
 }
 
 enum EffortLevel {

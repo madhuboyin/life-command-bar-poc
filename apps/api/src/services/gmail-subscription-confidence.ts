@@ -67,20 +67,33 @@ export function evaluateGmailSubscriptionConfidence(
 
   if (hasVendor) score += 0.04;
   if (hasRecurringPrice && hasBillingPeriod) score += 0.06;
-  if (classification.lifecycleEmailType === "RENEWAL" && extraction.renewalDate) score += 0.06;
-  if (classification.lifecycleEmailType === "RECEIPT" && hasChargedAmount) score += 0.06;
+  if (classification.lifecycleEmailType === "RENEWAL" && extraction.renewalDate) {
+    score += 0.06;
+    rationaleSignals.add("Detected renewal date from Gmail");
+  }
+  
+  if (classification.lifecycleEmailType === "RECEIPT" && hasChargedAmount) {
+    score += 0.06;
+  }
+
   if (
     classification.lifecycleEmailType === "CANCELLATION" &&
     (extraction.autoRenewStatus === "OFF" || Boolean(extraction.cancellationEffectiveDate))
   ) {
     score += 0.08;
+    rationaleSignals.add("Marked as ending based on cancellation confirmation email");
   }
 
   if (classification.lifecycleEmailType === "WELCOME") {
+    rationaleSignals.add("Identified welcome email indicating potential subscription");
+    
     if (!hasRecurringPrice && extraction.trialStatus === "UNKNOWN") {
       reviewReasons.push("Welcome email lacks recurring pricing clarity");
-      score -= 0.05;
+      score = Math.min(score - 0.05, 0.47); // Force LOW confidence
+    } else if (hasRecurringPrice) {
+      score = Math.max(score, 0.50); // Assure at least MEDIUM confidence
     }
+    
     if (!hasPlan && !hasBillingPeriod) {
       reviewReasons.push("Welcome signal may be generic account onboarding");
       score -= 0.08;
@@ -127,6 +140,10 @@ export function evaluateGmailSubscriptionConfidence(
   if (input.context?.history?.hasPriorVendor) {
     score += 0.3;
     rationaleSignals.add("matched_historical_vendor");
+    
+    if (classification.lifecycleEmailType === "RENEWAL" || classification.lifecycleEmailType === "CANCELLATION") {
+      score = Math.max(score, 0.80); // Ensure HIGH confidence
+    }
   }
 
   if (input.context?.history?.isUnknownVendor && score > 0.6) {

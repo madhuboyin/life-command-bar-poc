@@ -40,7 +40,7 @@ export class GmailIngestionService {
 
     await this.externalAccountRepository.createAuditEvent({
       userId: input.userId,
-      eventType: "gmail_subscription_lifecycle_classified",
+      eventType: "gmail_subscription_lifecycle_detected",
       metadata: {
         externalConnectionId: input.externalConnectionId,
         gmailMessageId: input.normalizedMessage.gmailMessageId,
@@ -161,7 +161,7 @@ export class GmailIngestionService {
       await this.emitIngestionAuditEvents(input, ingestion, dedupeReason, lifecycle);
 
       if (lifecycle.lifecycleEmailType !== "UNKNOWN") {
-        await this.subscriptionRegistryService
+        const registryResult = await this.subscriptionRegistryService
           .ingestFromGmail({
             userId: input.userId,
             lifecycle,
@@ -192,7 +192,32 @@ export class GmailIngestionService {
                     : "subscription_registry_ingest_failed"
               }
             });
+            return null;
           });
+
+        if (registryResult) {
+          if (lifecycle.lifecycleEmailType === "CANCELLATION") {
+            await this.externalAccountRepository.createAuditEvent({
+              userId: input.userId,
+              eventType: "gmail_subscription_cancellation_processed",
+              metadata: {
+                externalConnectionId: input.externalConnectionId,
+                gmailMessageId: input.normalizedMessage.gmailMessageId,
+                subscriptionId: registryResult.subscriptionId
+              }
+            });
+          } else if (lifecycle.lifecycleEmailType === "RENEWAL") {
+            await this.externalAccountRepository.createAuditEvent({
+              userId: input.userId,
+              eventType: "gmail_subscription_auto_updated",
+              metadata: {
+                externalConnectionId: input.externalConnectionId,
+                gmailMessageId: input.normalizedMessage.gmailMessageId,
+                subscriptionId: registryResult.subscriptionId
+              }
+            });
+          }
+        }
       }
 
       return {
