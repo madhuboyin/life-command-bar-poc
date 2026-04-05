@@ -180,6 +180,14 @@ export class GmailAuthService {
         providerAccountId: email
       }
     });
+    await this.repository.createAuditEvent({
+      userId: state.userId,
+      eventType: "gmail_connection_linked_to_user",
+      metadata: {
+        externalConnectionId: connection.id,
+        email
+      }
+    });
 
     return {
       userId: state.userId,

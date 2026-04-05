@@ -3,7 +3,15 @@ export const OBSERVABILITY_EVENT_TYPES = {
   INGESTION_CORRECTED: "ingestion_corrected",
   INGESTION_REJECTED: "ingestion_rejected",
 
+  AUTH_SIGN_IN_STARTED: "auth_sign_in_started",
+  AUTH_SIGN_IN_SUCCEEDED: "auth_sign_in_succeeded",
+  AUTH_SIGN_IN_FAILED: "auth_sign_in_failed",
+  AUTH_SIGN_OUT: "auth_sign_out",
+  PROTECTED_ROUTE_REDIRECTED: "protected_route_redirected",
+
   GMAIL_CONNECTION_CREATED: "gmail_connection_created",
+  GMAIL_CONNECTION_LINKED_TO_USER: "gmail_connection_linked_to_user",
+  GMAIL_CONNECTION_DISCONNECTED: "gmail_connection_disconnected",
   GMAIL_SYNC_STARTED: "gmail_sync_started",
   GMAIL_SYNC_COMPLETED: "gmail_sync_completed",
   GMAIL_MESSAGE_MATCHED: "gmail_message_matched",
@@ -71,7 +79,9 @@ export const OBSERVABILITY_EVENT_TYPES = {
 
   ASSIGNMENT_CHANGED: "assignment_changed",
   ITEM_CLAIMED: "item_claimed",
-  ITEM_REASSIGNED: "item_reassigned"
+  ITEM_REASSIGNED: "item_reassigned",
+
+  HOUSEHOLD_INVITE_ACCEPTED: "household_invite_accepted"
 } as const;
 
 export type ObservabilityEventType =

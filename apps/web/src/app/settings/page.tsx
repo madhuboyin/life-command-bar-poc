@@ -1,11 +1,16 @@
+import { redirect } from "next/navigation";
+import { auth } from "../../auth";
+import AccountSettingsPanel from "../../components/account-settings-panel";
 import ZeroInputSettingsPanel from "../../components/zero-input-settings-panel";
 import {
   getGmailConnectionStatus,
+  getHouseholds,
   getZeroInputDecisions,
   getZeroInputPolicy
 } from "../../lib/api";
 import type {
   GmailConnectionStatus,
+  HouseholdSummary,
   ZeroInputDecisionItem,
   ZeroInputPolicy
 } from "../../lib/types";
@@ -33,6 +38,11 @@ type Props = {
 };
 
 export default async function SettingsPage({ searchParams }: Props) {
+  const session = await auth();
+  if (!session?.user?.id || !session.user.email) {
+    redirect("/signin?callbackUrl=/settings");
+  }
+
   const resolvedSearchParams = (await searchParams) ?? {};
   const oauthState = firstSearchParam(resolvedSearchParams.gmail);
   const oauthError = firstSearchParam(resolvedSearchParams.gmail_error);
@@ -41,20 +51,23 @@ export default async function SettingsPage({ searchParams }: Props) {
   let policy: ZeroInputPolicy = EMPTY_POLICY;
   let decisions: ZeroInputDecisionItem[] = [];
   let gmailConnection: GmailConnectionStatus | null = null;
+  let households: HouseholdSummary[] = [];
   let error: string | null = null;
 
   try {
-    const [policyResult, decisionResult, gmailResult] = await Promise.all([
+    const [policyResult, decisionResult, gmailResult, householdResult] = await Promise.all([
       getZeroInputPolicy(),
       getZeroInputDecisions({
         limit: 12,
         decision: ["EXECUTED", "SUPPRESSED", "REVIEW", "APPROVAL_REQUIRED"]
       }),
-      getGmailConnectionStatus().catch(() => ({ connection: null }))
+      getGmailConnectionStatus().catch(() => ({ connection: null })),
+      getHouseholds().catch(() => ({ households: [] }))
     ]);
     policy = policyResult.policy;
     decisions = decisionResult.items;
     gmailConnection = gmailResult.connection;
+    households = householdResult.households;
   } catch (fetchError) {
     error =
       fetchError instanceof Error
@@ -63,15 +76,29 @@ export default async function SettingsPage({ searchParams }: Props) {
   }
 
   return (
-    <ZeroInputSettingsPanel
-      initialPolicy={policy}
-      initialDecisions={decisions}
-      initialGmailConnection={gmailConnection}
-      oauthState={oauthState}
-      oauthError={oauthError}
-      oauthErrorDetails={oauthErrorDetails}
-      initialError={error}
-    />
+    <>
+      <main style={{ maxWidth: 980, margin: "32px auto 0 auto", padding: 24 }}>
+        <AccountSettingsPanel
+          user={{
+            id: session.user.id,
+            email: session.user.email,
+            name: session.user.name ?? null,
+            image: session.user.image ?? null
+          }}
+          gmailConnection={gmailConnection}
+          households={households}
+        />
+      </main>
+      <ZeroInputSettingsPanel
+        initialPolicy={policy}
+        initialDecisions={decisions}
+        initialGmailConnection={gmailConnection}
+        oauthState={oauthState}
+        oauthError={oauthError}
+        oauthErrorDetails={oauthErrorDetails}
+        initialError={error}
+      />
+    </>
   );
 }
 

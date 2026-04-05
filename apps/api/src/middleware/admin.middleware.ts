@@ -17,22 +17,32 @@ function getHeaderValue(raw: string | string[] | undefined) {
 
 export function requireAdmin(req: Request, res: Response, next: NextFunction) {
   const userId = req.auth?.userId;
+  const email = req.auth?.email?.toLowerCase() ?? "";
   if (!userId) {
     return fail(res, "UNAUTHORIZED", "Authentication required", 401);
   }
 
   const configuredAdminIds = parseCsv(process.env.ADMIN_USER_IDS);
+  const configuredAdminEmails = parseCsv(process.env.ADMIN_USER_EMAILS).map((item) =>
+    item.toLowerCase()
+  );
   const configuredApiKey = (process.env.ADMIN_API_KEY || "").trim();
   const requestApiKey = getHeaderValue(req.headers["x-admin-key"]);
 
   const apiKeyAuthorized = Boolean(configuredApiKey) && configuredApiKey === requestApiKey;
   const userIdAuthorized = configuredAdminIds.includes(userId);
+  const emailAuthorized = Boolean(email) && configuredAdminEmails.includes(email);
 
-  if (apiKeyAuthorized || userIdAuthorized) {
+  if (apiKeyAuthorized || userIdAuthorized || emailAuthorized) {
     return next();
   }
 
-  if (process.env.NODE_ENV !== "production" && configuredAdminIds.length === 0 && !configuredApiKey) {
+  if (
+    process.env.NODE_ENV !== "production" &&
+    configuredAdminIds.length === 0 &&
+    configuredAdminEmails.length === 0 &&
+    !configuredApiKey
+  ) {
     return next();
   }
 

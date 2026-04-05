@@ -63,18 +63,11 @@ const SERVER_APP_URL =
   (process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || process.env.SITE_URL || "").trim();
 const VERCEL_URL = (process.env.VERCEL_URL || "").trim();
 
-const DEFAULT_USER_ID =
-  process.env.NEXT_PUBLIC_LCB_USER_ID ||
-  process.env.NEXT_PUBLIC_USER_ID ||
-  "usr_demo_001";
-
-const DEFAULT_USER_EMAIL =
-  process.env.NEXT_PUBLIC_LCB_USER_EMAIL || process.env.NEXT_PUBLIC_USER_EMAIL || "";
-
-type AuthIdentity = {
-  userId: string;
-  email?: string;
-};
+const CLIENT_SESSION_CACHE_MS = 15_000;
+let cachedClientApiToken: {
+  value: string | null;
+  fetchedAt: number;
+} | null = null;
 
 type ApiEnvelope<T> = {
   success?: boolean;
@@ -363,39 +356,35 @@ function resolveApiBaseUrl() {
   return stripTrailingSlash(`http://localhost:4000${serverFallbackPath}`);
 }
 
-function getClientStoredIdentity() {
+async function resolveApiAccessToken() {
   if (typeof window === "undefined") {
-    return {};
+    const { auth } = await import("../auth");
+    const session = await auth();
+    return session?.apiAccessToken ?? null;
   }
 
-  const userId =
-    window.localStorage.getItem("lcb.userId") ??
-    window.localStorage.getItem("lcb_user_id") ??
-    "";
+  if (
+    cachedClientApiToken &&
+    Date.now() - cachedClientApiToken.fetchedAt <= CLIENT_SESSION_CACHE_MS
+  ) {
+    return cachedClientApiToken.value;
+  }
 
-  const email =
-    window.localStorage.getItem("lcb.userEmail") ??
-    window.localStorage.getItem("lcb_user_email") ??
-    "";
-
-  return { userId, email };
+  const { getSession } = await import("next-auth/react");
+  const session = await getSession();
+  const token = session?.apiAccessToken ?? null;
+  cachedClientApiToken = {
+    value: token,
+    fetchedAt: Date.now()
+  };
+  return token;
 }
 
-function resolveAuthIdentity(): AuthIdentity {
-  const clientIdentity = getClientStoredIdentity();
-  const userId = clientIdentity.userId || DEFAULT_USER_ID;
-  const email = clientIdentity.email || DEFAULT_USER_EMAIL || undefined;
-
-  return { userId, email };
-}
-
-function withAuthHeaders(init: RequestInit = {}) {
+async function withAuthHeaders(init: RequestInit = {}) {
   const headers = new Headers(init.headers);
-  const auth = resolveAuthIdentity();
-
-  headers.set("x-user-id", auth.userId);
-  if (auth.email) {
-    headers.set("x-user-email", auth.email);
+  const token = await resolveApiAccessToken();
+  if (token) {
+    headers.set("authorization", `Bearer ${token}`);
   }
 
   return {
@@ -406,7 +395,7 @@ function withAuthHeaders(init: RequestInit = {}) {
 
 async function apiFetch(path: string, init: RequestInit = {}) {
   const baseUrl = resolveApiBaseUrl();
-  return fetch(`${baseUrl}${path}`, withAuthHeaders(init));
+  return fetch(`${baseUrl}${path}`, await withAuthHeaders(init));
 }
 
 async function handleResponse<T>(res: Response): Promise<T> {

@@ -4,13 +4,18 @@ import { colors, spacing } from "../lib/ui";
 import { ToastProvider } from "../components/ui/toast-provider";
 import { FlowSessionProvider } from "../components/flow-session-provider";
 import HouseholdSwitcher from "../components/household-switcher";
+import { auth } from "../auth";
+import UserMenu from "../components/user-menu";
 
 export const metadata = {
   title: "Life Command Bar POC",
   description: "Admin-First Life Command OS"
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const session = await auth();
+  const isAuthenticated = Boolean(session?.user?.id);
+
   return (
     <html lang="en">
       <body
@@ -43,31 +48,36 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/" style={{ textDecoration: "none", color: colors.text, fontWeight: 700 }}>
                 Life Command Bar
               </Link>
-              <HouseholdSwitcher />
-              <Link href="/obligations" style={{ textDecoration: "none", color: colors.textMuted }}>
-                Obligations
-              </Link>
-              <Link href="/subscriptions" style={{ textDecoration: "none", color: colors.textMuted }}>
-                Subscriptions
-              </Link>
-              <Link href="/households" style={{ textDecoration: "none", color: colors.textMuted }}>
-                Households
-              </Link>
-              <Link href="/focus" style={{ textDecoration: "none", color: colors.textMuted }}>
-                Focus Mode
-              </Link>
-              <Link href="/control-tower" style={{ textDecoration: "none", color: colors.textMuted }}>
-                Control Tower
-              </Link>
-              <Link href="/admin/observability" style={{ textDecoration: "none", color: colors.textMuted }}>
-                Admin Observability
-              </Link>
-              <Link href="/upcoming" style={{ textDecoration: "none", color: colors.textMuted }}>
-                Upcoming
-              </Link>
-              <Link href="/settings" style={{ textDecoration: "none", color: colors.textMuted }}>
-                Settings
-              </Link>
+              {isAuthenticated ? (
+                <>
+                  <HouseholdSwitcher />
+                  <Link href="/obligations" style={{ textDecoration: "none", color: colors.textMuted }}>
+                    Obligations
+                  </Link>
+                  <Link href="/subscriptions" style={{ textDecoration: "none", color: colors.textMuted }}>
+                    Subscriptions
+                  </Link>
+                  <Link href="/households" style={{ textDecoration: "none", color: colors.textMuted }}>
+                    Households
+                  </Link>
+                  <Link href="/focus" style={{ textDecoration: "none", color: colors.textMuted }}>
+                    Focus Mode
+                  </Link>
+                  <Link href="/control-tower" style={{ textDecoration: "none", color: colors.textMuted }}>
+                    Control Tower
+                  </Link>
+                  <Link href="/admin/observability" style={{ textDecoration: "none", color: colors.textMuted }}>
+                    Admin Observability
+                  </Link>
+                  <Link href="/upcoming" style={{ textDecoration: "none", color: colors.textMuted }}>
+                    Upcoming
+                  </Link>
+                  <Link href="/settings" style={{ textDecoration: "none", color: colors.textMuted }}>
+                    Settings
+                  </Link>
+                </>
+              ) : null}
+              <UserMenu user={session?.user ?? null} />
             </div>
             </nav>
 

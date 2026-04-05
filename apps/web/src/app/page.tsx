@@ -1,14 +1,36 @@
 import HomeShell from "../components/home-shell";
+import SignInButton from "../components/sign-in-button";
 import PageHeader from "../components/ui/page-header";
 import { getAutoFlow, getDashboardInsights, getTodayFeed } from "../lib/api";
+import { auth } from "../auth";
 import type {
   AutoFlowListResponse,
   DashboardInsightsResponse,
   TodayFeedResponse
 } from "../lib/types";
-import { pageStyles } from "../lib/ui";
+import { cardStyles, pageStyles } from "../lib/ui";
 
 export default async function HomePage() {
+  const session = await auth();
+  const googleConfigured = Boolean(
+    (process.env.AUTH_GOOGLE_ID || "").trim() &&
+      (process.env.AUTH_GOOGLE_SECRET || "").trim()
+  );
+
+  if (!session?.user?.id) {
+    return (
+      <main style={pageStyles.shell}>
+        <section style={{ ...cardStyles.section, maxWidth: 680, margin: "64px auto 0 auto" }}>
+          <PageHeader
+            title="Life Command Bar"
+            description="Your daily command center for real-life admin."
+          />
+          <SignInButton callbackUrl="/" disabled={!googleConfigured} />
+        </section>
+      </main>
+    );
+  }
+
   let data: TodayFeedResponse = {
     generatedAt: new Date().toISOString(),
     items: []

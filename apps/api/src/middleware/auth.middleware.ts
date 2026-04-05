@@ -1,8 +1,8 @@
-import crypto from "crypto";
 import { NextFunction, Request, Response } from "express";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../clients/prisma.client";
 import { fail } from "../utils/api-response";
+import { verifyApiAccessToken } from "../utils/api-access-token";
 
 function getHeaderValue(raw: string | string[] | undefined) {
   if (typeof raw === "string") return raw.trim();
@@ -18,59 +18,75 @@ function getBearerToken(req: Request) {
   return match?.[1]?.trim() ?? "";
 }
 
-function isSafeUserId(value: string) {
-  return /^[a-zA-Z0-9._:-]{3,128}$/.test(value);
-}
-
-function buildFallbackEmail(userId: string) {
-  const hash = crypto.createHash("sha256").update(userId).digest("hex").slice(0, 24);
-  return `user-${hash}@local.lcb`;
-}
-
 function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) && value.length <= 254;
 }
 
+function isSafeUserId(value: string) {
+  return /^[a-zA-Z0-9._:-]{3,128}$/.test(value);
+}
+
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
-  const userIdFromHeader = getHeaderValue(req.headers["x-user-id"]);
-  const userIdFromBearer = getBearerToken(req);
-  const userId = userIdFromHeader || userIdFromBearer;
-
-  if (!userId) {
-    return fail(
-      res,
-      "UNAUTHORIZED",
-      "Authentication required. Provide x-user-id or Authorization: Bearer <user-id>.",
-      401
-    );
-  }
-
-  if (!isSafeUserId(userId)) {
-    return fail(
-      res,
-      "VALIDATION_ERROR",
-      "Invalid user identity format",
-      400,
-      {
-        hint: "Use 3-128 chars: letters, numbers, '.', '_', ':' or '-'."
-      }
-    );
-  }
-
-  const emailHeader = getHeaderValue(req.headers["x-user-email"]);
-  if (emailHeader && !isValidEmail(emailHeader)) {
-    return fail(res, "VALIDATION_ERROR", "Invalid x-user-email header", 400);
-  }
+  const bearerToken = getBearerToken(req);
+  const secret = resolveApiAuthSecret();
+  const devHeaderFallbackEnabled = allowDevHeaderFallback();
 
   try {
-    const email = emailHeader || buildFallbackEmail(userId);
+    if (bearerToken && secret) {
+      const payload = verifyApiAccessToken(bearerToken, secret);
+      if (!payload) {
+        return fail(res, "UNAUTHORIZED", "Invalid or expired authentication token", 401);
+      }
+
+      const user = await prisma.user.findUnique({
+        where: {
+          id: payload.sub
+        }
+      });
+
+      if (!user) {
+        return fail(res, "UNAUTHORIZED", "Authenticated user was not found", 401);
+      }
+
+      if (user.email.toLowerCase() !== payload.email.toLowerCase()) {
+        return fail(res, "UNAUTHORIZED", "Authentication token does not match user", 401);
+      }
+
+      req.auth = {
+        userId: user.id,
+        email: user.email
+      };
+      return next();
+    }
+
+    if (!devHeaderFallbackEnabled) {
+      return fail(
+        res,
+        "UNAUTHORIZED",
+        "Authentication required. Provide Authorization: Bearer <token>.",
+        401
+      );
+    }
+
+    const devUserId = getHeaderValue(req.headers["x-user-id"]);
+    if (!devUserId) {
+      return fail(res, "UNAUTHORIZED", "Authentication required.", 401);
+    }
+    if (!isSafeUserId(devUserId)) {
+      return fail(res, "VALIDATION_ERROR", "Invalid x-user-id format", 400);
+    }
+
+    const emailHeader = getHeaderValue(req.headers["x-user-email"]);
+    if (emailHeader && !isValidEmail(emailHeader)) {
+      return fail(res, "VALIDATION_ERROR", "Invalid x-user-email header", 400);
+    }
 
     const user = await prisma.user.upsert({
-      where: { id: userId },
+      where: { id: devUserId },
       update: emailHeader ? { email: emailHeader } : {},
       create: {
-        id: userId,
-        email
+        id: devUserId,
+        email: emailHeader || `${devUserId}@dev.local`
       }
     });
 
@@ -81,7 +97,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
     return next();
   } catch (error) {
-    logAuthFailure(error, userId, emailHeader);
+    logAuthFailure(error, getHeaderValue(req.headers["x-user-id"]), getHeaderValue(req.headers["x-user-email"]));
 
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -120,6 +136,19 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       hint: "Check API logs for auth middleware dependency failures."
     });
   }
+}
+
+function resolveApiAuthSecret() {
+  const direct = (process.env.API_AUTH_TOKEN_SECRET || "").trim();
+  if (direct.length >= 32) return direct;
+  const shared = (process.env.AUTH_SECRET || "").trim();
+  if (shared.length >= 32) return shared;
+  return "";
+}
+
+function allowDevHeaderFallback() {
+  if (process.env.NODE_ENV === "production") return false;
+  return (process.env.ALLOW_DEV_USER_HEADER_AUTH || "").toLowerCase() === "true";
 }
 
 function isSchemaNotReadyError(error: unknown) {

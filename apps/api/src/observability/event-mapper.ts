@@ -87,8 +87,23 @@ function mapEventType(
     case "upload_ingestion_failed":
       return OBSERVABILITY_EVENT_TYPES.INGESTION_REJECTED;
 
+    case "auth_sign_in_started":
+      return OBSERVABILITY_EVENT_TYPES.AUTH_SIGN_IN_STARTED;
+    case "auth_sign_in_succeeded":
+      return OBSERVABILITY_EVENT_TYPES.AUTH_SIGN_IN_SUCCEEDED;
+    case "auth_sign_in_failed":
+      return OBSERVABILITY_EVENT_TYPES.AUTH_SIGN_IN_FAILED;
+    case "auth_sign_out":
+      return OBSERVABILITY_EVENT_TYPES.AUTH_SIGN_OUT;
+    case "protected_route_redirected":
+      return OBSERVABILITY_EVENT_TYPES.PROTECTED_ROUTE_REDIRECTED;
+
     case "gmail_connection_created":
       return OBSERVABILITY_EVENT_TYPES.GMAIL_CONNECTION_CREATED;
+    case "gmail_connection_linked_to_user":
+      return OBSERVABILITY_EVENT_TYPES.GMAIL_CONNECTION_LINKED_TO_USER;
+    case "gmail_connection_disconnected":
+      return OBSERVABILITY_EVENT_TYPES.GMAIL_CONNECTION_DISCONNECTED;
     case "gmail_sync_started":
       return OBSERVABILITY_EVENT_TYPES.GMAIL_SYNC_STARTED;
     case "gmail_sync_completed":
@@ -213,6 +228,8 @@ function mapEventType(
       return OBSERVABILITY_EVENT_TYPES.ITEM_CLAIMED;
     case "obligation_handed_off":
       return OBSERVABILITY_EVENT_TYPES.ITEM_REASSIGNED;
+    case "household_invite_accepted":
+      return OBSERVABILITY_EVENT_TYPES.HOUSEHOLD_INVITE_ACCEPTED;
 
     case "zero_input_decision_recorded": {
       const decision = getString(metadata.decision);
