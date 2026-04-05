@@ -66,47 +66,103 @@ export class ExternalAccountRepository {
     includeRecurringReceipts: boolean;
     lastHistoryId?: string | null;
   }) {
-    return prisma.externalAccountConnection.upsert({
-      where: {
-        userId_provider: {
-          userId: input.userId,
-          provider: ExternalProvider.GOOGLE_GMAIL
+    const provider = ExternalProvider.GOOGLE_GMAIL;
+    const baseUpdateData: Prisma.ExternalAccountConnectionUpdateInput = {
+      providerAccountId: input.providerAccountId,
+      email: input.email,
+      accessTokenEncrypted: input.accessTokenEncrypted,
+      refreshTokenEncrypted: input.refreshTokenEncrypted,
+      scope: input.scope,
+      status: ExternalAccountStatus.ACTIVE,
+      errorCode: null,
+      errorMessage: null,
+      autoSyncEnabled: input.autoSyncEnabled,
+      scanSubscriptions: input.scanSubscriptions,
+      scanBills: input.scanBills,
+      scanRenewals: input.scanRenewals,
+      includeRecurringReceipts: input.includeRecurringReceipts,
+      lastHistoryId: input.lastHistoryId ?? null,
+      lastSyncStatus: ExternalSyncStatus.IDLE
+    };
+
+    return prisma.$transaction(async (tx) => {
+      const existingByProviderAccount = await tx.externalAccountConnection.findUnique({
+        where: {
+          provider_providerAccountId: {
+            provider,
+            providerAccountId: input.providerAccountId
+          }
+        },
+        select: {
+          id: true,
+          userId: true
         }
-      },
-      update: {
-        providerAccountId: input.providerAccountId,
-        email: input.email,
-        accessTokenEncrypted: input.accessTokenEncrypted,
-        refreshTokenEncrypted: input.refreshTokenEncrypted,
-        scope: input.scope,
-        status: ExternalAccountStatus.ACTIVE,
-        errorCode: null,
-        errorMessage: null,
-        autoSyncEnabled: input.autoSyncEnabled,
-        scanSubscriptions: input.scanSubscriptions,
-        scanBills: input.scanBills,
-        scanRenewals: input.scanRenewals,
-        includeRecurringReceipts: input.includeRecurringReceipts,
-        lastHistoryId: input.lastHistoryId ?? null,
-        lastSyncStatus: ExternalSyncStatus.IDLE
-      },
-      create: {
-        userId: input.userId,
-        provider: ExternalProvider.GOOGLE_GMAIL,
-        providerAccountId: input.providerAccountId,
-        email: input.email,
-        accessTokenEncrypted: input.accessTokenEncrypted,
-        refreshTokenEncrypted: input.refreshTokenEncrypted,
-        scope: input.scope,
-        status: ExternalAccountStatus.ACTIVE,
-        autoSyncEnabled: input.autoSyncEnabled,
-        scanSubscriptions: input.scanSubscriptions,
-        scanBills: input.scanBills,
-        scanRenewals: input.scanRenewals,
-        includeRecurringReceipts: input.includeRecurringReceipts,
-        lastHistoryId: input.lastHistoryId ?? null,
-        lastSyncStatus: ExternalSyncStatus.IDLE
+      });
+
+      if (existingByProviderAccount) {
+        if (existingByProviderAccount.userId !== input.userId) {
+          const existingByUser = await tx.externalAccountConnection.findUnique({
+            where: {
+              userId_provider: {
+                userId: input.userId,
+                provider
+              }
+            },
+            select: {
+              id: true
+            }
+          });
+
+          if (existingByUser && existingByUser.id !== existingByProviderAccount.id) {
+            await tx.externalAccountConnection.delete({
+              where: {
+                id: existingByUser.id
+              }
+            });
+          }
+        }
+
+        return tx.externalAccountConnection.update({
+          where: {
+            id: existingByProviderAccount.id
+          },
+          data: {
+            ...baseUpdateData,
+            user: {
+              connect: {
+                id: input.userId
+              }
+            }
+          }
+        });
       }
+
+      return tx.externalAccountConnection.upsert({
+        where: {
+          userId_provider: {
+            userId: input.userId,
+            provider
+          }
+        },
+        update: baseUpdateData,
+        create: {
+          userId: input.userId,
+          provider,
+          providerAccountId: input.providerAccountId,
+          email: input.email,
+          accessTokenEncrypted: input.accessTokenEncrypted,
+          refreshTokenEncrypted: input.refreshTokenEncrypted,
+          scope: input.scope,
+          status: ExternalAccountStatus.ACTIVE,
+          autoSyncEnabled: input.autoSyncEnabled,
+          scanSubscriptions: input.scanSubscriptions,
+          scanBills: input.scanBills,
+          scanRenewals: input.scanRenewals,
+          includeRecurringReceipts: input.includeRecurringReceipts,
+          lastHistoryId: input.lastHistoryId ?? null,
+          lastSyncStatus: ExternalSyncStatus.IDLE
+        }
+      });
     });
   }
 
