@@ -7,8 +7,10 @@ RUN corepack enable && corepack prepare pnpm@10.0.0 --activate
 # Keep a production-safe default and allow overrides via --build-arg.
 ARG NEXT_PUBLIC_API_BASE_URL="https://api-lcb.contracttocozy.com/api"
 ARG NEXT_PUBLIC_APP_URL="https://lcb.contracttocozy.com"
+ARG AUTH_SECRET="build-only-auth-secret-replace-at-runtime-123456"
 ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
 ENV NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
+ENV AUTH_SECRET=${AUTH_SECRET}
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY apps/web/package.json apps/web/package.json
