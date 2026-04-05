@@ -34,6 +34,17 @@ spec:
                 secretKeyRef:
                   name: lcb-secrets
                   key: LLM_API_KEY
+            - name: AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lcb-secrets
+                  key: AUTH_SECRET
+            - name: API_AUTH_TOKEN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lcb-secrets
+                  key: API_AUTH_TOKEN_SECRET
+                  optional: true
             - name: GOOGLE_OAUTH_CLIENT_ID
               valueFrom:
                 secretKeyRef:

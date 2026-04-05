@@ -24,6 +24,29 @@ spec:
               value: "https://api-lcb.contracttocozy.com/api"
             - name: API_BASE_URL
               value: "https://api-lcb.contracttocozy.com/api"
+            - name: NEXTAUTH_URL
+              value: "https://lcb.contracttocozy.com"
+            - name: AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lcb-secrets
+                  key: AUTH_SECRET
+            - name: AUTH_GOOGLE_ID
+              valueFrom:
+                secretKeyRef:
+                  name: lcb-secrets
+                  key: AUTH_GOOGLE_ID
+            - name: AUTH_GOOGLE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lcb-secrets
+                  key: AUTH_GOOGLE_SECRET
+            - name: API_AUTH_TOKEN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lcb-secrets
+                  key: API_AUTH_TOKEN_SECRET
+                  optional: true
           resources:
             requests:
               cpu: "100m"

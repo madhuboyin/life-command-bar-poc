@@ -1,9 +1,6 @@
+import { PrismaClient } from "@prisma/client";
 
-const { PrismaClient } = require("@prisma/client") as {
-  PrismaClient: new (args?: Record<string, unknown>) => any;
-};
-
-type PrismaClientInstance = InstanceType<typeof PrismaClient>;
+type PrismaClientInstance = PrismaClient;
 
 const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClientInstance;
