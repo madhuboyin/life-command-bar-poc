@@ -1381,6 +1381,10 @@ function applyGmailLifecycleConfidenceHint(
   lifecycle: GmailSubscriptionHeuristicResult | null
 ): ConfidenceEvaluation {
   if (!lifecycle) return confidence;
+  if (lifecycle.lifecycleEmailType === "UNKNOWN") {
+    // Unknown lifecycle should not down-rank base ingestion confidence.
+    return confidence;
+  }
 
   const lifecycleScore = lifecycle.confidence.confidenceScore;
   const mergedScore = clamp(confidence.score * 0.62 + lifecycleScore * 0.38, 0, 1);

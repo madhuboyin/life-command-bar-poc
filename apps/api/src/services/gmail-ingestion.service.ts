@@ -61,7 +61,12 @@ export class GmailIngestionService {
       input.normalizedMessage.gmailMessageId
     );
     
-    if (connection && !connection.includeRecurringReceipts && lifecycle.lifecycleEmailType === "RECEIPT") {
+    if (
+      connection &&
+      !connection.includeRecurringReceipts &&
+      lifecycle.lifecycleEmailType === "RECEIPT" &&
+      input.matchedQueryKey === "recurring_receipt"
+    ) {
       await this.externalAccountRepository.createAuditEvent({
         userId: input.userId,
         eventType: "gmail_candidate_skipped",
