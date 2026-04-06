@@ -2,8 +2,8 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { SubscriptionDecisionFlowData } from "../../../lib/types";
-import { applySubscriptionReviewAction } from "../../../lib/api";
+import { SubscriptionDecisionFlowData } from "@/lib/types";
+import { applySubscriptionReviewAction } from "@/lib/api";
 import { SubscriptionDecisionActions } from "./subscription-decision-actions";
 
 export function SubscriptionReviewFlowShell({ data, subscriptionId }: { data: SubscriptionDecisionFlowData, subscriptionId: string }) {

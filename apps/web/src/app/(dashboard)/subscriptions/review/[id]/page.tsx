@@ -2,9 +2,9 @@
 
 import React, { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { getSubscriptionReviewFlow } from "../../../../../../lib/api";
-import { SubscriptionDecisionFlowData } from "../../../../../../lib/types";
-import { SubscriptionReviewFlowShell } from "../../../../../../components/subscription-review/subscription-review-flow-shell";
+import { getSubscriptionDecisionFlow } from "@/lib/api";
+import { SubscriptionDecisionFlowData } from "@/lib/types";
+import { SubscriptionReviewFlowShell } from "@/components/subscription-review/subscription-review-flow-shell";
 
 export default function SubscriptionDecisionPage() {
   const { id } = useParams() as { id: string };
@@ -14,7 +14,7 @@ export default function SubscriptionDecisionPage() {
 
   useEffect(() => {
     if (!id) return;
-    getSubscriptionReviewFlow(id)
+    getSubscriptionDecisionFlow(id)
       .then((res) => {
         setData(res);
         setLoading(false);

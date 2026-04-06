@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { SubscriptionReviewHubData } from "../../../lib/types";
+import { SubscriptionReviewHubData } from "@/lib/types";
 import { SubscriptionReviewCard } from "./subscription-review-card";
 
 export function SubscriptionReviewHubShell({ data }: { data: SubscriptionReviewHubData }) {

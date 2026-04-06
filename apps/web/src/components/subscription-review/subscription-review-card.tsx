@@ -1,6 +1,6 @@
 import React from "react";
 import Link from "next/link";
-import { SubscriptionReviewItem } from "../../../lib/types";
+import { SubscriptionReviewItem } from "@/lib/types";
 
 export function SubscriptionReviewCard({ item }: { item: SubscriptionReviewItem }) {
   const isDark = "dark"; // Assuming you have standard dark mode utilities here

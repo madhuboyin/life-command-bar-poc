@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { getSubscriptionReviewHub } from "../../../../../lib/api";
-import { SubscriptionReviewHubData } from "../../../../../lib/types";
-import { SubscriptionReviewHubShell } from "../../../../../components/subscription-review/subscription-review-hub-shell";
+import { getSubscriptionReviewHub } from "@/lib/api";
+import { SubscriptionReviewHubData } from "@/lib/types";
+import { SubscriptionReviewHubShell } from "@/components/subscription-review/subscription-review-hub-shell";
 
 export default function SubscriptionReviewPage() {
   const [data, setData] = useState<SubscriptionReviewHubData | null>(null);
