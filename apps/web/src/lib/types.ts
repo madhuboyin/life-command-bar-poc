@@ -1609,3 +1609,75 @@ export interface AdminAlertsResponse {
     low: number;
   };
 }
+
+export interface SubscriptionReviewItem {
+  subscriptionId: string;
+  title: string;
+  vendorName: string;
+  planName: string | null;
+  lifecycleState: SubscriptionLifecycleState | "REVIEW";
+  recurringPrice: number | null;
+  currency: string | null;
+  nextRenewalDate: string | null;
+  recommendationType: string;
+  recommendationReason: string;
+  healthScore: number;
+  confidenceBand: string;
+  primaryInsight: string | null;
+  assignee: string | null;
+  scopeType: "PERSONAL" | "HOUSEHOLD";
+}
+
+export interface SubscriptionReviewGroup {
+  key: string;
+  title: string;
+  description: string;
+  items: SubscriptionReviewItem[];
+}
+
+export interface SubscriptionReviewSummary {
+  totalReviewItems: number;
+  renewingSoonCount: number;
+  priceIncreasedCount: number;
+  needsConfirmationCount: number;
+  potentialSavingsAmount: number;
+  currency: string;
+}
+
+export interface SubscriptionReviewHubData {
+  summary: SubscriptionReviewSummary;
+  groups: SubscriptionReviewGroup[];
+}
+
+export interface SubscriptionDecisionFlowData {
+  subscription: {
+    id: string;
+    title: string;
+    vendorName: string;
+    planName: string | null;
+    lifecycleState: string;
+    recurringPrice: number | null;
+    currency: string | null;
+    nextRenewalDate: string | null;
+    confidenceBand: string;
+    healthScore: number;
+  };
+  recommendation: {
+    type: string;
+    reason: string;
+    confidence: number;
+    supportingInsights: string[];
+  };
+  decisionContext: {
+    whatChanged: string;
+    whyNow: string;
+    riskLevel: string;
+    sourceSummary: string;
+  };
+  actions: Array<{ key: string; label: string }>;
+  detailSections: {
+    priceHistory: Array<any>;
+    evidenceSummary: Array<{ title: string; desc: string }>;
+    lifecycleTimeline: Array<any>;
+  };
+}

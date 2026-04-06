@@ -29,6 +29,7 @@ import { requireAdmin } from "./middleware/admin.middleware";
 import { gmailRouter } from "./routes/gmail.routes";
 import { gmailPublicRouter } from "./routes/gmail-public.routes";
 import { subscriptionRouter } from "./routes/subscription.routes";
+import { subscriptionReviewRouter } from "./routes/subscription-review.routes";
 
 export function createApp() {
   const app = express();
@@ -61,6 +62,7 @@ export function createApp() {
   app.use("/api/households", householdRouter);
   app.use("/api/household-invites", householdInviteRouter);
   app.use("/api/gmail", gmailRouter);
+  app.use("/api/subscriptions/review", subscriptionReviewRouter);
   app.use("/api/subscriptions", subscriptionRouter);
   app.use("/api/admin", requireAdmin, adminObservabilityRouter);
   app.use("/api", resolutionRouter);

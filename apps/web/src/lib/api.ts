@@ -54,7 +54,9 @@ import type {
   SubscriptionRegistryListResponse,
   TodayFeedResponse,
   ZeroInputDecisionItem,
-  ZeroInputPolicy
+  ZeroInputPolicy,
+  SubscriptionReviewHubData,
+  SubscriptionDecisionFlowData
 } from "./types";
 
 const PUBLIC_API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "").trim();
@@ -2181,4 +2183,34 @@ export async function getAdminAlerts(params?: {
   });
 
   return handleResponse<AdminAlertsResponse>(res);
+}
+
+export async function getSubscriptionReviewHub() {
+  const res = await apiFetch(`/subscriptions/review`, {
+    cache: "no-store"
+  });
+  return handleResponse<SubscriptionReviewHubData>(res);
+}
+
+export async function getSubscriptionDecisionFlow(subscriptionId: string) {
+  const res = await apiFetch(`/subscriptions/review/${subscriptionId}/review-flow`, {
+    cache: "no-store"
+  });
+  return handleResponse<SubscriptionDecisionFlowData>(res);
+}
+
+export async function applySubscriptionReviewAction(
+  subscriptionId: string,
+  input: {
+    action: "KEEP" | "CANCEL" | "REMIND_LATER" | "REVIEWED";
+    remindAt?: string | null;
+    note?: string | null;
+  }
+) {
+  const res = await apiFetch(`/subscriptions/review/${subscriptionId}/review-actions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  return handleResponse<{ success: boolean; action: string; subscriptionId: string; nextState: string }>(res);
 }
