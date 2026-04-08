@@ -9,7 +9,7 @@ export default function PredictionRationale({ item }: Props) {
   if (!item.rationaleSummary) {
     return (
       <div style={{ fontSize: 13, color: colors.textMuted }}>
-        Based on what you've handled before.
+        Based on what you&apos;ve handled before.
       </div>
     );
   }
