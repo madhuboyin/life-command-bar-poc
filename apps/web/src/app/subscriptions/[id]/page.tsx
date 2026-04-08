@@ -103,10 +103,10 @@ export default async function SubscriptionDetailPage({ params }: Props) {
           </section>
 
           <section style={{ ...cardStyles.section, display: "grid", gap: 10 }}>
-            <h2 style={{ margin: 0 }}>Lifecycle Events</h2>
+            <h2 style={{ margin: 0 }}>Status Updates</h2>
             {subscription.lifecycleEvents.length === 0 ? (
               <div style={{ ...cardStyles.bordered, color: colors.textMuted, fontSize: 13 }}>
-                No lifecycle events yet.
+                No status updates yet.
               </div>
             ) : (
               <div style={{ display: "grid", gap: 8 }}>

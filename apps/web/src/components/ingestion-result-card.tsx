@@ -24,6 +24,12 @@ export default function IngestionResultCard({ result, sourceLabel }: Props) {
       : result.confidenceBand === "MEDIUM"
         ? "#92400e"
         : colors.errorText;
+  const confidenceLabel =
+    result.confidenceBand === "HIGH"
+      ? "Looks clear"
+      : result.confidenceBand === "MEDIUM"
+        ? "Worth a quick check"
+        : "Not sure yet";
 
   return (
     <section style={{ ...cardStyles.bordered, marginTop: 14 }}>
@@ -38,9 +44,9 @@ export default function IngestionResultCard({ result, sourceLabel }: Props) {
           <strong>Status:</strong> {result.status}
         </div>
         <div>
-          <strong>Confidence:</strong>{" "}
+          <strong>How clear:</strong>{" "}
           <span style={{ color: statusColor }}>
-            {Math.round(result.confidence * 100)}% ({result.confidenceBand})
+            {confidenceLabel}
           </span>
         </div>
         <div>
@@ -106,7 +112,7 @@ export default function IngestionResultCard({ result, sourceLabel }: Props) {
         </div>
       ) : (
         <div style={{ marginTop: 10, color: colors.textMuted }}>
-          Not enough signal to create a candidate. Try adding a due date, vendor, or amount.
+          We need a bit more detail before creating a draft. Try adding a due date, vendor, or amount.
         </div>
       )}
       {feedbackState === "saved" ? (

@@ -10,6 +10,7 @@ import {
   toRecommendationKey,
   toStatusKey
 } from "./human-language.mapper";
+import { hardenUserFacingCopy } from "./user-facing-copy";
 
 type BuilderResult = {
   primary: string;
@@ -81,8 +82,8 @@ export function getUserFacingText(
   }
 
   trackMessageKey(key);
-  if (!context) return template;
-  return injectContext(template, context);
+  if (!context) return hardenUserFacingCopy(template);
+  return hardenUserFacingCopy(injectContext(template, context));
 }
 
 export function buildSummaryMessage(input: SummaryMessageInput): BuilderResult {
@@ -234,7 +235,8 @@ function toSimpleSentence(value: string | null | undefined) {
   if (!value) return null;
   const trimmed = value.trim();
   if (!trimmed) return null;
-  return trimmed.length > 180 ? `${trimmed.slice(0, 177)}...` : trimmed;
+  const sentence = trimmed.length > 180 ? `${trimmed.slice(0, 177)}...` : trimmed;
+  return hardenUserFacingCopy(sentence);
 }
 
 function sourceToContext(source: string) {
@@ -331,5 +333,6 @@ function compactSentence(value?: string | null) {
   if (!value) return undefined;
   const trimmed = value.trim();
   if (!trimmed) return undefined;
-  return trimmed.length > 120 ? `${trimmed.slice(0, 117)}...` : trimmed;
+  const sentence = trimmed.length > 120 ? `${trimmed.slice(0, 117)}...` : trimmed;
+  return hardenUserFacingCopy(sentence);
 }

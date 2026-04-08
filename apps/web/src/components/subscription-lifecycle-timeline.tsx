@@ -9,14 +9,14 @@ export default function SubscriptionLifecycleTimeline({
   if (items.length === 0) {
     return (
       <section style={{ ...cardStyles.section, color: colors.textMuted }}>
-        No lifecycle events available yet.
+        No status updates yet.
       </section>
     );
   }
 
   return (
     <section style={{ ...cardStyles.section, display: "grid", gap: 8 }}>
-      <h3 style={{ margin: 0 }}>Lifecycle timeline</h3>
+      <h3 style={{ margin: 0 }}>Status timeline</h3>
       <div style={{ display: "grid", gap: 8 }}>
         {items.map((item) => (
           <article key={item.id} style={{ ...cardStyles.item, display: "grid", gap: 4 }}>

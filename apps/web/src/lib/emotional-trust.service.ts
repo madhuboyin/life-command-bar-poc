@@ -15,6 +15,7 @@ import type {
   MessagePresentationStyle,
   ReminderSuggestionStyle
 } from "./human-language.service";
+import { hardenUserFacingCopy } from "./user-facing-copy";
 
 type ReassurancePattern =
   | "primary_reassurance"
@@ -98,8 +99,8 @@ export function getEmotionalTrustText(
   }
 
   trackEmotionalMessageKey(key);
-  if (!context) return template;
-  return injectContext(template, context);
+  if (!context) return hardenUserFacingCopy(template);
+  return hardenUserFacingCopy(injectContext(template, context));
 }
 
 export function buildPrimaryReassurance(input: CommonInput = {}): EmotionalTrustMessage {
@@ -478,7 +479,7 @@ function tunePrimaryReassurance(
   if (input.presentationStyle === "COMPACT_ACTION") {
     return {
       ...base,
-      supporting: "Clear next step. Keep it short."
+      supporting: hardenUserFacingCopy("Clear next step. Keep it short.")
     };
   }
 
@@ -488,14 +489,14 @@ function tunePrimaryReassurance(
       : "A quick review first is enough.";
     return {
       ...base,
-      supporting
+      supporting: hardenUserFacingCopy(supporting)
     };
   }
 
   if (input.reminderStyle === "REALISTIC_FOLLOWUP") {
     return {
       ...base,
-      supporting: "Review now, or choose a realistic follow-up time."
+      supporting: hardenUserFacingCopy("Review now, or choose a realistic follow-up time.")
     };
   }
 
@@ -514,26 +515,30 @@ function tuneReminderDeferral(
   if (reminderStyle === "SHORT_FOLLOWUP") {
     return {
       ...base,
-      primary:
+      primary: hardenUserFacingCopy(
         phase === "after"
           ? "Reminder set for soon follow-up."
-          : "Not ready? Set a near follow-up.",
-      supporting:
+          : "Not ready? Set a near follow-up."
+      ),
+      supporting: hardenUserFacingCopy(
         phase === "after"
           ? "We'll nudge this again soon."
           : "A short reminder can help you close it quickly."
+      )
     };
   }
 
   return {
     ...base,
-    primary:
+    primary: hardenUserFacingCopy(
       phase === "after"
         ? "Reminder set for a realistic follow-up."
-        : "No rush. Choose a realistic follow-up.",
-    supporting:
+        : "No rush. Choose a realistic follow-up."
+    ),
+    supporting: hardenUserFacingCopy(
       phase === "after"
         ? "We'll bring this back at a workable time."
         : "A practical reminder helps reduce repeat postponing."
+    )
   };
 }

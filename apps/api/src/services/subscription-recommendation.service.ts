@@ -26,7 +26,7 @@ export class SubscriptionRecommendationService {
         subscriptionId: input.subscriptionId,
         recommendationType: SubscriptionRecommendationType.CONFIRM,
         confidence: 0.9,
-        reason: "Cancellation signal is strong. Confirm and close remaining renewal prompts.",
+        reason: "Cancellation looks clear. Confirm and close any remaining renewal prompts.",
         supportingInsights: input.insights
       });
     }
@@ -46,7 +46,7 @@ export class SubscriptionRecommendationService {
         subscriptionId: input.subscriptionId,
         recommendationType: SubscriptionRecommendationType.REVIEW,
         confidence: 0.82,
-        reason: "Duplicate subscription signals were detected. Review to merge or separate correctly.",
+        reason: "This may be a duplicate subscription. Review to merge or separate it correctly.",
         supportingInsights: input.insights
       });
     }
@@ -56,7 +56,7 @@ export class SubscriptionRecommendationService {
         subscriptionId: input.subscriptionId,
         recommendationType: SubscriptionRecommendationType.REVIEW,
         confidence: 0.74,
-        reason: "Lifecycle or plan signals conflict. Review to keep the subscription record accurate.",
+        reason: "Plan details do not line up yet. Review to keep this subscription accurate.",
         supportingInsights: input.insights
       });
     }
@@ -86,7 +86,7 @@ export class SubscriptionRecommendationService {
         subscriptionId: input.subscriptionId,
         recommendationType: SubscriptionRecommendationType.REVIEW,
         confidence: 0.62,
-        reason: "Signals are still weak. Confirm details so future decisions stay accurate.",
+        reason: "We still need a bit more detail. Confirm this so future suggestions stay accurate.",
         supportingInsights: input.insights
       });
     }
@@ -98,8 +98,8 @@ export class SubscriptionRecommendationService {
         recommendationType: confident ? SubscriptionRecommendationType.KEEP : SubscriptionRecommendationType.REVIEW,
         confidence: confident ? 0.78 : 0.64,
         reason: confident
-          ? "Renewal is upcoming and signals are stable. Keep unless your usage changed."
-          : "Renewal is upcoming but confidence is moderate. Quick review is recommended.",
+          ? "Renewal is coming up and details look steady. Keep unless your usage changed."
+          : "Renewal is coming up, but details still need a quick check.",
         supportingInsights: input.insights
       });
     }
@@ -122,7 +122,7 @@ export class SubscriptionRecommendationService {
       subscriptionId: input.subscriptionId,
       recommendationType: SubscriptionRecommendationType.KEEP,
       confidence: 0.58,
-      reason: "No high-risk signals detected. Keep monitoring lifecycle updates.",
+      reason: "Nothing risky stands out. Keep an eye on future status updates.",
       supportingInsights: input.insights
     });
   }
@@ -155,4 +155,3 @@ function clamp(value: number, minValue: number, maxValue: number) {
   if (value > maxValue) return maxValue;
   return value;
 }
-

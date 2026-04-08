@@ -569,7 +569,7 @@ function buildSourceSummary(
   subscriptionVendorName: string | null
 ) {
   if (subscriptionVendorName && obligation.subscriptionId) {
-    return `Linked to subscription lifecycle signals for ${subscriptionVendorName}.`;
+    return `Linked to recent subscription updates for ${subscriptionVendorName}.`;
   }
 
   if (obligation.sourceMetadata?.provenanceLabel) {
@@ -577,10 +577,10 @@ function buildSourceSummary(
   }
 
   if (obligation.sourceType === "EMAIL") {
-    return "Detected from Gmail billing and lifecycle messages.";
+    return "Found from Gmail billing and subscription updates.";
   }
 
-  return "Detected from trusted obligation intelligence signals.";
+  return "Found from recent obligation activity.";
 }
 
 function toCompletedStatus(status: ObligationStatus): DailyCommandCenterCompletedItem["status"] {
@@ -653,7 +653,7 @@ function mergeUpcomingWithPredictions(
       secondaryActions: [],
       whyNow: prediction.predictedDate
         ? `Likely due around ${prediction.predictedDate.slice(0, 10)}.`
-        : "Expected this week from recurring patterns.",
+        : "Likely this week based on your history.",
       whyThisMatters: "Looking ahead reduces last-minute decision pressure.",
       sourceSummary: prediction.sourceLabel,
       scopeType: "PERSONAL",

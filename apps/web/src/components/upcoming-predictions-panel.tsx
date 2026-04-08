@@ -39,7 +39,7 @@ export default function UpcomingPredictionsPanel({
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Could not load upcoming signals");
+          setError(err instanceof Error ? err.message : "Could not load upcoming items");
         }
       } finally {
         if (!cancelled) {
@@ -62,7 +62,7 @@ export default function UpcomingPredictionsPanel({
       setData(next);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not refresh upcoming signals");
+      setError(err instanceof Error ? err.message : "Could not refresh upcoming items");
     } finally {
       setLoading(false);
     }
@@ -100,8 +100,8 @@ export default function UpcomingPredictionsPanel({
 
       {items.length === 0 && !loading ? (
         <EmptyState
-          title="No strong upcoming signals"
-          description="As patterns stabilize, this area will show what is likely coming next."
+          title="Nothing important coming up"
+          description="As things settle, this area will show what may be coming next."
         />
       ) : (
         <div style={{ display: "grid", gap: 10 }}>

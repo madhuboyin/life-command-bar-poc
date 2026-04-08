@@ -13,7 +13,7 @@ type Props = {
 
 export default function OutcomeFeedbackPrompt({
   title = "Was this helpful?",
-  description = "A quick signal helps future recommendations stay relevant.",
+  description = "A quick note helps future suggestions stay relevant.",
   loading = false,
   submitted = false,
   onHelpful,

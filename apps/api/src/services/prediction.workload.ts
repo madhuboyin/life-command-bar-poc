@@ -165,10 +165,10 @@ export function buildWorkloadWindowPredictions(input: {
             : `Next ${days} days look light`,
       description:
         workloadBand === "HEAVY"
-          ? `Expected workload is elevated with ${dueObligations.length} due items and ${predictedRecurring.length} expected recurring items.`
+          ? `It may feel busy with ${dueObligations.length} due items and ${predictedRecurring.length} likely recurring items.`
           : workloadBand === "MODERATE"
-            ? `${dueObligations.length} due items and ${predictedRecurring.length} expected recurring items are likely in this window.`
-            : "No dense admin cluster is expected in this window.",
+            ? `${dueObligations.length} due items and ${predictedRecurring.length} likely recurring items may show up in this window.`
+            : "Nothing heavy is expected in this window.",
       predictionWindowStart: windowStart,
       predictionWindowEnd: windowEnd,
       confidenceScore: round(confidenceScore, 4),

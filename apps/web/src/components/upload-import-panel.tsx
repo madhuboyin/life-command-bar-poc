@@ -47,7 +47,7 @@ export default function UploadImportPanel({ onCompleted }: Props) {
       setUploadIngestionResult(result.ingestion);
       setSuccess(
         result.ingestion.status === "NO_CANDIDATE"
-          ? "File uploaded. We saved the import but need more signal to build a draft."
+          ? "File uploaded. We saved it, but need a bit more detail before drafting."
           : "File uploaded and ingested"
       );
       showToast({

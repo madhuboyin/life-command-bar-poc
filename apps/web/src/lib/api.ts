@@ -61,6 +61,7 @@ import type {
   ZeroInputDecisionItem,
   ZeroInputPolicy
 } from "./types";
+import { hardenUserFacingData } from "./user-facing-copy";
 
 const PUBLIC_API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "").trim();
 const SERVER_API_BASE_URL = (process.env.API_BASE_URL || "").trim();
@@ -425,10 +426,10 @@ async function handleResponse<T>(res: Response): Promise<T> {
   }
 
   if (payload && "data" in payload) {
-    return payload.data as T;
+    return hardenUserFacingData(payload.data as T);
   }
 
-  return payload as T;
+  return hardenUserFacingData(payload as T);
 }
 
 export async function getTodayFeed(params?: {

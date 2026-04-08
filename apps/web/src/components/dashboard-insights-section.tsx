@@ -45,7 +45,7 @@ export default function DashboardInsightsSection({
   return (
     <SectionCard
       title="Dashboard Insights"
-      description="Quiet signals about progress, pressure, and what to handle next."
+      description="A calm view of progress, pressure, and what to handle next."
     >
       {onRefresh ? (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, gap: 10, flexWrap: "wrap" }}>

@@ -348,7 +348,7 @@ export class ControlTowerService {
         const primaryReason =
           reasonLines[0] ??
           (item.candidateAction === "PROMOTE_RECURRING_PREDICTION"
-            ? "System found a stable recurring pattern."
+            ? "This follows a recurring history."
             : "Approval needed before safe automation.");
 
         return {
@@ -458,7 +458,7 @@ export class ControlTowerService {
       .map<ControlTowerReviewItem>((item) => {
         const reasons = [
           item.confidenceBand === "LOW"
-            ? "Low confidence prediction"
+            ? "Not sure yet"
             : "Prediction review suggested"
         ];
         return {
@@ -479,7 +479,7 @@ export class ControlTowerService {
         priorityBand: null,
         surfacingTarget: null,
         why: {
-          primaryReason: item.rationaleSummary ?? "Pattern requires confirmation",
+          primaryReason: item.rationaleSummary ?? "Needs a quick check",
           signals: ["due soon", "recent activity"],
             confidence: toWhyConfidence(item.confidenceScore),
             personalizationReason: null
@@ -795,8 +795,8 @@ export class ControlTowerService {
     const primaryReason =
       item.rationaleSummary ??
       (item.predictionType === "WORKLOAD_WINDOW"
-        ? "Upcoming workload signal"
-        : "Pattern suggests this is coming soon");
+        ? "A busy stretch may be coming"
+        : "This may be coming soon");
 
     return {
       id: `upcoming:${item.id}`,
@@ -825,10 +825,10 @@ export class ControlTowerService {
 }
 
 function predictionSourceLabel(referenceType: string) {
-  if (referenceType === "OBLIGATION") return "Predicted from obligation history";
-  if (referenceType === "MEMORY_PATTERN") return "Predicted from memory pattern";
-  if (referenceType === "MEMORY_ENTITY") return "Predicted from system context";
-  return "Predicted from vendor pattern";
+  if (referenceType === "OBLIGATION") return "Based on obligation history";
+  if (referenceType === "MEMORY_PATTERN") return "Based on your history";
+  if (referenceType === "MEMORY_ENTITY") return "Based on recent context";
+  return "Based on vendor history";
 }
 
 function reviewPriorityScore(item: ControlTowerReviewItem) {
@@ -1030,7 +1030,7 @@ function toRecentDescription(eventType: string, metadata: Record<string, unknown
         description:
           (typeof metadata?.reason === "string" && metadata.reason.length > 0
             ? metadata.reason
-            : "Recent system or user action recorded.") ?? "Recent action recorded.",
+            : "Recent activity recorded.") ?? "Recent activity recorded.",
         outcomeLabel: "Recorded"
       };
   }

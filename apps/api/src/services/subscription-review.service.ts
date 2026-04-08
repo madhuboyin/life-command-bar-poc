@@ -171,7 +171,7 @@ export class SubscriptionReviewService {
           primaryInsight:
             insights[0]?.title ??
             recommendation.reason ??
-            "No major risk signal detected. Monitoring for changes.",
+            "Nothing major stands out right now. We will watch for changes.",
           assignee: subscription.assignedToUser
             ? {
                 id: subscription.assignedToUser.id,
@@ -380,10 +380,10 @@ function groupDescription(key: GroupKey) {
     return "Recurring price increased based on recent subscription evidence.";
   }
   if (key === "NEEDS_CONFIRMATION") {
-    return "Conflicting or low-confidence details that should be confirmed now.";
+    return "Details still need a quick check before deciding.";
   }
   if (key === "POTENTIALLY_UNUSED") {
-    return "Weak value or inactivity signals suggest a quick review is worth it.";
+    return "Light usage suggests this is worth a quick review.";
   }
   if (key === "RECENTLY_CANCELED") {
     return "Cancellation state items that still need acknowledgment or follow-up.";

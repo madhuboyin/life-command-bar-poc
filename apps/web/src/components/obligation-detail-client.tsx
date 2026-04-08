@@ -330,31 +330,35 @@ export default function ObligationDetailClient({ obligation }: Props) {
           <div>
             <strong>Provenance:</strong> {sourceDetails.provenanceLabel}
             {sourceDetails.parseConfidence !== null && sourceDetails.parseConfidence !== undefined
-              ? ` (${Math.round(sourceDetails.parseConfidence * 100)}%)`
+              ? sourceDetails.parseConfidence >= 0.75
+                ? " · looks clear"
+                : sourceDetails.parseConfidence >= 0.5
+                  ? " · worth a quick check"
+                  : " · not sure yet"
               : ""}
           </div>
         ) : null}
         {gmailLifecycleType ? (
           <div>
-            <strong>Gmail lifecycle:</strong> {gmailLifecycleType}
+            <strong>Gmail status:</strong> {gmailLifecycleType}
             {gmailLifecyclePlan ? ` · Plan ${gmailLifecyclePlan}` : ""}
-            {gmailLifecycleConfidenceBand ? ` · Confidence ${gmailLifecycleConfidenceBand}` : ""}
+            {gmailLifecycleConfidenceBand ? ` · ${gmailLifecycleConfidenceBand.toLowerCase()}` : ""}
           </div>
         ) : null}
         {gmailVendorName ? (
           <div>
-            <strong>Vendor intelligence:</strong> {gmailVendorName}
+            <strong>Vendor details:</strong> {gmailVendorName}
             {gmailVendorCategory ? ` (${gmailVendorCategory})` : ""}
-            {gmailVendorScore !== null ? ` · score ${Math.round(gmailVendorScore * 100)}%` : ""}
-            {gmailRoutingReason ? ` · routing: ${gmailRoutingReason.replace(/_/g, " ")}` : ""}
+            {gmailVendorScore !== null ? ` · match noted` : ""}
+            {gmailRoutingReason ? ` · ${gmailRoutingReason.replace(/_/g, " ")}` : ""}
           </div>
         ) : null}
         <div><strong>Recurrence:</strong> {current.recurrence ?? "—"}</div>
       </section>
 
       <section style={cardStyles.bordered}>
-        <div style={text.label}>Ranking Signals</div>
-        <div><strong>Confidence:</strong> {current.confidenceScore}</div>
+        <div style={text.label}>Priority Overview</div>
+        <div><strong>How clear:</strong> {current.confidenceBand.toLowerCase()}</div>
         <div><strong>Urgency:</strong> {current.urgencyScore}</div>
         <div><strong>Importance:</strong> {current.importanceScore}</div>
         <div><strong>Effort:</strong> {current.effortLevel}</div>

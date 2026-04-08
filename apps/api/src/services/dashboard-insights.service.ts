@@ -798,7 +798,7 @@ function buildUpcomingPredictionCard(
 
   return {
     key: "upcoming_prediction",
-    title: "Upcoming signal",
+    title: "Upcoming item",
     value: predictedDateLabel ? `By ${predictedDateLabel}` : "Likely soon",
     supportingText:
       candidate.description ??
@@ -855,7 +855,7 @@ function buildCards(input: {
       supportingText:
         summary.quickWinsAvailable > 0
           ? "Low-effort tasks with meaningful impact are ready."
-          : "No strong quick wins detected right now.",
+          : "No strong quick wins right now.",
       tone: summary.quickWinsAvailable > 0 ? "positive" : "neutral",
       priority: summary.quickWinsAvailable > 0 ? 3 : 6,
       targetView: "quick_wins"
@@ -884,7 +884,7 @@ function buildCards(input: {
       supportingText:
         postponedStats.repeatedCount > 0
           ? `${postponedStats.repeatedCount} ${pluralize("item", postponedStats.repeatedCount)} postponed more than once.`
-          : "No repeated postponement pattern detected.",
+          : "No repeated postponements right now.",
       tone: summary.postponedRecently > 0 ? "warning" : "neutral",
       priority: postponedStats.repeatedCount > 0 ? 2 : summary.postponedRecently > 0 ? 3 : 7,
       targetView: "postponed_recently"

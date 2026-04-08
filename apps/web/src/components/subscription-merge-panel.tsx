@@ -43,7 +43,7 @@ export default function SubscriptionMergePanel({
     <section style={{ ...cardStyles.section, display: "grid", gap: 10 }}>
       <h2 style={{ margin: 0 }}>Merge Duplicate Subscription</h2>
       <p style={{ margin: 0, color: colors.textMuted, fontSize: 14 }}>
-        Move evidence, lifecycle history, and linked obligations from a duplicate record into this canonical subscription.
+        Move updates, status history, and linked items from a duplicate record into this main subscription.
       </p>
       <input
         value={duplicateId}

@@ -1,9 +1,10 @@
 import { Response } from "express";
+import { hardenUserFacingResponseData } from "./user-facing-copy";
 
 export function ok<T>(res: Response, data: T, status = 200) {
   return res.status(status).json({
     success: true,
-    data
+    data: hardenUserFacingResponseData(data)
   });
 }
 
@@ -18,7 +19,7 @@ export function fail(
     success: false,
     error: {
       code,
-      message,
+      message: hardenUserFacingResponseData(message),
       details: details ?? {}
     }
   });

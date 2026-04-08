@@ -6,6 +6,7 @@ import {
   getMemoryPatterns,
   updateMemoryPattern
 } from "../lib/api";
+import { hardenUserFacingCopy } from "../lib/user-facing-copy";
 import type { MemoryPattern, Obligation } from "../lib/types";
 import { buttonStyles, cardStyles, colors, inputStyles } from "../lib/ui";
 import StatusMessage from "./ui/status-message";
@@ -44,7 +45,7 @@ export default function MemoryPatternsPanel({ obligation }: Props) {
         }
       } catch (loadError) {
         if (!cancelled) {
-          setError(loadError instanceof Error ? loadError.message : "Could not load memory patterns");
+          setError(loadError instanceof Error ? loadError.message : "Could not load memory");
         }
       } finally {
         if (!cancelled) {
@@ -118,8 +119,8 @@ export default function MemoryPatternsPanel({ obligation }: Props) {
         variant: "success",
         title: pattern.isSuppressed ? "Pattern restored" : "Pattern suppressed",
         description: pattern.isSuppressed
-          ? "This pattern is active again."
-          : "This pattern will no longer drive recommendations."
+          ? "This memory is active again."
+          : "This memory won't drive suggestions right now."
       });
     });
   }
@@ -131,7 +132,7 @@ export default function MemoryPatternsPanel({ obligation }: Props) {
       showToast({
         variant: "success",
         title: "Pattern removed",
-        description: "The memory pattern was deleted."
+        description: "This memory note was removed."
       });
     });
   }
@@ -170,7 +171,7 @@ export default function MemoryPatternsPanel({ obligation }: Props) {
         patternData: {
           ...data,
           labels: ["balanced"],
-          reason: "Behavior profile manually set to balanced."
+          reason: "Behavior style manually reset to balanced."
         },
         isUserLocked: true
       });
@@ -179,7 +180,7 @@ export default function MemoryPatternsPanel({ obligation }: Props) {
       );
       showToast({
         variant: "success",
-        title: "Behavior profile updated",
+        title: "Behavior style updated",
         description: "Behavior assumptions were reset to balanced."
       });
     });
@@ -189,7 +190,7 @@ export default function MemoryPatternsPanel({ obligation }: Props) {
     <section style={cardStyles.bordered}>
       <h3 style={{ marginTop: 0 }}>Home Memory</h3>
       <p style={{ marginTop: 0, color: colors.textMuted, fontSize: 14 }}>
-        Pattern signals derived from your real behavior. You can override or remove these anytime.
+        Notes from how you handle life admin. You can edit or remove these anytime.
       </p>
 
       {loading ? <div style={{ color: colors.textMuted, fontSize: 14 }}>Loading memory…</div> : null}
@@ -198,7 +199,7 @@ export default function MemoryPatternsPanel({ obligation }: Props) {
       {!loading ? (
         <div style={{ display: "grid", gap: 10 }}>
           <div style={{ fontSize: 13, color: colors.textMuted }}>
-            Behavior profile:{" "}
+            Behavior style:{" "}
             {behaviorLabels.length > 0 ? behaviorLabels.join(" · ") : "Not enough data yet"}
           </div>
           {behaviorPattern ? (
@@ -218,20 +219,22 @@ export default function MemoryPatternsPanel({ obligation }: Props) {
                 style={buttonStyles.secondary}
               >
                 {behaviorPattern.isSuppressed
-                  ? "Restore behavior pattern"
-                  : "Suppress behavior pattern"}
+                  ? "Restore behavior style"
+                  : "Pause behavior style"}
               </button>
             </div>
           ) : null}
 
           {recurringMatches.length === 0 ? (
             <div style={{ fontSize: 13, color: colors.textMuted }}>
-              No recurring memory pattern is linked to this obligation yet.
+              No recurring memory is linked to this item yet.
             </div>
           ) : (
             recurringMatches.map((pattern) => {
               const data = asRecord(pattern.patternData);
-              const reason = toStringOrNull(data?.reason) ?? "Recurring pattern detected.";
+              const reason = hardenUserFacingCopy(
+                toStringOrNull(data?.reason) ?? "Recurring history found."
+              );
               const recurrenceType = toStringOrNull(data?.recurrenceType) ?? "IRREGULAR";
               const saveState = saveStateById[pattern.id] ?? { loading: false, error: null };
 
@@ -252,7 +255,7 @@ export default function MemoryPatternsPanel({ obligation }: Props) {
                     {reason}
                   </div>
                   <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 8 }}>
-                    Confidence {Math.round(pattern.confidence * 100)}% · Observed {pattern.frequency} times
+                    Seen {pattern.frequency} times
                   </div>
 
                   <div
@@ -295,7 +298,7 @@ export default function MemoryPatternsPanel({ obligation }: Props) {
                       disabled={saveState.loading}
                       style={buttonStyles.secondary}
                     >
-                      {pattern.isSuppressed ? "Restore pattern" : "Suppress pattern"}
+                      {pattern.isSuppressed ? "Restore memory" : "Pause memory"}
                     </button>
 
                     <button
@@ -304,7 +307,7 @@ export default function MemoryPatternsPanel({ obligation }: Props) {
                       disabled={saveState.loading}
                       style={buttonStyles.danger}
                     >
-                      Remove pattern
+                      Remove memory
                     </button>
                   </div>
 
@@ -325,7 +328,9 @@ function extractBehaviorLabels(pattern: MemoryPattern | null) {
   if (!pattern) return [];
   const data = asRecord(pattern.patternData);
   if (!Array.isArray(data?.labels)) return [];
-  return data.labels.filter((item): item is string => typeof item === "string");
+  return data.labels
+    .filter((item): item is string => typeof item === "string")
+    .map((label) => toBehaviorLabel(label));
 }
 
 function buildInitialRecurrenceDrafts(patterns: MemoryPattern[]) {
@@ -356,4 +361,14 @@ function asRecord(value: unknown) {
 
 function toStringOrNull(value: unknown) {
   return typeof value === "string" ? value : null;
+}
+
+function toBehaviorLabel(label: string) {
+  const normalized = label.trim().toLowerCase();
+  if (!normalized) return "Balanced";
+  if (normalized === "balanced") return "Balanced";
+  if (normalized === "quick_action" || normalized === "action_fast") return "Acts quickly";
+  if (normalized === "review_first") return "Reviews first";
+  if (normalized === "high_defer") return "Often decides later";
+  return normalized.replace(/[_-]+/g, " ");
 }
