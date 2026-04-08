@@ -30,7 +30,13 @@ import {
   buildActionLabel,
   buildRecommendationMessage
 } from "../lib/human-language.service";
+import {
+  buildActionAftercareMessage,
+  buildDecisionConfidenceMessage,
+  buildPrimaryReassurance
+} from "../lib/emotional-trust.service";
 import ConfidenceBadge from "./confidence-badge";
+import ReassuranceInline from "./reassurance-inline";
 import WhyThisExplanation from "./why-this-explanation";
 import WhyThisToggle from "./why-this-toggle";
 import { useToast } from "./ui/toast-provider";
@@ -151,6 +157,16 @@ export default function ControlItemCard(props: Props) {
       issue: props.item.reviewReasons[0] ?? null,
       reason: props.item.reviewReasons[0] ?? null
     });
+    const confidenceMessage = buildDecisionConfidenceMessage({
+      confidenceBand: props.item.confidenceBand,
+      actionType: "REVIEW"
+    });
+    const reassurance = buildPrimaryReassurance({
+      confidenceBand: props.item.confidenceBand,
+      needsReview: true,
+      actionType: "REVIEW",
+      priorityBand: props.item.priorityBand
+    });
 
     return (
       <article style={{ ...cardStyles.item, display: "grid", gap: 10 }}>
@@ -176,9 +192,14 @@ export default function ControlItemCard(props: Props) {
           <div style={{ fontSize: 13, color: colors.textMuted }}>Expected around {dateLabel}</div>
         ) : null}
 
-        {reviewMessage.context ? (
-          <div style={{ fontSize: 12, color: colors.textMuted }}>{reviewMessage.context}</div>
-        ) : null}
+        <ReassuranceInline
+          compact
+          message={{
+            ...confidenceMessage,
+            primary: reviewMessage.primary,
+            supporting: reviewMessage.context ?? reassurance.supporting
+          }}
+        />
 
         {extracted.length > 0 ? (
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -217,7 +238,7 @@ export default function ControlItemCard(props: Props) {
                         status: "ACTIVE"
                       });
                     },
-                    "Review item confirmed",
+                    buildActionAftercareMessage({ actionType: "REVIEW", trackAction: true }).primary,
                     props.item.title
                   )
                 }
@@ -240,7 +261,7 @@ export default function ControlItemCard(props: Props) {
                         "Rejected from control tower"
                       );
                     },
-                    "Review item rejected",
+                    buildActionAftercareMessage({ actionType: "IGNORE", trackAction: true }).primary,
                     props.item.title
                   )
                 }
@@ -260,7 +281,7 @@ export default function ControlItemCard(props: Props) {
                     async () => {
                       await confirmPrediction(props.item.predictionId as string, false);
                     },
-                    "Prediction confirmed",
+                    buildActionAftercareMessage({ actionType: "CONFIRM", trackAction: true }).primary,
                     props.item.title
                   )
                 }
@@ -283,7 +304,7 @@ export default function ControlItemCard(props: Props) {
                         "dismissed_from_control_tower_review"
                       );
                     },
-                    "Prediction dismissed",
+                    buildActionAftercareMessage({ actionType: "IGNORE", trackAction: true }).primary,
                     props.item.title
                   )
                 }
@@ -308,7 +329,7 @@ export default function ControlItemCard(props: Props) {
           <div>
             <h3 style={{ margin: "0 0 6px 0" }}>{props.item.title}</h3>
             <div style={{ color: colors.textMuted, fontSize: 13 }}>
-              {props.item.rationaleSummary ?? "Approval required before automation executes."}
+              {props.item.rationaleSummary ?? "Quick check needed before this runs."}
             </div>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -340,7 +361,7 @@ export default function ControlItemCard(props: Props) {
                 async () => {
                   await approveZeroInputAction(props.item.decisionId);
                 },
-                "Automation approved",
+                buildActionAftercareMessage({ actionType: "CONFIRM", trackAction: true }).primary,
                 props.item.title
               )
             }
@@ -368,7 +389,7 @@ export default function ControlItemCard(props: Props) {
                     reason: "rejected_from_control_tower"
                   });
                 },
-                "Automation rejected",
+                buildActionAftercareMessage({ actionType: "IGNORE", trackAction: true }).primary,
                 props.item.title
               )
             }
@@ -429,7 +450,7 @@ export default function ControlItemCard(props: Props) {
                     "dismissed_from_control_tower_ready"
                   );
                 },
-                "Ready item dismissed",
+                buildActionAftercareMessage({ actionType: "IGNORE", trackAction: true }).primary,
                 props.item.title
               )
             }
@@ -449,7 +470,9 @@ export default function ControlItemCard(props: Props) {
         <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
           <div>
             <h3 style={{ margin: "0 0 6px 0" }}>{props.item.title}</h3>
-            <div style={{ color: colors.textMuted, fontSize: 13 }}>{props.item.rationaleSummary ?? "Pattern-based upcoming signal"}</div>
+            <div style={{ color: colors.textMuted, fontSize: 13 }}>
+              {props.item.rationaleSummary ?? "Nothing urgent yet. This may matter later."}
+            </div>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
             <SourceLabelBadge label={props.item.sourceLabel} />
@@ -481,7 +504,7 @@ export default function ControlItemCard(props: Props) {
                 async () => {
                   await confirmPrediction(props.item.predictionId, false);
                 },
-                "Prediction confirmed",
+                buildActionAftercareMessage({ actionType: "CONFIRM", trackAction: true }).primary,
                 props.item.title
               )
             }
@@ -498,7 +521,7 @@ export default function ControlItemCard(props: Props) {
                 async () => {
                   await dismissPrediction(props.item.predictionId, "dismissed_from_control_tower_upcoming");
                 },
-                "Prediction dismissed",
+                buildActionAftercareMessage({ actionType: "IGNORE", trackAction: true }).primary,
                 props.item.title
               )
             }
@@ -552,7 +575,7 @@ export default function ControlItemCard(props: Props) {
         <Tag label={props.item.decisionType} />
       </div>
       <div style={{ color: colors.textMuted }}>{props.item.explanation}</div>
-      <WhyThisToggle>
+      <WhyThisToggle metricKey="control_tower_system_decision_why">
         <div style={{ marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
           {props.item.sourceSignals.length > 0 ? (
             props.item.sourceSignals.map((signal) => (

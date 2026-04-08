@@ -13,6 +13,11 @@ import {
 import { buildGuidedHref } from "../lib/flow-navigation";
 import type { SubscriptionDecisionFlowData, SubscriptionReviewActionResponse } from "../lib/types";
 import { cardStyles, colors, pageStyles } from "../lib/ui";
+import {
+  buildActionAftercareMessage,
+  buildCompletionReliefMessage
+} from "../lib/emotional-trust.service";
+import ActionAftercareInline from "./action-aftercare-inline";
 import { useFlowSession } from "./flow-session-provider";
 import SubscriptionDecisionActions from "./subscription-decision-actions";
 import SubscriptionDecisionHeader from "./subscription-decision-header";
@@ -39,30 +44,38 @@ export default function SubscriptionReviewFlowShell({
   const [loadingAction, setLoadingAction] = useState<"KEEP" | "CANCEL" | "REMIND_LATER" | "DETAILS" | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [remindAt, setRemindAt] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
+  const [lastAction, setLastAction] = useState<"KEEP" | "CANCEL" | "REMIND_LATER" | "CONFIRM" | "IGNORE" | null>(null);
   const openedAtRef = useRef<number>(Date.now());
   const detailsTrackedRef = useRef(false);
 
   const linkedObligations = useMemo(() => data?.detailSections.linkedObligations ?? [], [data]);
 
-  async function finalize(response: SubscriptionReviewActionResponse, successMessage: string) {
-    setMessage(successMessage);
+  async function finalize(
+    response: SubscriptionReviewActionResponse,
+    actionType: "KEEP" | "CANCEL" | "REMIND_LATER"
+  ) {
+    const aftercare = buildActionAftercareMessage({ actionType, trackAction: true });
+    setLastAction(actionType);
     const nextId = response.nextReviewSubscriptionId;
 
     if (nextId) {
       showToast({
         variant: "success",
-        title: "Decision saved",
-        description: "Moving to next subscription review item"
+        title: aftercare.primary,
+        description: aftercare.supporting ?? "Moving to the next subscription review item."
       });
       router.push(`/subscriptions/review/${nextId}`);
       return;
     }
 
+    const completion = buildCompletionReliefMessage({
+      remainingCount: 0,
+      trackCompletion: true
+    });
     showToast({
       variant: "success",
-      title: "Decision saved",
-      description: "You are done with current high-priority items"
+      title: completion.primary,
+      description: completion.supporting ?? aftercare.supporting
     });
     router.push("/subscriptions/review");
   }
@@ -74,7 +87,7 @@ export default function SubscriptionReviewFlowShell({
       const response = await applySubscriptionReviewKeep(subscriptionId, {
         decisionDurationMs: Date.now() - openedAtRef.current
       });
-      await finalize(response, "Marked as keep.");
+      await finalize(response, "KEEP");
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : "Could not keep subscription");
     } finally {
@@ -112,7 +125,7 @@ export default function SubscriptionReviewFlowShell({
         return;
       }
 
-      await finalize(response, "Marked for cancellation follow-up.");
+      await finalize(response, "CANCEL");
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : "Could not mark cancellation");
     } finally {
@@ -128,7 +141,7 @@ export default function SubscriptionReviewFlowShell({
         remindAt: remindAt ? toIsoOrNull(remindAt) : undefined,
         decisionDurationMs: Date.now() - openedAtRef.current
       });
-      await finalize(response, "Reminder scheduled.");
+      await finalize(response, "REMIND_LATER");
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : "Could not schedule reminder");
     } finally {
@@ -202,7 +215,11 @@ export default function SubscriptionReviewFlowShell({
           />
         </section>
 
-        {message ? <section style={{ ...cardStyles.bordered }}>{message}</section> : null}
+        {lastAction ? (
+          <section style={{ ...cardStyles.bordered }}>
+            <ActionAftercareInline actionType={lastAction} />
+          </section>
+        ) : null}
         {error ? (
           <section style={{ ...cardStyles.bordered, color: colors.errorText }}>{error}</section>
         ) : null}

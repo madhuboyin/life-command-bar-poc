@@ -2,12 +2,16 @@
 
 import type { DailyCommandCenterCompletedItem } from "../lib/types";
 import { cardStyles, colors } from "../lib/ui";
+import { buildCompletionReliefMessage } from "../lib/emotional-trust.service";
 
 export default function TodayCompletedCollapsed({
   items
 }: {
   items: DailyCommandCenterCompletedItem[];
 }) {
+  const relief = buildCompletionReliefMessage({
+    remainingCount: items.length === 0 ? 0 : 1
+  });
   return (
     <section style={{ ...cardStyles.section }}>
       <details>
@@ -16,7 +20,7 @@ export default function TodayCompletedCollapsed({
         </summary>
         <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
           {items.length === 0 ? (
-            <div style={{ color: colors.textMuted }}>No items handled yet today.</div>
+            <div style={{ color: colors.textMuted }}>{relief.supporting}</div>
           ) : (
             items.map((item) => (
               <article key={item.id} style={{ ...cardStyles.item, display: "grid", gap: 4 }}>

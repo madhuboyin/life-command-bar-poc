@@ -9,7 +9,14 @@ import {
   buildActionLabel,
   buildRecommendationMessage
 } from "../lib/human-language.service";
+import {
+  buildActionAftercareMessage,
+  buildDecisionConfidenceMessage,
+  buildPrimaryReassurance
+} from "../lib/emotional-trust.service";
 import ConfidenceBadge from "./confidence-badge";
+import ReassuranceInline from "./reassurance-inline";
+import SharedContextNote from "./shared-context-note";
 import SourceBadge from "./source-badge";
 import { useToast } from "./ui/toast-provider";
 
@@ -81,13 +88,29 @@ export default function ReviewQueueCard({ item, onUpdated }: Props) {
     issue: item.reviewReasons[0] ?? null,
     reason: item.reviewReasons[0] ?? null
   });
+  const decisionConfidence = buildDecisionConfidenceMessage({
+    confidenceBand: item.confidenceBand,
+    actionType: "REVIEW"
+  });
+  const reassurance = buildPrimaryReassurance({
+    confidenceBand: item.confidenceBand,
+    needsReview: true,
+    actionType: "REVIEW",
+    scopeType: item.scopeType,
+    assigneeName: item.assignee?.name ?? item.assignee?.email ?? null
+  });
 
   async function handleConfirm() {
     try {
       setLoading("confirm");
       await confirmObligationCandidate(item.id, { status: "ACTIVE" });
       await onUpdated();
-      showToast({ variant: "success", title: "Item confirmed", description: item.title });
+      const aftercare = buildActionAftercareMessage({ actionType: "REVIEW", trackAction: true });
+      showToast({
+        variant: "success",
+        title: aftercare.primary,
+        description: aftercare.supporting ?? item.title
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not confirm item";
       showToast({ variant: "error", title: "Confirm failed", description: message });
@@ -101,7 +124,12 @@ export default function ReviewQueueCard({ item, onUpdated }: Props) {
       setLoading("reject");
       await rejectObligationCandidate(item.id, "Rejected from review queue");
       await onUpdated();
-      showToast({ variant: "success", title: "Item rejected", description: item.title });
+      const aftercare = buildActionAftercareMessage({ actionType: "IGNORE", trackAction: true });
+      showToast({
+        variant: "success",
+        title: aftercare.primary,
+        description: aftercare.supporting ?? item.title
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not reject item";
       showToast({ variant: "error", title: "Reject failed", description: message });
@@ -129,9 +157,14 @@ export default function ReviewQueueCard({ item, onUpdated }: Props) {
         </div>
       </div>
 
-      <div style={{ fontSize: 13, color: colors.textMuted }}>
-        {reviewMessage.primary}
-      </div>
+      <ReassuranceInline
+        compact
+        message={{
+          ...decisionConfidence,
+          primary: reviewMessage.primary,
+          supporting: reviewMessage.context ?? reassurance.supporting ?? decisionConfidence.supporting
+        }}
+      />
 
       {intelligence && reviewMessage.context ? (
         <div style={{ fontSize: 12, color: colors.textMuted }}>
@@ -174,6 +207,12 @@ export default function ReviewQueueCard({ item, onUpdated }: Props) {
           {lifecycleRoutingReason ? ` · ${lifecycleRoutingReason.replace(/_/g, " ")}` : ""}
         </div>
       ) : null}
+
+      <SharedContextNote
+        scopeType={item.scopeType}
+        assigneeName={item.assignee?.name ?? item.assignee?.email ?? null}
+        dueSoon={Boolean(item.dueDate)}
+      />
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
         <button

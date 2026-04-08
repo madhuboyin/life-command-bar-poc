@@ -5,6 +5,7 @@ import { useState } from "react";
 import { getSubscriptionReviewHub } from "../lib/api";
 import type { SubscriptionReviewHubResponse } from "../lib/types";
 import { buttonStyles, pageStyles } from "../lib/ui";
+import { buildPrimaryReassurance } from "../lib/emotional-trust.service";
 import SubscriptionReviewEmptyState from "./subscription-review-empty-state";
 import SubscriptionReviewGroup from "./subscription-review-group";
 import SubscriptionReviewSummary from "./subscription-review-summary";
@@ -17,6 +18,9 @@ export default function SubscriptionReviewHubShell({
   initialData: SubscriptionReviewHubResponse | null;
   initialError?: string | null;
 }) {
+  const reassurance = buildPrimaryReassurance({
+    emotionalState: "DECISION_NOW"
+  });
   const [data, setData] = useState<SubscriptionReviewHubResponse | null>(initialData);
   const [error, setError] = useState<string | null>(initialError);
   const [loading, setLoading] = useState(false);
@@ -50,7 +54,7 @@ export default function SubscriptionReviewHubShell({
         <div>
           <h1 style={{ margin: "0 0 6px 0", fontSize: 32 }}>Subscription Review Hub</h1>
           <p style={{ margin: 0, color: "#6b7280" }}>
-            One clear subscription decision at a time.
+            {reassurance.supporting ?? "One clear subscription decision at a time."}
           </p>
         </div>
         <button type="button" onClick={() => void refresh()} style={buttonStyles.secondary} disabled={loading}>

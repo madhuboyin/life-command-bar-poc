@@ -2,6 +2,7 @@
 
 import type { DailyCommandCenterResponse } from "../lib/types";
 import { cardStyles, colors } from "../lib/ui";
+import { buildCompletionReliefMessage } from "../lib/emotional-trust.service";
 
 export default function TodaySummaryStrip({
   summary,
@@ -10,17 +11,20 @@ export default function TodaySummaryStrip({
   summary: DailyCommandCenterResponse["summary"];
   pulse: DailyCommandCenterResponse["pulse"];
 }) {
+  const relief = buildCompletionReliefMessage({
+    remainingCount: summary.todayCount
+  });
   return (
     <section style={{ ...cardStyles.section, display: "grid", gap: 12 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <div>
           <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 4 }}>Today Summary</div>
           <div style={{ fontSize: 28, fontWeight: 700 }}>
-            {summary.todayCount === 0 ? "Done for now" : `${summary.todayCount} to handle`}
+            {summary.todayCount === 0 ? relief.primary : `${summary.todayCount} to handle`}
           </div>
         </div>
         <div style={{ color: colors.textMuted, fontSize: 13 }}>
-          Pulse {pulse.openedToday ? "opened" : "not opened"} · {pulse.completedCount} completed
+          Pulse {pulse.openedToday ? "checked in" : "not opened yet"} · {pulse.completedCount} completed
         </div>
       </div>
 

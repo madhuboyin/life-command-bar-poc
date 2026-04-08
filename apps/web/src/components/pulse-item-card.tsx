@@ -23,12 +23,18 @@ import {
   buildActionLabel,
   trackMessageAction
 } from "../lib/human-language.service";
+import {
+  buildActionAftercareMessage,
+  buildDecisionConfidenceMessage,
+  buildReminderDeferralMessage
+} from "../lib/emotional-trust.service";
 import { useFlowSession } from "./flow-session-provider";
 import { useToast } from "./ui/toast-provider";
 import SourceBadge from "./source-badge";
 import ConfidenceBadge from "./confidence-badge";
 import WhyThisExplanation from "./why-this-explanation";
 import AutoFlowBadge from "./auto-flow-badge";
+import ReassuranceInline from "./reassurance-inline";
 
 type Props = {
   item: DailyPulseItem;
@@ -43,6 +49,11 @@ export default function PulseItemCard({ item, flowObligationIds, onItemUpdated }
   const flow = useFlowSession();
   const guideLabel =
     item.status === "OPENED_GUIDED" ? "Resume" : buildActionLabel(item.actionLabel || "start");
+  const confidenceMessage = buildDecisionConfidenceMessage({
+    confidenceBand: item.confidenceBand,
+    actionType: item.actionLabel
+  });
+  const reminderBeforeMessage = buildReminderDeferralMessage({ phase: "before" });
 
   async function reportOutcome(input: {
     selectedActionKey: string;
@@ -114,10 +125,11 @@ export default function PulseItemCard({ item, flowObligationIds, onItemUpdated }
       });
 
       onItemUpdated(pulseUpdate);
+      const aftercare = buildActionAftercareMessage({ actionType: "CONFIRM", trackAction: true });
       showToast({
         variant: "success",
-        title: "+1 cleared from today's pulse",
-        description: pulseUpdate.momentum.completionMessage
+        title: aftercare.primary,
+        description: aftercare.supporting ?? pulseUpdate.momentum.completionMessage
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not mark done";
@@ -144,10 +156,11 @@ export default function PulseItemCard({ item, flowObligationIds, onItemUpdated }
       });
 
       onItemUpdated(pulseUpdate);
+      const aftercare = buildActionAftercareMessage({ actionType: "IGNORE", trackAction: true });
       showToast({
         variant: "success",
-        title: "Pulse updated",
-        description: pulseUpdate.momentum.completionMessage
+        title: aftercare.primary,
+        description: aftercare.supporting ?? pulseUpdate.momentum.completionMessage
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not dismiss";
@@ -182,10 +195,11 @@ export default function PulseItemCard({ item, flowObligationIds, onItemUpdated }
       });
 
       onItemUpdated(pulseUpdate);
+      const aftercare = buildReminderDeferralMessage({ phase: "after" });
       showToast({
         variant: "success",
-        title: "Postponed intentionally",
-        description: pulseUpdate.momentum.completionMessage
+        title: aftercare.primary,
+        description: aftercare.supporting ?? pulseUpdate.momentum.completionMessage
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not postpone";
@@ -216,6 +230,12 @@ export default function PulseItemCard({ item, flowObligationIds, onItemUpdated }
       <h3 style={{ margin: "0 0 6px 0" }}>{item.title}</h3>
       <div style={{ marginBottom: 12 }}>
         <WhyThisExplanation why={item.why} decisionTrace={item.decisionTrace} />
+        <div style={{ marginTop: 8 }}>
+          <ReassuranceInline compact message={confidenceMessage} />
+        </div>
+      </div>
+      <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 10 }}>
+        {reminderBeforeMessage.primary}
       </div>
 
       <div

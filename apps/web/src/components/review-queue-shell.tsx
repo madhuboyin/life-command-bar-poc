@@ -6,6 +6,7 @@ import { getReviewQueue } from "../lib/api";
 import type { ReviewQueueResponse } from "../lib/types";
 import { buttonStyles, pageStyles } from "../lib/ui";
 import { buildEmptyStateMessage } from "../lib/human-language.service";
+import { buildPrimaryReassurance } from "../lib/emotional-trust.service";
 import ReviewQueueCard from "./review-queue-card";
 import EmptyState from "./ui/empty-state";
 import StatusMessage from "./ui/status-message";
@@ -17,6 +18,9 @@ type Props = {
 
 export default function ReviewQueueShell({ initialData, initialError = null }: Props) {
   const emptyMessage = buildEmptyStateMessage("review");
+  const reassurance = buildPrimaryReassurance({
+    emotionalState: "REVIEW_NEEDED"
+  });
   const [data, setData] = useState(initialData);
   const [error, setError] = useState<string | null>(initialError);
   const [loading, setLoading] = useState(false);
@@ -46,7 +50,7 @@ export default function ReviewQueueShell({ initialData, initialError = null }: P
         <div>
           <h1 style={{ margin: "0 0 6px 0", fontSize: 30 }}>Needs Review</h1>
           <p style={{ margin: 0, color: "#6b7280" }}>
-            Items that need a quick confirmation.
+            {reassurance.supporting ?? "Items that need a quick confirmation."}
           </p>
         </div>
         <button onClick={refresh} style={buttonStyles.secondary} disabled={loading}>

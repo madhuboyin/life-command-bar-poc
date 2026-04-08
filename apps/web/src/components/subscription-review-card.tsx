@@ -6,9 +6,15 @@ import type {
 import { buttonStyles, cardStyles, colors, radius } from "../lib/ui";
 import {
   buildActionLabel,
-  buildRecommendationMessage,
-  buildSummaryMessage
+  buildRecommendationMessage
 } from "../lib/human-language.service";
+import {
+  buildDecisionConfidenceMessage,
+  buildPrimaryReassurance
+} from "../lib/emotional-trust.service";
+import DecisionConfidenceBadge from "./decision-confidence-badge";
+import ReassuranceInline from "./reassurance-inline";
+import SharedContextNote from "./shared-context-note";
 import SubscriptionLifecycleBadge from "./subscription-lifecycle-badge";
 
 export default function SubscriptionReviewCard({
@@ -20,7 +26,17 @@ export default function SubscriptionReviewCard({
     recommendationType: item.recommendationType,
     reason: item.recommendationReason
   });
-  const summary = buildSummaryMessage({ confidence: item.confidenceBand });
+  const confidenceMessage = buildDecisionConfidenceMessage({
+    confidenceBand: item.confidenceBand,
+    actionType: item.recommendationType
+  });
+  const reassurance = buildPrimaryReassurance({
+    confidenceBand: item.confidenceBand,
+    actionType: item.recommendationType,
+    dueAt: item.nextRenewalDate,
+    scopeType: item.scopeType,
+    assigneeName: item.assignee?.name ?? item.assignee?.email ?? null
+  });
 
   return (
     <article style={{ ...cardStyles.item, display: "grid", gap: 8 }}>
@@ -37,7 +53,10 @@ export default function SubscriptionReviewCard({
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <Tag label={recommendation.primary} />
-        <Tag label={summary.primary} />
+        <DecisionConfidenceBadge
+          confidenceBand={item.confidenceBand}
+          actionType={item.recommendationType}
+        />
         <Tag label={`Scope ${item.scopeType.toLowerCase()}`} />
         {item.recurringPrice !== null ? (
           <Tag label={`Price ${formatMoney(item.recurringPrice, item.currency)}`} />
@@ -46,7 +65,13 @@ export default function SubscriptionReviewCard({
       </div>
 
       <div style={{ fontSize: 14 }}>{item.primaryInsight}</div>
-      <div style={{ color: colors.textMuted, fontSize: 13 }}>{item.recommendationReason}</div>
+      <ReassuranceInline
+        compact
+        message={{
+          ...confidenceMessage,
+          supporting: reassurance.supporting ?? item.recommendationReason
+        }}
+      />
 
       {item.assignee ? (
         <div style={{ color: colors.textMuted, fontSize: 12 }}>
@@ -54,9 +79,14 @@ export default function SubscriptionReviewCard({
         </div>
       ) : item.scopeType === "HOUSEHOLD" ? (
         <div style={{ color: colors.textMuted, fontSize: 12 }}>
-          Household subscription currently unassigned.
+          Household subscription is currently unassigned.
         </div>
       ) : null}
+      <SharedContextNote
+        scopeType={item.scopeType}
+        assigneeName={item.assignee?.name ?? item.assignee?.email ?? null}
+        dueSoon={Boolean(item.nextRenewalDate)}
+      />
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <Link href={`/subscriptions/review/${item.subscriptionId}`} style={buttonStyles.primary}>

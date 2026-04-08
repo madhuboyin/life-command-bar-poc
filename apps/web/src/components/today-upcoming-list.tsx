@@ -4,13 +4,14 @@ import Link from "next/link";
 import type { DailyCommandCenterItem } from "../lib/types";
 import { cardStyles, colors } from "../lib/ui";
 import { buildActionLabel } from "../lib/human-language.service";
+import SafeToWaitNote from "./safe-to-wait-note";
 
 export default function TodayUpcomingList({ items }: { items: DailyCommandCenterItem[] }) {
   if (items.length === 0) {
     return (
       <section style={{ ...cardStyles.section }}>
         <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 4 }}>Upcoming This Week</div>
-        <div style={{ color: colors.textMuted }}>Nothing else needs attention this week right now.</div>
+        <div style={{ color: colors.textMuted }}>The next few days look quiet.</div>
       </section>
     );
   }
@@ -35,7 +36,7 @@ export default function TodayUpcomingList({ items }: { items: DailyCommandCenter
             <span style={{ fontSize: 12, color: colors.textMuted }}>{item.priorityBand.toLowerCase()}</span>
           </div>
           {item.subtitle ? <div style={{ color: colors.textMuted, fontSize: 13 }}>{item.subtitle}</div> : null}
-          <div style={{ fontSize: 13, color: colors.textMuted }}>{item.whyNow}</div>
+          <SafeToWaitNote note={item.whyNow} />
           {item.primaryAction.mode === "NAVIGATE" && item.primaryAction.href ? (
             <div>
               <Link href={item.primaryAction.href} style={{ color: "#2563eb", textDecoration: "none", fontWeight: 600 }}>

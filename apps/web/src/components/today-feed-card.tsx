@@ -22,6 +22,11 @@ import {
   getHookBadgeStyle
 } from "../lib/ui";
 import { buildActionLabel } from "../lib/human-language.service";
+import {
+  buildActionAftercareMessage,
+  buildDecisionConfidenceMessage,
+  buildReminderDeferralMessage
+} from "../lib/emotional-trust.service";
 import { useIsMobile } from "../lib/use-is-mobile";
 import { useRouter } from "next/navigation";
 import ResolutionModal from "./resolution-modal";
@@ -32,6 +37,7 @@ import SourceBadge from "./source-badge";
 import ConfidenceBadge from "./confidence-badge";
 import WhyThisExplanation from "./why-this-explanation";
 import AutoFlowBadge from "./auto-flow-badge";
+import ReassuranceInline from "./reassurance-inline";
 
 type Props = {
   item: TodayFeedItem;
@@ -48,6 +54,11 @@ export default function TodayFeedCard({ item, flowObligationIds, onRefresh }: Pr
   const isMobile = useIsMobile();
   const router = useRouter();
   const flow = useFlowSession();
+  const confidenceMessage = buildDecisionConfidenceMessage({
+    confidenceBand: item.confidenceBand,
+    actionType: item.primaryAction.key
+  });
+  const reminderMessage = buildReminderDeferralMessage({ phase: "before" });
 
   async function reportOutcome(input: {
     recommendationKey?: string;
@@ -113,7 +124,7 @@ export default function TodayFeedCard({ item, flowObligationIds, onRefresh }: Pr
         outcomeType: "COMPLETED_SUCCESSFULLY",
         note: "Completed from Today Feed"
       });
-    }, "done", "Marked done");
+    }, "done", buildActionAftercareMessage({ actionType: "CONFIRM", trackAction: true }).primary);
   }
 
   async function handleDismiss() {
@@ -131,7 +142,7 @@ export default function TodayFeedCard({ item, flowObligationIds, onRefresh }: Pr
         outcomeType: "DISMISSED_NOT_RELEVANT",
         note: "Dismissed from Today Feed"
       });
-    }, "dismiss", "Dismissed");
+    }, "dismiss", buildActionAftercareMessage({ actionType: "IGNORE", trackAction: true }).primary);
   }
 
   async function handlePostpone() {
@@ -154,7 +165,7 @@ export default function TodayFeedCard({ item, flowObligationIds, onRefresh }: Pr
           postponedUntil: until
         }
       });
-    }, "postpone", "Postponed");
+    }, "postpone", buildReminderDeferralMessage({ phase: "after" }).primary);
   }
 
   async function handleShowResolution() {
@@ -246,12 +257,16 @@ export default function TodayFeedCard({ item, flowObligationIds, onRefresh }: Pr
 
         <div style={{ display: "grid", gap: 8, marginBottom: 14 }}>
           <WhyThisExplanation why={item.why} decisionTrace={item.decisionTrace} />
+          <ReassuranceInline compact message={confidenceMessage} />
           <div>
             <strong>What:</strong> {item.whatToDo}
           </div>
           <div>
             <strong>How hard:</strong> {item.howHardIsIt}
           </div>
+        </div>
+        <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 10 }}>
+          {reminderMessage.primary}
         </div>
 
         <div

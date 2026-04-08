@@ -13,6 +13,7 @@ import {
   buildEmptyStateMessage,
   buildRecommendationMessage
 } from "../lib/human-language.service";
+import { buildPrimaryReassurance } from "../lib/emotional-trust.service";
 import ControlItemCard from "./control-item-card";
 import ControlSection from "./control-section";
 import PageHeader from "./ui/page-header";
@@ -54,6 +55,9 @@ const EMPTY_CONTROL_TOWER: ControlTowerResponse = {
 
 export default function ControlTowerShell({ initialData, initialError = null }: Props) {
   const controlEmptyMessage = buildEmptyStateMessage("control_tower");
+  const reassurance = buildPrimaryReassurance({
+    emotionalState: "CALM_CLEAR"
+  });
   const [data, setData] = useState<ControlTowerResponse>(initialData ?? EMPTY_CONTROL_TOWER);
   const [error, setError] = useState<string | null>(initialError);
   const [loading, setLoading] = useState(false);
@@ -92,7 +96,7 @@ export default function ControlTowerShell({ initialData, initialError = null }: 
 
       <PageHeader
         title="Control Tower"
-        description="One place for what needs a quick look and what you can do now."
+        description={reassurance.supporting ?? "One place for what needs a quick look and what you can do now."}
         actions={
           <button type="button" onClick={() => void refresh()} disabled={loading} style={buttonStyles.secondary}>
             {loading ? "Refreshing..." : "Refresh"}
@@ -110,7 +114,7 @@ export default function ControlTowerShell({ initialData, initialError = null }: 
           <Pill label={`Ready now ${data.summary.readyCount}`} />
           <Pill label={`Upcoming ${data.summary.upcomingCount}`} />
           <Pill label={`Recent ${data.summary.recentCount}`} />
-          <Pill label={`System decisions ${data.summary.systemDecisionCount}`} />
+          <Pill label={`Background updates ${data.summary.systemDecisionCount}`} />
           <Pill label={`Subscriptions ${data.summary.subscriptionOptimizationCount}`} />
         </div>
         <div style={{ marginTop: 10 }}>
@@ -181,7 +185,7 @@ export default function ControlTowerShell({ initialData, initialError = null }: 
 
         <ControlSection
           title="Approval Needed"
-          description="Safe automation requests awaiting your explicit approval."
+          description="Requests waiting for your final yes."
           count={data.approvals.length}
         >
           {data.approvals.length === 0 ? (
@@ -219,14 +223,14 @@ export default function ControlTowerShell({ initialData, initialError = null }: 
 
         <ControlSection
           title="Upcoming"
-          description="What's likely coming up next."
+          description="What may need attention later."
           count={data.upcoming.items.length}
           defaultCollapsedOnMobile
         >
           {data.upcoming.windows.length === 0 || data.upcoming.items.length === 0 ? (
             <EmptyState
-              title="No strong upcoming signals"
-              description="As recurring behavior stabilizes, likely future obligations will appear here."
+              title="Nothing urgent yet"
+              description="Likely upcoming items will show up here when timing is clearer."
               action={
                 <Link href="/upcoming" style={buttonStyles.link}>
                   Open upcoming view
@@ -260,7 +264,7 @@ export default function ControlTowerShell({ initialData, initialError = null }: 
 
         <ControlSection
           title="Recently Handled"
-          description="Recent outcomes so you can verify progress and trust the system loop."
+          description="Recent outcomes so you can quickly confirm progress."
           count={data.recent.length}
           defaultCollapsedOnMobile
         >
@@ -279,8 +283,8 @@ export default function ControlTowerShell({ initialData, initialError = null }: 
         </ControlSection>
 
         <ControlSection
-          title="System Decisions"
-          description="Recent background decisions made by the system."
+          title="Background Decisions"
+          description="Recent background updates and routing outcomes."
           count={data.systemDecisions.length}
           defaultCollapsedOnMobile
         >

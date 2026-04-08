@@ -6,6 +6,10 @@ import {
   buildActionLabel,
   trackMessageAction
 } from "../lib/human-language.service";
+import {
+  trackActionAfterReassurance,
+  trackDeferAfterReassurance
+} from "../lib/emotional-trust.service";
 
 export default function TodayActionBar({
   item,
@@ -34,6 +38,10 @@ export default function TodayActionBar({
             type="button"
             onClick={() => {
               trackMessageAction(action.key);
+              trackActionAfterReassurance(action.key);
+              if (action.key === "REMIND_LATER") {
+                trackDeferAfterReassurance("today_action_bar_remind_later");
+              }
               void onAction(action.key);
             }}
             disabled={loading !== null}

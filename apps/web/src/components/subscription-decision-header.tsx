@@ -4,6 +4,12 @@ import type {
 } from "../lib/types";
 import { colors } from "../lib/ui";
 import { buildSummaryMessage } from "../lib/human-language.service";
+import {
+  buildDecisionConfidenceMessage,
+  buildPrimaryReassurance
+} from "../lib/emotional-trust.service";
+import DecisionConfidenceBadge from "./decision-confidence-badge";
+import SharedContextNote from "./shared-context-note";
 import SubscriptionLifecycleBadge from "./subscription-lifecycle-badge";
 
 export default function SubscriptionDecisionHeader({
@@ -14,6 +20,17 @@ export default function SubscriptionDecisionHeader({
   const summary = buildSummaryMessage({
     confidence: subscription.confidenceBand,
     issue: subscription.lifecycleState === "UNKNOWN" ? "LIFECYCLE_UNKNOWN" : null
+  });
+  const confidenceMessage = buildDecisionConfidenceMessage({
+    confidenceBand: subscription.confidenceBand,
+    actionType: "REVIEW"
+  });
+  const reassurance = buildPrimaryReassurance({
+    confidenceBand: subscription.confidenceBand,
+    actionType: "REVIEW",
+    dueAt: subscription.nextRenewalDate,
+    scopeType: subscription.scopeType,
+    assigneeName: subscription.assignee?.name ?? subscription.assignee?.email ?? null
   });
 
   return (
@@ -40,8 +57,19 @@ export default function SubscriptionDecisionHeader({
         {summary.primary}
         {summary.context ? ` · ${summary.context}` : ""}
       </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <DecisionConfidenceBadge confidenceBand={subscription.confidenceBand} actionType="REVIEW" />
+        <span style={{ fontSize: 13, color: colors.textMuted }}>
+          {confidenceMessage.supporting ?? reassurance.supporting}
+        </span>
+      </div>
 
       <div style={{ color: colors.textMuted, fontSize: 12 }}>{subscription.whyVisible}</div>
+      <SharedContextNote
+        scopeType={subscription.scopeType}
+        assigneeName={subscription.assignee?.name ?? subscription.assignee?.email ?? null}
+        dueSoon={Boolean(subscription.nextRenewalDate)}
+      />
       {subscription.lastHandledBy ? (
         <div style={{ color: colors.textMuted, fontSize: 12 }}>
           Last reviewed by {subscription.lastHandledBy.name || subscription.lastHandledBy.email}

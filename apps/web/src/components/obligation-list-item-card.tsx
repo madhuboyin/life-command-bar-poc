@@ -15,6 +15,7 @@ import ConfidenceBadge from "./confidence-badge";
 import AssigneeBadge from "./assignee-badge";
 import AssignmentMenu from "./assignment-menu";
 import ClaimItemButton from "./claim-item-button";
+import SharedContextNote from "./shared-context-note";
 
 type Props = {
   item: Obligation;
@@ -78,6 +79,13 @@ export default function ObligationListItemCard({
             needsReview={item.needsReview}
           />
           <AssigneeBadge obligation={item} compact />
+        </div>
+        <div style={{ marginTop: 8 }}>
+          <SharedContextNote
+            scopeType={item.scopeType}
+            assigneeName={item.assignee?.name ?? item.assignee?.email ?? null}
+            dueSoon={Boolean(item.dueDate)}
+          />
         </div>
       </div>
 

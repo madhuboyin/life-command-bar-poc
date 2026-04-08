@@ -13,10 +13,15 @@ import {
   buildActionLabel,
   buildSummaryMessage
 } from "../lib/human-language.service";
+import {
+  buildActionAftercareMessage,
+  buildDecisionConfidenceMessage
+} from "../lib/emotional-trust.service";
 import StatusMessage from "./ui/status-message";
 import { useToast } from "./ui/toast-provider";
 import SourceBadge from "./source-badge";
 import ConfidenceBadge from "./confidence-badge";
+import ReassuranceInline from "./reassurance-inline";
 
 type Props = {
   obligation: Obligation;
@@ -42,6 +47,10 @@ export default function ObligationCandidateReview({ obligation, source }: Props)
     confidence: obligation.confidenceBand,
     issue: source?.parseStatus === "PARTIAL" ? "SIGNALS_WEAK" : null
   });
+  const confidenceMessage = buildDecisionConfidenceMessage({
+    confidenceBand: obligation.confidenceBand,
+    actionType: "REVIEW"
+  });
 
   async function handleActivate() {
     try {
@@ -62,7 +71,7 @@ export default function ObligationCandidateReview({ obligation, source }: Props)
 
       showToast({
         variant: "success",
-        title: "Candidate activated",
+        title: buildActionAftercareMessage({ actionType: "CONFIRM", trackAction: true }).primary,
         description: form.title
       });
 
@@ -96,7 +105,7 @@ export default function ObligationCandidateReview({ obligation, source }: Props)
 
       showToast({
         variant: "success",
-        title: "Draft saved",
+        title: buildActionAftercareMessage({ actionType: "REVIEW", trackAction: true }).primary,
         description: form.title
       });
 
@@ -119,7 +128,7 @@ export default function ObligationCandidateReview({ obligation, source }: Props)
 
       showToast({
         variant: "success",
-        title: "Candidate rejected",
+        title: buildActionAftercareMessage({ actionType: "IGNORE", trackAction: true }).primary,
         description: form.title
       });
 
@@ -137,7 +146,7 @@ export default function ObligationCandidateReview({ obligation, source }: Props)
   return (
     <div style={{ display: "grid", gap: 16 }}>
       <section style={cardStyles.bordered}>
-        <h3 style={{ marginTop: 0 }}>Source Provenance</h3>
+        <h3 style={{ marginTop: 0 }}>Source details</h3>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
           <SourceBadge
             sourceType={obligation.sourceType}
@@ -152,11 +161,16 @@ export default function ObligationCandidateReview({ obligation, source }: Props)
           {source?.provenanceLabel ?? "Imported source"}
         </div>
         <div style={{ fontSize: 14, marginTop: 6 }}>
-          Parse status: <strong>{source?.parseStatus ?? "UNKNOWN"}</strong>
+          Current status: <strong>{source?.parseStatus ?? "UNKNOWN"}</strong>
         </div>
-        <div style={{ fontSize: 14 }}>
-          {summary.primary}
-        </div>
+        <ReassuranceInline
+          compact
+          message={{
+            ...confidenceMessage,
+            primary: summary.primary,
+            supporting: summary.context ?? confidenceMessage.supporting
+          }}
+        />
       </section>
 
       <section style={cardStyles.bordered}>

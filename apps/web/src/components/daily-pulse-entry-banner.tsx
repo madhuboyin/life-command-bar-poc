@@ -10,10 +10,10 @@ export default function DailyPulseEntryBanner() {
         Daily Pulse
       </div>
       <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>
-        Start your day
+        Start with what matters
       </div>
       <div style={{ color: colors.textMuted, marginBottom: 12 }}>
-        Review today&apos;s top 3–5 decisions in one calm flow.
+        Review today&apos;s top decisions in one calm flow.
       </div>
       <Link href="/today" style={buttonStyles.link}>
         Open Today View

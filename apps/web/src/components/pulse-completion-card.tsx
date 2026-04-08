@@ -4,6 +4,7 @@ import {
   buildActionLabel,
   buildEmptyStateMessage
 } from "../lib/human-language.service";
+import { buildCompletionReliefMessage } from "../lib/emotional-trust.service";
 
 type Props = {
   onRefresh: () => void;
@@ -11,6 +12,9 @@ type Props = {
 
 export default function PulseCompletionCard({ onRefresh }: Props) {
   const message = buildEmptyStateMessage("daily_pulse");
+  const relief = buildCompletionReliefMessage({
+    remainingCount: 0
+  });
   return (
     <section
       style={{
@@ -22,9 +26,9 @@ export default function PulseCompletionCard({ onRefresh }: Props) {
       <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 6 }}>
         Daily Pulse
       </div>
-      <h2 style={{ margin: "0 0 6px 0", fontSize: 24 }}>{message.primary}</h2>
+      <h2 style={{ margin: "0 0 6px 0", fontSize: 24 }}>{relief.primary}</h2>
       <p style={{ margin: "0 0 14px 0", color: colors.textMuted }}>
-        {message.context ?? "Check back later if something new comes up."}
+        {relief.supporting ?? message.context ?? "Check back later if something new comes up."}
       </p>
 
       <div

@@ -17,6 +17,10 @@ import { buildGuidedHref, getFlowReturnPath, getSourceLabel } from "../lib/flow-
 import type { FlowSession, GuidedJourney } from "../lib/types";
 import { buttonStyles, cardStyles, colors, pageStyles, text } from "../lib/ui";
 import { buildActionLabel } from "../lib/human-language.service";
+import {
+  buildCompletionReliefMessage,
+  buildPrimaryReassurance
+} from "../lib/emotional-trust.service";
 import { useFlowSession } from "./flow-session-provider";
 import GuidedProgress from "./guided-progress";
 import GuidedStepCard from "./guided-step-card";
@@ -64,6 +68,9 @@ export default function GuidedJourneyShell({
     return "/obligations";
   }, [flowSession, journey]);
   const isFocusFlow = flowSession?.sourceType === "FOCUS_MODE";
+  const headerReassurance = buildPrimaryReassurance({
+    emotionalState: "CALM_CLEAR"
+  });
 
   async function syncFlowCompletion(nextJourney: GuidedJourney) {
     if (!flowSessionId) return;
@@ -277,7 +284,7 @@ export default function GuidedJourneyShell({
       <header style={{ marginBottom: 20 }}>
         <h1 style={text.pageTitle}>Guided Mode</h1>
         <p style={text.bodyMuted}>
-          A calm step-by-step path so you always know what to do next.
+          {headerReassurance.supporting ?? "A calm step-by-step path so you always know what to do next."}
         </p>
       </header>
 
@@ -348,7 +355,7 @@ export default function GuidedJourneyShell({
               </h2>
               <p style={{ color: colors.textMuted, marginBottom: 0 }}>
                 {flowSession?.state === "COMPLETED"
-                  ? "You are done for now in this flow."
+                  ? buildCompletionReliefMessage().supporting ?? "You are done for now in this flow."
                   : isFocusFlow
                     ? "Return to Focus Mode to continue the session."
                     : "You can move to the next item or return to your previous context."}

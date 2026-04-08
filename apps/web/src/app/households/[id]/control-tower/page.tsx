@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { getHousehold, getHouseholdControlTower } from "../../../../lib/api";
 import { cardStyles, colors, pageStyles } from "../../../../lib/ui";
 import { buildSummaryMessage } from "../../../../lib/human-language.service";
+import { buildPrimaryReassurance } from "../../../../lib/emotional-trust.service";
 
 type Props = {
   params?: Promise<{ id?: string } | undefined>;
@@ -21,6 +22,9 @@ export default async function HouseholdControlTowerPage({ params }: Props) {
       getHousehold(householdId),
       getHouseholdControlTower(householdId)
     ]);
+    const reassurance = buildPrimaryReassurance({
+      emotionalState: "SHARED_RESPONSIBILITY"
+    });
 
     return (
       <main style={pageStyles.shell}>
@@ -32,7 +36,7 @@ export default async function HouseholdControlTowerPage({ params }: Props) {
 
         <h1 style={{ marginTop: 0 }}>{householdRes.household.name} Control Tower</h1>
         <p style={{ color: colors.textMuted, marginTop: -4 }}>
-          Shared items that need attention and what to do next.
+          {reassurance.primary}
         </p>
 
         <section style={{ ...cardStyles.section, marginBottom: 14 }}>
@@ -68,7 +72,7 @@ export default async function HouseholdControlTowerPage({ params }: Props) {
             <article key={item.id} style={cardStyles.item}>
               <div style={{ fontWeight: 700 }}>{item.title}</div>
               <div style={{ color: colors.textMuted, fontSize: 13 }}>
-                {item.candidateAction} · {item.status}
+                Quick check needed · {item.status}
               </div>
             </article>
           ))}

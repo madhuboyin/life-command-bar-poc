@@ -14,6 +14,10 @@ import {
   buildEmptyStateMessage,
   buildRecommendationMessage
 } from "../lib/human-language.service";
+import {
+  buildCompletionReliefMessage,
+  buildPrimaryReassurance
+} from "../lib/emotional-trust.service";
 import DailyPulseProgress from "./daily-pulse-progress";
 import EmptyState from "./ui/empty-state";
 import LoadingCard from "./ui/loading-card";
@@ -37,6 +41,9 @@ export default function DailyPulseShell({
   initialError = null
 }: Props) {
   const pulseEmptyMessage = buildEmptyStateMessage("daily_pulse");
+  const pulseReassurance = buildPrimaryReassurance({
+    emotionalState: "CALM_CLEAR"
+  });
   const [pulse, setPulse] = useState<DailyPulseResponse | null>(initialPulse);
   const [autoFlow, setAutoFlow] = useState<AutoFlowListResponse>(initialAutoFlow);
   const [error, setError] = useState<string | null>(initialError);
@@ -114,7 +121,7 @@ export default function DailyPulseShell({
         <div>
           <h1 style={{ margin: "0 0 6px 0", fontSize: 34 }}>Today</h1>
           <p style={{ margin: 0, color: colors.textMuted }}>
-            One clear step at a time.
+            {pulseReassurance.supporting ?? "One clear step at a time."}
           </p>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -236,15 +243,15 @@ export default function DailyPulseShell({
 
           {pulse.progress.totalItems === 0 ? (
             <EmptyState
-              title={pulseEmptyMessage.primary}
-              description={pulseEmptyMessage.context ?? "No items need action right now."}
+              title={buildCompletionReliefMessage().primary}
+              description={pulseEmptyMessage.context ?? "Nothing important needs attention right now."}
             />
           ) : pulse.progress.isCompletedForNow ? (
             <PulseCompletionCard onRefresh={refreshPulse} />
           ) : pulse.items.length === 0 ? (
             <EmptyState
               title="Pulse is updating"
-              description="No pending pulse items are visible right now. Refresh to sync the latest status."
+              description="No pending pulse items are visible right now. Refresh if you want a quick sync."
               action={
                 <button onClick={refreshPulse} style={buttonStyles.secondary}>
                   Refresh pulse
@@ -269,11 +276,11 @@ export default function DailyPulseShell({
 
 function getQuickSummaryFromProgress(progress: DailyPulseResponse["progress"]) {
   if (progress.totalItems === 0) {
-    return "You're all caught up today.";
+    return "You're all clear for now.";
   }
 
   if (progress.isCompletedForNow) {
-    return "You handled today's pulse and are done for now.";
+    return "You're done for now.";
   }
 
   if (progress.remainingCount === 1) {

@@ -16,9 +16,11 @@ import type {
 } from "../lib/types";
 import { buttonStyles, cardStyles, colors, inputStyles, pageStyles } from "../lib/ui";
 import { buildSummaryMessage } from "../lib/human-language.service";
+import { buildPrimaryReassurance } from "../lib/emotional-trust.service";
 import AssignmentMenu from "./assignment-menu";
 import AssigneeBadge from "./assignee-badge";
 import ClaimItemButton from "./claim-item-button";
+import SharedContextNote from "./shared-context-note";
 import { useToast } from "./ui/toast-provider";
 
 type Props = {
@@ -35,6 +37,9 @@ export default function HouseholdOverviewShell({
   initialObligations
 }: Props) {
   const { showToast } = useToast();
+  const householdReassurance = buildPrimaryReassurance({
+    emotionalState: "SHARED_RESPONSIBILITY"
+  });
   const [pulse, setPulse] = useState(initialPulse);
   const [controlTower, setControlTower] = useState(initialControlTower);
   const [obligations, setObligations] = useState(initialObligations);
@@ -98,7 +103,7 @@ export default function HouseholdOverviewShell({
         <div>
           <h1 style={{ margin: "0 0 6px 0", fontSize: 34 }}>{household.name}</h1>
           <div style={{ color: colors.textMuted }}>
-            Shared household workspace for ownership, delegation, and review.
+            {householdReassurance.primary}
           </div>
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
@@ -165,6 +170,11 @@ export default function HouseholdOverviewShell({
                 <ClaimItemButton obligationId={item.id} onClaimed={() => void refresh()} />
               ) : null}
             </div>
+            <SharedContextNote
+              scopeType={item.scopeType}
+              assigneeName={item.assignee?.name ?? item.assignee?.email ?? null}
+              dueSoon={Boolean(item.dueDate)}
+            />
           </article>
         ))}
       </section>
@@ -173,7 +183,7 @@ export default function HouseholdOverviewShell({
         <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 8 }}>Needs Review</div>
         <div style={{ display: "grid", gap: 8 }}>
           {controlTower.review.length === 0 ? (
-            <div style={{ color: colors.textMuted }}>No review items right now.</div>
+            <div style={{ color: colors.textMuted }}>No shared review items right now.</div>
           ) : (
             controlTower.review.map((item) => (
               <div key={item.obligationId} style={cardStyles.item}>
@@ -189,7 +199,7 @@ export default function HouseholdOverviewShell({
         <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 8 }}>Upcoming</div>
         <div style={{ display: "grid", gap: 8 }}>
           {controlTower.upcoming.length === 0 ? (
-            <div style={{ color: colors.textMuted }}>No upcoming household predictions yet.</div>
+            <div style={{ color: colors.textMuted }}>Nothing urgent is coming up yet.</div>
           ) : (
             controlTower.upcoming.map((item) => (
               <div key={item.id} style={cardStyles.item}>

@@ -14,6 +14,11 @@ import {
   buildEmptyStateMessage,
   trackMessageAction
 } from "../lib/human-language.service";
+import {
+  buildActionAftercareMessage,
+  buildCompletionReliefMessage,
+  buildPrimaryReassurance
+} from "../lib/emotional-trust.service";
 import { useFlowSession } from "./flow-session-provider";
 import TodayCompletedCollapsed from "./today-completed-collapsed";
 import TodayEmptyState from "./today-empty-state";
@@ -30,6 +35,7 @@ export default function TodayViewShell({
   initialError?: string | null;
 }) {
   const todayEmptyMessage = buildEmptyStateMessage("today");
+  const headerMessage = buildPrimaryReassurance({ emotionalState: "CALM_CLEAR" });
   const [data, setData] = useState<DailyCommandCenterResponse | null>(initialData);
   const [error, setError] = useState<string | null>(initialError);
   const [loadingAction, setLoadingAction] = useState<Record<string, TodayActionKey | null>>({});
@@ -71,7 +77,7 @@ export default function TodayViewShell({
         showToast({
           variant: "info",
           title: "Opening guided flow",
-          description: "You can come right back to Today when finished."
+          description: "You can come right back to Today whenever you're ready."
         });
 
         router.push(buildGuidedHref(journey.journey.id, session.id));
@@ -83,14 +89,21 @@ export default function TodayViewShell({
         return;
       }
 
+      const nextRemaining = result.today.primaryItems.length;
+      const aftercare = buildActionAftercareMessage({ actionType: actionKey, trackAction: true });
+      const completionRelief = buildCompletionReliefMessage({
+        remainingCount: nextRemaining,
+        trackCompletion: nextRemaining === 0
+      });
       setData(result.today);
       showToast({
         variant: "success",
-        title: result.message,
+        title: aftercare.primary,
         description:
-          result.today.primaryItems.length === 0
-            ? "You are done for now."
-            : `${result.today.primaryItems.length} left in today.`
+          aftercare.supporting ??
+          (nextRemaining === 0
+            ? completionRelief.primary
+            : `${nextRemaining} left in today.`)
       });
     } catch (actionError) {
       const message =
@@ -126,7 +139,7 @@ export default function TodayViewShell({
         <div>
           <h1 style={{ margin: "0 0 6px 0", fontSize: 34 }}>Today</h1>
           <p style={{ margin: 0, color: colors.textMuted }}>
-            {todayEmptyMessage.context ?? "Clear next steps for today."}
+            {headerMessage.supporting ?? todayEmptyMessage.context ?? "Clear next steps for today."}
           </p>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -172,7 +185,7 @@ export default function TodayViewShell({
             <section style={{ ...cardStyles.bordered }}>
               <div style={{ marginBottom: 6, fontWeight: 700 }}>Need more context?</div>
               <div style={{ color: colors.textMuted, marginBottom: 10 }}>
-                A few items still need a quick confirmation before you act.
+                A few items still need a quick check before you act.
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <Link href="/review" style={buttonStyles.link}>

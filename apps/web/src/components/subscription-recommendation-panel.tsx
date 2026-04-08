@@ -1,6 +1,11 @@
 import type { SubscriptionDecisionFlowData } from "../lib/types";
 import { cardStyles, colors, radius } from "../lib/ui";
 import { buildRecommendationMessage } from "../lib/human-language.service";
+import {
+  buildDecisionConfidenceMessage,
+  buildRiskReassurance
+} from "../lib/emotional-trust.service";
+import ReassuranceInline from "./reassurance-inline";
 import WhyThisToggle from "./why-this-toggle";
 
 export default function SubscriptionRecommendationPanel({
@@ -14,6 +19,13 @@ export default function SubscriptionRecommendationPanel({
     recommendationType: recommendation.type,
     issue: recommendation.supportingInsights[0]?.insightType ?? null,
     reason: recommendation.reason
+  });
+  const confidenceMessage = buildDecisionConfidenceMessage({
+    confidenceBand: recommendation.confidence,
+    actionType: recommendation.type
+  });
+  const riskMessage = buildRiskReassurance({
+    riskLevel: decisionContext.riskLevel
   });
 
   return (
@@ -35,8 +47,19 @@ export default function SubscriptionRecommendationPanel({
       </div>
 
       <div style={{ fontSize: 15 }}>{decisionContext.whyNow}</div>
-      <div style={{ color: colors.textMuted, fontSize: 14 }}>{decisionContext.whatChanged}</div>
-      <WhyThisToggle>{decisionContext.sourceSummary}</WhyThisToggle>
+      <div style={{ color: colors.textMuted, fontSize: 14 }}>
+        {message.context ?? riskMessage.primary}
+      </div>
+      <ReassuranceInline
+        compact
+        message={{
+          ...confidenceMessage,
+          supporting: decisionContext.whatChanged || confidenceMessage.supporting
+        }}
+      />
+      <WhyThisToggle metricKey="subscription_recommendation_why">
+        {decisionContext.sourceSummary}
+      </WhyThisToggle>
 
       {recommendation.supportingInsights.length > 0 ? (
         <div style={{ display: "grid", gap: 8 }}>

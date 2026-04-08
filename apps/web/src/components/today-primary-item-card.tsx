@@ -2,10 +2,15 @@
 
 import type { DailyCommandCenterItem, TodayActionKey } from "../lib/types";
 import { cardStyles, colors, formatDateTime } from "../lib/ui";
+import { buildRecommendationMessage } from "../lib/human-language.service";
 import {
-  buildRecommendationMessage,
-  buildSummaryMessage
-} from "../lib/human-language.service";
+  buildDecisionConfidenceMessage,
+  buildPrimaryReassurance,
+  buildRiskReassurance
+} from "../lib/emotional-trust.service";
+import DecisionConfidenceBadge from "./decision-confidence-badge";
+import ReassuranceInline from "./reassurance-inline";
+import SharedContextNote from "./shared-context-note";
 import TodayActionBar from "./today-action-bar";
 import WhyThisToggle from "./why-this-toggle";
 
@@ -18,14 +23,28 @@ export default function TodayPrimaryItemCard({
   loading: TodayActionKey | null;
   onAction: (itemId: string, actionKey: TodayActionKey) => Promise<void>;
 }) {
-  const summaryMessage = buildSummaryMessage({
-    confidence: item.confidenceBand,
-    issue: item.primaryAction.key === "REVIEW" || item.primaryAction.key === "REVIEW_SUBSCRIPTION" ? "LOW_CONFIDENCE" : null
-  });
   const recommendationMessage = buildRecommendationMessage({
     recommendationType: item.primaryAction.key,
     reason: item.whyNow,
     issue: item.whyNow
+  });
+  const confidenceMessage = buildDecisionConfidenceMessage({
+    confidenceBand: item.confidenceBand,
+    actionType: item.primaryAction.key
+  });
+  const reassuranceMessage = buildPrimaryReassurance({
+    confidenceBand: item.confidenceBand,
+    actionType: item.primaryAction.key,
+    priorityBand: item.priorityBand,
+    dueAt: item.dueDate,
+    renewsAt: item.renewalDate,
+    scopeType: item.scopeType,
+    assigneeName: item.assignee?.name ?? item.assignee?.email ?? null
+  });
+  const riskMessage = buildRiskReassurance({
+    priorityBand: item.priorityBand,
+    dueAt: item.dueDate,
+    renewsAt: item.renewalDate
   });
 
   return (
@@ -38,7 +57,10 @@ export default function TodayPrimaryItemCard({
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignSelf: "flex-start" }}>
           <PriorityBadge band={item.priorityBand} />
           <Tag label={item.category.replace(/_/g, " ")} />
-          <Tag label={summaryMessage.primary} />
+          <DecisionConfidenceBadge
+            confidenceBand={item.confidenceBand}
+            actionType={item.primaryAction.key}
+          />
           <ScopeBadge item={item} />
         </div>
       </div>
@@ -60,9 +82,21 @@ export default function TodayPrimaryItemCard({
       <div style={{ display: "grid", gap: 6 }}>
         <div style={{ fontWeight: 600 }}>{recommendationMessage.primary}</div>
         <div style={{ color: colors.textMuted }}>
-          {recommendationMessage.context ?? item.whyThisMatters}
+          {recommendationMessage.context ?? reassuranceMessage.primary}
         </div>
-        <WhyThisToggle>
+        <ReassuranceInline
+          compact
+          message={{
+            ...confidenceMessage,
+            supporting: confidenceMessage.supporting ?? riskMessage.primary
+          }}
+        />
+        <SharedContextNote
+          scopeType={item.scopeType}
+          assigneeName={item.assignee?.name ?? item.assignee?.email ?? null}
+          dueSoon={isDueSoon(item.dueDate ?? item.renewalDate)}
+        />
+        <WhyThisToggle metricKey="today_primary_card_why">
           {recommendationMessage.why ?? item.sourceSummary}
         </WhyThisToggle>
       </div>
@@ -133,4 +167,11 @@ function Tag({ label }: { label: string }) {
 
 function formatMoney(amount: number, currency: string | null) {
   return `${(currency ?? "USD").toUpperCase()} ${amount.toFixed(2)}`;
+}
+
+function isDueSoon(value: string | null) {
+  if (!value) return false;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return false;
+  return parsed.getTime() - Date.now() <= 5 * 24 * 60 * 60 * 1000;
 }
