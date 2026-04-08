@@ -56,9 +56,7 @@ import type {
   SubscriptionRegistryListResponse,
   TodayFeedResponse,
   ZeroInputDecisionItem,
-  ZeroInputPolicy,
-  SubscriptionReviewHubData,
-  SubscriptionDecisionFlowData
+  ZeroInputPolicy
 } from "./types";
 
 const PUBLIC_API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "").trim();
@@ -2254,13 +2252,6 @@ export async function getAdminAlerts(params?: {
   });
 
   return handleResponse<AdminAlertsResponse>(res);
-}
-
-export async function getSubscriptionReviewHub() {
-  const res = await apiFetch(`/subscriptions/review`, {
-    cache: "no-store"
-  });
-  return handleResponse<SubscriptionReviewHubData>(res);
 }
 
 export async function getSubscriptionDecisionFlow(subscriptionId: string) {

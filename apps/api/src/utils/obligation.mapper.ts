@@ -5,6 +5,7 @@ import {
   Prisma
 } from "@prisma/client";
 import {
+  getObligationIntelligenceFromSummary,
   getExtractedFieldsFromSummary,
   getExtractionSummaryRecord,
   resolveNeedsReview,
@@ -68,6 +69,7 @@ export function mapObligation(obligation: ObligationWithRelations) {
   const confidenceBand = toConfidenceBand(ingestionConfidence);
   const parseStatus = source?.parseStatus ?? null;
   const extractedFields = getExtractedFieldsFromSummary(summary);
+  const obligationIntelligence = getObligationIntelligenceFromSummary(summary);
   const needsReview = resolveNeedsReview({
     obligationStatus: obligation.status,
     confidenceBand,
@@ -138,6 +140,7 @@ export function mapObligation(obligation: ObligationWithRelations) {
     ingestionConfidence,
     confidenceBand,
     extractedFields,
+    obligationIntelligence,
     extractionStatus: parseStatus,
     needsReview,
     duplicateCandidate,

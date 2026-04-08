@@ -690,6 +690,11 @@ function buildReviewReasons(item: {
   conflictDetected?: boolean;
   duplicateCandidate?: boolean;
   extractionStatus?: string | null;
+  obligationIntelligence?: {
+    category?: string;
+    priority?: { band?: string } | null;
+    routing?: { reason?: string } | null;
+  } | null;
   sourceMetadata?: {
     sourceSubtype?: string | null;
     rawData?: unknown;
@@ -703,6 +708,19 @@ function buildReviewReasons(item: {
   if (item.confidenceBand === "MEDIUM") reasons.push("Medium confidence - review suggested");
   if (item.extractionStatus === "PARTIAL") reasons.push("Partial extraction");
   if (item.extractionStatus === "FAILED") reasons.push("Extraction failed");
+  if (item.obligationIntelligence?.category) {
+    reasons.push(
+      `Category guess: ${item.obligationIntelligence.category.toLowerCase().replace(/_/g, " ")}`
+    );
+  }
+  if (item.obligationIntelligence?.routing?.reason) {
+    reasons.push(
+      `Routing reason: ${item.obligationIntelligence.routing.reason.replace(/_/g, " ")}`
+    );
+  }
+  if (item.obligationIntelligence?.priority?.band === "URGENT") {
+    reasons.push("High priority signal detected");
+  }
 
   if (item.sourceMetadata?.sourceSubtype === "GMAIL_READONLY") {
     const raw = asRecord(item.sourceMetadata.rawData);

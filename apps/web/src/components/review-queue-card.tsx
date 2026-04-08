@@ -71,6 +71,7 @@ export default function ReviewQueueCard({ item, onUpdated }: Props) {
   const lifecycleVendorScore = typeof v2Vendor?.score === "number" ? v2Vendor.score : null;
   const lifecycleRoutingReason =
     typeof v2Routing?.reason === "string" ? v2Routing.reason : null;
+  const intelligence = item.obligationIntelligence;
 
   async function handleConfirm() {
     try {
@@ -122,6 +123,14 @@ export default function ReviewQueueCard({ item, onUpdated }: Props) {
       <div style={{ fontSize: 13, color: colors.textMuted }}>
         {item.reviewReasons.join(" · ")}
       </div>
+
+      {intelligence ? (
+        <div style={{ fontSize: 12, color: colors.textMuted }}>
+          Category: {intelligence.category.replace(/_/g, " ").toLowerCase()} · Priority:{" "}
+          {intelligence.priority.band.toLowerCase()} · Route:{" "}
+          {intelligence.routing.route.toLowerCase().replace(/_/g, " ")}
+        </div>
+      ) : null}
 
       {gmailFrom || gmailSubject ? (
         <div style={{ fontSize: 12, color: colors.textMuted }}>

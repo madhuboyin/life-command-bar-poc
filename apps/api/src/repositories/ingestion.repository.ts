@@ -309,6 +309,42 @@ export class IngestionRepository {
     return null;
   }
 
+  async findLikelyCanonicalMatch(input: {
+    userId: string;
+    vendor: string | null;
+    type: ObligationType;
+    dueDate: string | null;
+  }) {
+    if (!input.vendor) return null;
+
+    const where: Prisma.ObligationWhereInput = {
+      userId: input.userId,
+      type: input.type,
+      status: {
+        in: [ObligationStatus.DRAFT, ObligationStatus.ACTIVE, ObligationStatus.POSTPONED]
+      },
+      vendor: {
+        equals: input.vendor,
+        mode: "insensitive"
+      }
+    };
+
+    if (input.dueDate) {
+      const dueDate = new Date(input.dueDate);
+      if (!Number.isNaN(dueDate.getTime())) {
+        where.dueDate = {
+          gte: new Date(dueDate.getTime() - 21 * 24 * 60 * 60 * 1000),
+          lte: new Date(dueDate.getTime() + 21 * 24 * 60 * 60 * 1000)
+        };
+      }
+    }
+
+    return prisma.obligation.findFirst({
+      where,
+      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }]
+    });
+  }
+
   async findPotentialSubscriptionMatches(input: {
     userId: string;
     vendor: string;

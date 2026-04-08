@@ -105,6 +105,12 @@ type PulseCandidate = {
   } | null;
   predictionBoost: number;
   predictionReason: string | null;
+  obligationIntelligence: {
+    category: string;
+    priorityBand: "URGENT" | "HIGH" | "MEDIUM" | "LOW";
+    surfacingTarget: "PULSE" | "CONTROL_TOWER_READY" | "CONTROL_TOWER_REVIEW" | "UPCOMING" | "SUPPRESS";
+    priorityScore: number;
+  } | null;
 };
 
 const MAX_ITEMS = 5;
@@ -171,14 +177,25 @@ export class DailyPulseService {
 
     const candidates = activeObligations.map((raw) => {
       const obligation = mapObligation(raw);
+      const intelligence = obligation.obligationIntelligence
+        ? {
+            category: obligation.obligationIntelligence.category,
+            priorityBand: obligation.obligationIntelligence.priority.band,
+            surfacingTarget: obligation.obligationIntelligence.priority.surfacingTarget,
+            priorityScore: obligation.obligationIntelligence.priority.score
+          }
+        : null;
       const dueDate = obligation.dueDate;
-      const basePriorityScore = computePriorityScore(obligation);
-      const isUrgent = computeIsUrgent(obligation);
+      const basePriorityScore = computePriorityScore(obligation, intelligence);
+      const isUrgent = computeIsUrgent(obligation, intelligence);
       const isQuickWin = computeIsQuickWin(obligation);
       const isMoney = typeof obligation.amount === "number" && obligation.amount > 0;
       const isPostponed =
         obligation.status === ObligationStatus.POSTPONED || recentlyPostponedIds.has(obligation.id);
-      const hookType = resolveHookType({ isUrgent, isQuickWin, isMoney, isPostponed }, feedByObligationId.get(obligation.id)?.hookType);
+      const hookType = resolveHookType(
+        { isUrgent, isQuickWin, isMoney, isPostponed, obligationIntelligence: intelligence },
+        feedByObligationId.get(obligation.id)?.hookType
+      );
       const autoFlow = feedByObligationId.get(obligation.id)?.autoFlow ?? null;
       const autoFlowBoost =
         autoFlow?.state === "READY" ? 20 : autoFlow?.state === "SUGGESTED" ? 12 : 0;
@@ -231,7 +248,8 @@ export class DailyPulseService {
         hookType,
         autoFlow,
         predictionBoost,
-        predictionReason
+        predictionReason,
+        obligationIntelligence: intelligence
       } satisfies PulseCandidate;
     });
 
@@ -256,6 +274,20 @@ export class DailyPulseService {
     );
     const momentum = await this.getMomentum(userId, progress.completedCount);
     const subscriptionSignalSummary = summarizeSubscriptionSignals(subscriptionActions);
+
+    void prisma.auditEvent
+      .create({
+        data: {
+          userId,
+          eventType: "obligation_upcoming_generated",
+          metadata: {
+            selectedCount: selectedCandidates.length,
+            urgentCount: selectedCandidates.filter((item) => item.obligationIntelligence?.priorityBand === "URGENT").length,
+            highCount: selectedCandidates.filter((item) => item.obligationIntelligence?.priorityBand === "HIGH").length
+          }
+        }
+      })
+      .catch(() => null);
 
     return {
       generatedAt: state.createdAt.toISOString(),
@@ -1206,15 +1238,33 @@ function computePriorityScore(item: {
   amount: number | null;
   dueDate: string | null;
   status: ObligationStatus;
-}) {
+}, intelligence?: {
+  priorityScore: number;
+  priorityBand: "URGENT" | "HIGH" | "MEDIUM" | "LOW";
+  surfacingTarget: "PULSE" | "CONTROL_TOWER_READY" | "CONTROL_TOWER_REVIEW" | "UPCOMING" | "SUPPRESS";
+} | null) {
   const effortBonus = item.effortLevel === "LOW" ? 8 : item.effortLevel === "MEDIUM" ? 3 : 0;
   const impactBonus = item.impactLevel === "HIGH" ? 8 : item.impactLevel === "MEDIUM" ? 4 : 0;
   const moneyBonus = item.amount && item.amount > 0 ? 6 : 0;
   const postponedBonus = item.status === "POSTPONED" ? 5 : 0;
   const dueSoonBonus = isDueWithinHours(item.dueDate, 48) ? 12 : 0;
+  const intelligenceBoost =
+    intelligence?.priorityBand === "URGENT"
+      ? 18
+      : intelligence?.priorityBand === "HIGH"
+        ? 10
+        : intelligence?.priorityBand === "MEDIUM"
+          ? 4
+          : 0;
 
   const raw = item.urgencyScore * 0.45 + item.importanceScore * 0.35;
-  return Math.round(raw + effortBonus + impactBonus + moneyBonus + postponedBonus + dueSoonBonus);
+  const blended =
+    intelligence?.priorityScore && intelligence.priorityScore > 0
+      ? raw * 0.65 + intelligence.priorityScore * 0.35
+      : raw;
+  return Math.round(
+    blended + effortBonus + impactBonus + moneyBonus + postponedBonus + dueSoonBonus + intelligenceBoost
+  );
 }
 
 function getPulseMemoryAdjustment(input: {
@@ -1247,8 +1297,10 @@ function getPulseMemoryAdjustment(input: {
 function computeIsUrgent(item: {
   dueDate: string | null;
   urgencyScore: number;
-}) {
-  return isDueWithinHours(item.dueDate, 48) || item.urgencyScore >= 85;
+}, intelligence?: {
+  priorityBand: "URGENT" | "HIGH" | "MEDIUM" | "LOW";
+} | null) {
+  return isDueWithinHours(item.dueDate, 48) || item.urgencyScore >= 85 || intelligence?.priorityBand === "URGENT";
 }
 
 function computeIsQuickWin(item: {
@@ -1279,10 +1331,22 @@ function resolveHookType(
     isQuickWin: boolean;
     isMoney: boolean;
     isPostponed: boolean;
+    obligationIntelligence?: {
+      category: string;
+      priorityBand: "URGENT" | "HIGH" | "MEDIUM" | "LOW";
+      surfacingTarget: "PULSE" | "CONTROL_TOWER_READY" | "CONTROL_TOWER_REVIEW" | "UPCOMING" | "SUPPRESS";
+    } | null;
   },
   feedHook?: "urgent" | "money" | "quick_win" | "none"
 ): PulseHookType {
   if (feedHook === "urgent" || item.isUrgent) return "urgent";
+  if (item.obligationIntelligence?.priorityBand === "URGENT") return "urgent";
+  if (
+    item.obligationIntelligence?.category === "PAYMENT_DUE" ||
+    item.obligationIntelligence?.category === "CREDIT_CARD"
+  ) {
+    return "money";
+  }
   if (feedHook === "quick_win" || item.isQuickWin) return "quick_win";
   if (feedHook === "money" || item.isMoney) return "money";
   if (item.isPostponed) return "postponed";

@@ -33,6 +33,46 @@ export type TrustExtractedFields = {
   description: string | null;
 };
 
+export type TrustObligationIntelligence = {
+  category:
+    | "SUBSCRIPTION"
+    | "BILL"
+    | "STATEMENT"
+    | "PAYMENT_DUE"
+    | "UTILITY"
+    | "TELECOM"
+    | "INSURANCE"
+    | "CREDIT_CARD"
+    | "LOAN"
+    | "SERVICE_RENEWAL"
+    | "COMPLIANCE"
+    | "COMMITMENT"
+    | "UNKNOWN";
+  categoryConfidenceScore: number;
+  categoryConfidenceBand: TrustConfidenceBand;
+  priority: {
+    score: number;
+    band: "URGENT" | "HIGH" | "MEDIUM" | "LOW";
+    surfacingTarget:
+      | "PULSE"
+      | "CONTROL_TOWER_READY"
+      | "CONTROL_TOWER_REVIEW"
+      | "UPCOMING"
+      | "SUPPRESS";
+    rationale: string[];
+  };
+  routing: {
+    route: "PULSE" | "READY" | "REVIEW" | "UPCOMING" | "SUPPRESS";
+    reason: string;
+    needsReview: boolean;
+    suppress: boolean;
+  };
+  trust: {
+    sourceSummary: string[];
+    explainability: string[];
+  };
+};
+
 export function normalizeConfidenceScore(value: number | null | undefined) {
   if (typeof value !== "number" || Number.isNaN(value)) {
     return 0;
@@ -120,6 +160,64 @@ export function resolveNeedsReview(input: {
   return input.confidenceBand !== "HIGH";
 }
 
+export function getObligationIntelligenceFromSummary(
+  summary: Record<string, unknown> | null
+): TrustObligationIntelligence | null {
+  if (!summary) return null;
+  const intelligence = asRecord(summary.obligationIntelligence);
+  if (!intelligence) return null;
+
+  const category = asString(intelligence.category);
+  if (!category) return null;
+  const categoryConfidenceScore = normalizeConfidenceScore(asNullableNumber(intelligence.categoryConfidenceScore));
+  const categoryConfidenceBand = toConfidenceBand(categoryConfidenceScore);
+  const priority = asRecord(intelligence.priority);
+  const routing = asRecord(intelligence.routing);
+  const trust = asRecord(intelligence.trust);
+
+  const priorityBand = asString(priority?.band);
+  const surfacingTarget = asString(priority?.surfacingTarget);
+  const route = asString(routing?.route);
+
+  if (
+    (priorityBand !== "URGENT" && priorityBand !== "HIGH" && priorityBand !== "MEDIUM" && priorityBand !== "LOW") ||
+    (surfacingTarget !== "PULSE" &&
+      surfacingTarget !== "CONTROL_TOWER_READY" &&
+      surfacingTarget !== "CONTROL_TOWER_REVIEW" &&
+      surfacingTarget !== "UPCOMING" &&
+      surfacingTarget !== "SUPPRESS") ||
+    (route !== "PULSE" &&
+      route !== "READY" &&
+      route !== "REVIEW" &&
+      route !== "UPCOMING" &&
+      route !== "SUPPRESS")
+  ) {
+    return null;
+  }
+
+  return {
+    category: isAllowedCategory(category) ? category : "UNKNOWN",
+    categoryConfidenceScore,
+    categoryConfidenceBand,
+    priority: {
+      score: asNullableNumber(priority?.score) ?? 0,
+      band: priorityBand,
+      surfacingTarget,
+      rationale: asStringArray(priority?.rationale)
+    },
+    routing: {
+      route,
+      reason: asString(routing?.reason) ?? "unspecified",
+      needsReview: Boolean(routing?.needsReview),
+      suppress: Boolean(routing?.suppress)
+    },
+    trust: {
+      sourceSummary: asStringArray(trust?.sourceSummary),
+      explainability: asStringArray(trust?.explainability)
+    }
+  };
+}
+
 export function toWhyConfidence(input: number) {
   return clamp(Math.round(input * 100) / 100, 0.2, 0.99);
 }
@@ -141,6 +239,31 @@ function asNullableString(value: unknown) {
 function asNullableNumber(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   return null;
+}
+
+function asStringArray(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string");
+}
+
+function isAllowedCategory(
+  value: string
+): value is TrustObligationIntelligence["category"] {
+  return (
+    value === "SUBSCRIPTION" ||
+    value === "BILL" ||
+    value === "STATEMENT" ||
+    value === "PAYMENT_DUE" ||
+    value === "UTILITY" ||
+    value === "TELECOM" ||
+    value === "INSURANCE" ||
+    value === "CREDIT_CARD" ||
+    value === "LOAN" ||
+    value === "SERVICE_RENEWAL" ||
+    value === "COMPLIANCE" ||
+    value === "COMMITMENT" ||
+    value === "UNKNOWN"
+  );
 }
 
 function clamp(value: number, minValue: number, maxValue: number) {

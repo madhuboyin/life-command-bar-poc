@@ -10,6 +10,7 @@ import { PredictionEngineService } from "./prediction-engine.service";
 import { HomeMemoryService } from "./home-memory.service";
 import { ZeroInputService } from "./zero-input.service";
 import { SubscriptionInsightService } from "./subscription-insight.service";
+import { createAuditEvent } from "../observability/audit-event";
 
 const DEFAULT_REVIEW_LIMIT = 6;
 const DEFAULT_APPROVAL_LIMIT = 6;
@@ -32,6 +33,9 @@ type ControlTowerReviewItem = {
   extractedFields: Record<string, unknown> | null;
   predictedDate: string | null;
   status: string;
+  obligationCategory: string | null;
+  priorityBand: "URGENT" | "HIGH" | "MEDIUM" | "LOW" | null;
+  surfacingTarget: string | null;
   why: TrustWhy;
 };
 
@@ -230,6 +234,23 @@ export class ControlTowerService {
       filteredUpcomingWindows.flatMap((window) => window.items)
     );
 
+    void createAuditEvent({
+      userId,
+      eventType: "obligation_control_tower_surfaced",
+      metadata: {
+        reviewCount: review.length,
+        readyCount: ready.length,
+        upcomingCount: upcomingItems.length,
+        surfacedObligationIds: Array.from(
+          new Set(
+            [...review, ...ready]
+              .map((item) => ("obligationId" in item ? item.obligationId : null))
+              .filter((value): value is string => Boolean(value))
+          )
+        ).slice(0, 20)
+      }
+    }).catch(() => null);
+
     return {
       generatedAt: new Date().toISOString(),
       review,
@@ -384,6 +405,15 @@ export class ControlTowerService {
         : [];
       const extractedFields = {
         ...(asRecord(item.extractedFields) ?? {}),
+        ...(item.obligationIntelligence?.category
+          ? { obligationCategory: item.obligationIntelligence.category }
+          : {}),
+        ...(item.obligationIntelligence?.priority?.band
+          ? { priorityBand: item.obligationIntelligence.priority.band }
+          : {}),
+        ...(item.obligationIntelligence?.priority?.surfacingTarget
+          ? { surfacingTarget: item.obligationIntelligence.priority.surfacingTarget }
+          : {}),
         ...(typeof rawData?.from === "string" ? { sender: rawData.from } : {}),
         ...(typeof rawData?.subject === "string" ? { subject: rawData.subject } : {}),
         ...(lifecycleEmailType ? { lifecycle: lifecycleEmailType } : {}),
@@ -411,6 +441,9 @@ export class ControlTowerService {
         extractedFields,
         predictedDate: item.dueDate,
         status: item.status,
+        obligationCategory: item.obligationIntelligence?.category ?? null,
+        priorityBand: item.obligationIntelligence?.priority?.band ?? null,
+        surfacingTarget: item.obligationIntelligence?.priority?.surfacingTarget ?? null,
         why: {
           primaryReason: reasons[0] ?? "Needs confirmation",
           signals: deriveReviewSignals(item),
@@ -439,12 +472,15 @@ export class ControlTowerService {
           confidenceBand: item.confidenceBand,
           confidenceScore: item.confidenceScore,
           reviewReasons: reasons,
-          extractedFields: asRecord(item.rationale),
-          predictedDate: item.predictedDate,
-          status: item.status,
-          why: {
-            primaryReason: item.rationaleSummary ?? "Pattern requires confirmation",
-            signals: ["due soon", "recent activity"],
+        extractedFields: asRecord(item.rationale),
+        predictedDate: item.predictedDate,
+        status: item.status,
+        obligationCategory: null,
+        priorityBand: null,
+        surfacingTarget: null,
+        why: {
+          primaryReason: item.rationaleSummary ?? "Pattern requires confirmation",
+          signals: ["due soon", "recent activity"],
             confidence: toWhyConfidence(item.confidenceScore),
             personalizationReason: null
           }
@@ -799,6 +835,10 @@ function reviewPriorityScore(item: ControlTowerReviewItem) {
   let score = item.confidenceBand === "LOW" ? 50 : item.confidenceBand === "MEDIUM" ? 35 : 15;
   if (item.reviewReasons.some((reason) => reason.toLowerCase().includes("conflict"))) score += 20;
   if (item.reviewReasons.some((reason) => reason.toLowerCase().includes("duplicate"))) score += 15;
+  if (item.priorityBand === "URGENT") score += 22;
+  if (item.priorityBand === "HIGH") score += 12;
+  if (item.surfacingTarget === "CONTROL_TOWER_REVIEW") score += 8;
+  if (item.obligationCategory === "PAYMENT_DUE" || item.obligationCategory === "CREDIT_CARD") score += 10;
   if (item.itemType === "PREDICTION") score += 8;
   return score;
 }
@@ -808,6 +848,10 @@ function deriveReviewSignals(item: {
   conflictDetected?: boolean;
   duplicateCandidate?: boolean;
   extractionStatus?: string | null;
+  obligationIntelligence?: {
+    priority?: { band?: string } | null;
+    category?: string | null;
+  } | null;
 }) {
   const signals: string[] = [];
   if (item.confidenceBand !== "HIGH") signals.push("high importance");
@@ -815,6 +859,15 @@ function deriveReviewSignals(item: {
   if (item.duplicateCandidate) signals.push("recent activity");
   if (item.extractionStatus === "PARTIAL" || item.extractionStatus === "FAILED") {
     signals.push("quick win");
+  }
+  if (item.obligationIntelligence?.priority?.band === "URGENT") {
+    signals.push("due soon");
+  }
+  if (
+    item.obligationIntelligence?.category === "PAYMENT_DUE" ||
+    item.obligationIntelligence?.category === "CREDIT_CARD"
+  ) {
+    signals.push("money exposure");
   }
   if (signals.length === 0) {
     signals.push("high importance");

@@ -47,6 +47,7 @@ export interface Obligation {
   ingestionConfidence: number;
   confidenceBand: ConfidenceBand;
   extractedFields: ObligationExtractedFields | null;
+  obligationIntelligence: ObligationIntelligence | null;
   extractionStatus:
     | "RECEIVED"
     | "PARTIAL"
@@ -87,6 +88,46 @@ export interface ObligationExtractedFields {
   dueDate: string | null;
   recurrence: string | null;
   description: string | null;
+}
+
+export interface ObligationIntelligence {
+  category:
+    | "SUBSCRIPTION"
+    | "BILL"
+    | "STATEMENT"
+    | "PAYMENT_DUE"
+    | "UTILITY"
+    | "TELECOM"
+    | "INSURANCE"
+    | "CREDIT_CARD"
+    | "LOAN"
+    | "SERVICE_RENEWAL"
+    | "COMPLIANCE"
+    | "COMMITMENT"
+    | "UNKNOWN";
+  categoryConfidenceScore: number;
+  categoryConfidenceBand: ConfidenceBand;
+  priority: {
+    score: number;
+    band: "URGENT" | "HIGH" | "MEDIUM" | "LOW";
+    surfacingTarget:
+      | "PULSE"
+      | "CONTROL_TOWER_READY"
+      | "CONTROL_TOWER_REVIEW"
+      | "UPCOMING"
+      | "SUPPRESS";
+    rationale: string[];
+  };
+  routing: {
+    route: "PULSE" | "READY" | "REVIEW" | "UPCOMING" | "SUPPRESS";
+    reason: string;
+    needsReview: boolean;
+    suppress: boolean;
+  };
+  trust: {
+    sourceSummary: string[];
+    explainability: string[];
+  };
 }
 
 export interface ObligationSourceMetadata {
@@ -658,6 +699,9 @@ export interface ControlTowerReviewItem {
   extractedFields: Record<string, unknown> | null;
   predictedDate: string | null;
   status: string;
+  obligationCategory: string | null;
+  priorityBand: "URGENT" | "HIGH" | "MEDIUM" | "LOW" | null;
+  surfacingTarget: string | null;
   why: WhyExplanation;
 }
 
@@ -1753,77 +1797,5 @@ export interface AdminAlertsResponse {
     high: number;
     medium: number;
     low: number;
-  };
-}
-
-export interface SubscriptionReviewItem {
-  subscriptionId: string;
-  title: string;
-  vendorName: string;
-  planName: string | null;
-  lifecycleState: SubscriptionLifecycleState | "REVIEW";
-  recurringPrice: number | null;
-  currency: string | null;
-  nextRenewalDate: string | null;
-  recommendationType: string;
-  recommendationReason: string;
-  healthScore: number;
-  confidenceBand: string;
-  primaryInsight: string | null;
-  assignee: string | null;
-  scopeType: "PERSONAL" | "HOUSEHOLD";
-}
-
-export interface SubscriptionReviewGroup {
-  key: string;
-  title: string;
-  description: string;
-  items: SubscriptionReviewItem[];
-}
-
-export interface SubscriptionReviewSummary {
-  totalReviewItems: number;
-  renewingSoonCount: number;
-  priceIncreasedCount: number;
-  needsConfirmationCount: number;
-  potentialSavingsAmount: number;
-  currency: string;
-}
-
-export interface SubscriptionReviewHubData {
-  summary: SubscriptionReviewSummary;
-  groups: SubscriptionReviewGroup[];
-}
-
-export interface SubscriptionDecisionFlowData {
-  subscription: {
-    id: string;
-    title: string;
-    vendorName: string;
-    planName: string | null;
-    lifecycleState: string;
-    recurringPrice: number | null;
-    currency: string | null;
-    nextRenewalDate: string | null;
-    confidenceBand: string;
-    healthScore: number;
-  };
-  recommendation: {
-    type: string;
-    reason: string;
-    confidence: number;
-    supportingInsights: string[];
-  };
-  decisionContext: {
-    whatChanged: string;
-    whyNow: string;
-    riskLevel: string;
-    sourceSummary: string;
-  };
-  actions: Array<{ key: string; label: string }>;
-  detailSections: {
-    priceHistory: Array<any>;
-    evidenceSummary: Array<{ title: string; desc: string }>;
-    lifecycleTimeline: Array<any>;
   };
 }

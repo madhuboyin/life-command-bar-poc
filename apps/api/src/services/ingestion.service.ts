@@ -43,6 +43,7 @@ import { HomeMemoryService } from "./home-memory.service";
 import { PredictionEngineService } from "./prediction-engine.service";
 import { ZeroInputService } from "./zero-input.service";
 import { LlmCacheService } from "./llm-cache.service";
+import { ObligationIntelligenceService } from "./obligation-intelligence.service";
 
 const PARSER_VERSION = "ingestion-v1-rule-2026-04-04";
 
@@ -140,6 +141,7 @@ export class IngestionService {
   private readonly predictionEngineService = new PredictionEngineService();
   private readonly zeroInputService = new ZeroInputService();
   private readonly llmCacheService = new LlmCacheService();
+  private readonly obligationIntelligenceService = new ObligationIntelligenceService();
 
   async ingestEmailForward(payload: unknown): Promise<IngestionResult> {
     const input = emailForwardSchema.parse(payload);
@@ -605,7 +607,7 @@ export class IngestionService {
       metadata: normalized.metadata,
       now: new Date()
     });
-    const extracted = applyGmailLifecycleExtractionHint(baseExtracted, gmailSubscriptionLifecycle);
+    let extracted = applyGmailLifecycleExtractionHint(baseExtracted, gmailSubscriptionLifecycle);
 
     const baseConfidence = evaluateIngestionConfidence({
       channel: normalized.channel,
@@ -613,7 +615,81 @@ export class IngestionService {
       extracted,
       hasUsableText: options.hasUsableText
     });
-    const confidence = applyGmailLifecycleConfidenceHint(baseConfidence, gmailSubscriptionLifecycle);
+    let confidence = applyGmailLifecycleConfidenceHint(baseConfidence, gmailSubscriptionLifecycle);
+
+    const obligationIntelligence = this.obligationIntelligenceService.analyze({
+      channel: normalized.channel,
+      rawText: normalized.rawText,
+      normalizedText: normalized.normalizedText,
+      titleHint: normalized.titleHint,
+      metadata: normalized.metadata,
+      classification,
+      extracted,
+      confidence: {
+        score: confidence.score,
+        band: confidence.band
+      },
+      conflictDetected: false,
+      duplicateDetected: false,
+      needsReview: confidence.needsConfirmation
+    });
+
+    extracted = {
+      ...extracted,
+      ...obligationIntelligence.adjustedExtracted
+    };
+
+    confidence = {
+      ...confidence,
+      score: obligationIntelligence.adjustedConfidence.score,
+      band: obligationIntelligence.adjustedConfidence.band,
+      needsConfirmation:
+        confidence.needsConfirmation || obligationIntelligence.routingNeedsReview,
+      importParseStatus:
+        obligationIntelligence.suppressCandidate && !confidence.shouldCreateObligation
+          ? ImportParseStatus.REJECTED
+          : confidence.importParseStatus,
+      shouldCreateObligation:
+        confidence.shouldCreateObligation && !obligationIntelligence.suppressCandidate,
+      obligationStatus:
+        confidence.shouldCreateObligation && obligationIntelligence.routingNeedsReview
+          ? ObligationStatus.DRAFT
+          : confidence.obligationStatus,
+      rationale: Array.from(
+        new Set([
+          ...confidence.rationale,
+          ...obligationIntelligence.summary.trust.explainability,
+          ...obligationIntelligence.summary.priority.rationale
+        ])
+      )
+    };
+
+    await this.repository.createAuditEvent({
+      userId: normalized.userId,
+      eventType: "obligation_candidate_classified",
+      metadata: {
+        importSourceId: importSource.id,
+        category: obligationIntelligence.summary.category,
+        categoryConfidenceScore: obligationIntelligence.summary.categoryConfidenceScore,
+        categoryConfidenceBand: obligationIntelligence.summary.categoryConfidenceBand,
+        canonicalType: obligationIntelligence.summary.canonical.obligationType,
+        rationaleSignals: obligationIntelligence.summary.rationaleSignals,
+        cautionSignals: obligationIntelligence.summary.cautionSignals
+      }
+    });
+
+    await this.repository.createAuditEvent({
+      userId: normalized.userId,
+      eventType: "obligation_priority_assigned",
+      metadata: {
+        importSourceId: importSource.id,
+        priorityScore: obligationIntelligence.summary.priority.score,
+        priorityBand: obligationIntelligence.summary.priority.band,
+        surfacingTarget: obligationIntelligence.summary.priority.surfacingTarget,
+        routing: obligationIntelligence.summary.routing.route,
+        routingReason: obligationIntelligence.summary.routing.reason
+      }
+    });
 
     const existingLifecycleMatch =
       normalized.channel === "EMAIL_GMAIL" && gmailSubscriptionLifecycle
@@ -659,6 +735,7 @@ export class IngestionService {
         extractionSummary: {
           classification,
           extracted,
+          obligationIntelligence: obligationIntelligence.summary,
           confidence: {
             score: lifecycleConfidence,
             band: toConfidenceBand(lifecycleConfidence),
@@ -685,6 +762,17 @@ export class IngestionService {
           lifecycleConfidence: lifecycle.confidence.confidenceScore,
           vendor: lifecycle.extraction.vendor,
           planName: lifecycle.extraction.planName
+        }
+      });
+
+      await this.repository.createAuditEvent({
+        userId: normalized.userId,
+        obligationId: existingLifecycleMatch.id,
+        eventType: "obligation_duplicate_suppressed",
+        metadata: {
+          importSourceId: importSource.id,
+          reason: "matched_existing_subscription_lifecycle",
+          duplicateOfObligationId: existingLifecycleMatch.id
         }
       });
 
@@ -808,6 +896,7 @@ export class IngestionService {
         extractionSummary: {
           classification,
           extracted,
+          obligationIntelligence: obligationIntelligence.summary,
           confidence: {
             score: confidence.score,
             band: confidence.band,
@@ -831,6 +920,17 @@ export class IngestionService {
         metadata: {
           importSourceId: importSource.id,
           duplicateOfObligationId: structuredDuplicate.id
+        }
+      });
+
+      await this.repository.createAuditEvent({
+        userId: normalized.userId,
+        obligationId: structuredDuplicate.id,
+        eventType: "obligation_duplicate_suppressed",
+        metadata: {
+          importSourceId: importSource.id,
+          duplicateOfObligationId: structuredDuplicate.id,
+          reason: "same_vendor_date_amount"
         }
       });
 
@@ -904,9 +1004,52 @@ export class IngestionService {
       type: extracted.type as ObligationType
     });
     const conflictDetected = Boolean(conflictMatch);
-    const guardedConfidence = applyValidationGuards(confidence, {
-      conflictDetected
+    const finalObligationIntelligence = this.obligationIntelligenceService.analyze({
+      channel: normalized.channel,
+      rawText: normalized.rawText,
+      normalizedText: normalized.normalizedText,
+      titleHint: normalized.titleHint,
+      metadata: normalized.metadata,
+      classification,
+      extracted,
+      confidence: {
+        score: confidence.score,
+        band: confidence.band
+      },
+      conflictDetected,
+      duplicateDetected: false,
+      needsReview: confidence.needsConfirmation
     });
+
+    extracted = {
+      ...extracted,
+      ...finalObligationIntelligence.adjustedExtracted
+    };
+
+    confidence = {
+      ...confidence,
+      score: finalObligationIntelligence.adjustedConfidence.score,
+      band: finalObligationIntelligence.adjustedConfidence.band,
+      needsConfirmation:
+        confidence.needsConfirmation || finalObligationIntelligence.routingNeedsReview,
+      rationale: Array.from(
+        new Set([
+          ...confidence.rationale,
+          ...finalObligationIntelligence.summary.trust.explainability,
+          ...finalObligationIntelligence.summary.priority.rationale
+        ])
+      )
+    };
+
+    const guardedConfidence = applyIntelligenceRoutingGuards(
+      applyValidationGuards(confidence, {
+        conflictDetected
+      }),
+      {
+        needsReview: finalObligationIntelligence.routingNeedsReview,
+        suppress: finalObligationIntelligence.suppressCandidate
+      }
+    );
 
     await this.repository.updateImportSourceParseResult({
       importSourceId: importSource.id,
@@ -915,6 +1058,7 @@ export class IngestionService {
       extractionSummary: {
         classification,
         extracted,
+        obligationIntelligence: finalObligationIntelligence.summary,
         confidence: {
           score: guardedConfidence.score,
           band: guardedConfidence.band,
@@ -941,7 +1085,9 @@ export class IngestionService {
         parseStatus: guardedConfidence.importParseStatus,
         conflictDetected,
         conflictWithObligationId: conflictMatch?.obligationId ?? null,
-        gmailLifecycleEmailType: gmailSubscriptionLifecycle?.lifecycleEmailType ?? null
+        gmailLifecycleEmailType: gmailSubscriptionLifecycle?.lifecycleEmailType ?? null,
+        obligationCategory: finalObligationIntelligence.summary.category,
+        obligationPriorityBand: finalObligationIntelligence.summary.priority.band
       }
     });
 
@@ -971,6 +1117,17 @@ export class IngestionService {
         metadata: {
           importSourceId: importSource.id,
           reason: skippedReason
+        }
+      });
+
+      await this.repository.createAuditEvent({
+        userId: normalized.userId,
+        eventType: "obligation_candidate_review_routed",
+        metadata: {
+          importSourceId: importSource.id,
+          reason: finalObligationIntelligence.summary.routing.reason,
+          category: finalObligationIntelligence.summary.category,
+          priorityBand: finalObligationIntelligence.summary.priority.band
         }
       });
 
@@ -1036,27 +1193,87 @@ export class IngestionService {
       return noCandidateResult;
     }
 
-    const obligationInput = this.buildObligationPayload({
+    const canonicalMatch = await this.repository.findLikelyCanonicalMatch({
       userId: normalized.userId,
-      importSourceId: importSource.id,
-      extracted,
-      sourceStatus: guardedConfidence.obligationStatus,
-      score: guardedConfidence.score,
-      source: normalized.obligationSource
+      vendor: extracted.vendor,
+      type: extracted.type as ObligationType,
+      dueDate: extracted.dueDate
     });
 
-    const obligation = await this.repository.createObligationFromIngestion(obligationInput);
+    let obligation: Awaited<ReturnType<IngestionRepository["createObligationFromIngestion"]>>;
+    let wasUpdated = false;
 
-    await this.repository.createAuditEvent({
-      userId: normalized.userId,
-      obligationId: obligation.id,
-      eventType: "obligation_created",
-      metadata: {
-        title: obligation.title,
-        type: obligation.type,
-        via: "ingestion"
+    if (
+      canonicalMatch &&
+      shouldMergeIntoCanonical({
+        extracted,
+        existing: canonicalMatch,
+        confidenceBand: guardedConfidence.band
+      })
+    ) {
+      const updateData = buildCanonicalMergeUpdate({
+        existing: canonicalMatch,
+        extracted,
+        confidenceScore: guardedConfidence.score
+      });
+      const updated = await this.repository.updateObligationForUser({
+        obligationId: canonicalMatch.id,
+        userId: normalized.userId,
+        data: updateData
+      });
+
+      if (updated) {
+        obligation = updated;
+        wasUpdated = true;
+
+        await this.captureMemorySignal({
+          userId: normalized.userId,
+          sourceType: "INGESTION",
+          referenceId: obligation.id,
+          eventType: "obligation_candidate_updated",
+          metadata: {
+            importSourceId: importSource.id,
+            category: finalObligationIntelligence.summary.category
+          }
+        });
+      } else {
+        wasUpdated = false;
+        const obligationInput = this.buildObligationPayload({
+          userId: normalized.userId,
+          importSourceId: importSource.id,
+          extracted,
+          sourceStatus: guardedConfidence.obligationStatus,
+          score: guardedConfidence.score,
+          source: normalized.obligationSource,
+          priorityScore: finalObligationIntelligence.priorityScore
+        });
+        obligation = await this.repository.createObligationFromIngestion(obligationInput);
       }
-    });
+    } else {
+      const obligationInput = this.buildObligationPayload({
+        userId: normalized.userId,
+        importSourceId: importSource.id,
+        extracted,
+        sourceStatus: guardedConfidence.obligationStatus,
+        score: guardedConfidence.score,
+        source: normalized.obligationSource,
+        priorityScore: finalObligationIntelligence.priorityScore
+      });
+      obligation = await this.repository.createObligationFromIngestion(obligationInput);
+    }
+
+    if (!wasUpdated) {
+      await this.repository.createAuditEvent({
+        userId: normalized.userId,
+        obligationId: obligation.id,
+        eventType: "obligation_created",
+        metadata: {
+          title: obligation.title,
+          type: obligation.type,
+          via: "ingestion"
+        }
+      });
+    }
 
     const obligationStatus =
       obligation.status === ObligationStatus.ACTIVE ? "ACTIVE" : "DRAFT";
@@ -1065,7 +1282,7 @@ export class IngestionService {
       userId: normalized.userId,
       sourceType: "INGESTION",
       referenceId: obligation.id,
-      eventType: "ingestion_candidate_created",
+      eventType: wasUpdated ? "ingestion_candidate_updated" : "ingestion_candidate_created",
       metadata: {
         importSourceId: importSource.id,
         obligationStatus,
@@ -1078,7 +1295,7 @@ export class IngestionService {
     await this.repository.createAuditEvent({
       userId: normalized.userId,
       obligationId: obligation.id,
-      eventType: "ingestion_candidate_created",
+      eventType: wasUpdated ? "obligation_candidate_updated" : "obligation_candidate_created",
       metadata: {
         importSourceId: importSource.id,
         status: obligation.status,
@@ -1086,9 +1303,24 @@ export class IngestionService {
         confidenceBand: guardedConfidence.band,
         conflictDetected,
         conflictWithObligationId: conflictMatch?.obligationId ?? null,
-        gmailLifecycleEmailType: gmailSubscriptionLifecycle?.lifecycleEmailType ?? null
+        gmailLifecycleEmailType: gmailSubscriptionLifecycle?.lifecycleEmailType ?? null,
+        category: finalObligationIntelligence.summary.category,
+        priorityBand: finalObligationIntelligence.summary.priority.band
       }
     });
+
+    if (finalObligationIntelligence.summary.priority.surfacingTarget === "UPCOMING") {
+      await this.repository.createAuditEvent({
+        userId: normalized.userId,
+        obligationId: obligation.id,
+        eventType: "obligation_upcoming_generated",
+        metadata: {
+          importSourceId: importSource.id,
+          category: finalObligationIntelligence.summary.category,
+          priorityScore: finalObligationIntelligence.summary.priority.score
+        }
+      });
+    }
 
     await this.autoFlowService.triggerForEvent({
       userId: normalized.userId,
@@ -1120,7 +1352,10 @@ export class IngestionService {
       confidence: guardedConfidence.score,
       confidenceBand: guardedConfidence.band,
       needsConfirmation: guardedConfidence.needsConfirmation,
-      needsReview: guardedConfidence.needsConfirmation || conflictDetected,
+      needsReview:
+        guardedConfidence.needsConfirmation ||
+        conflictDetected ||
+        finalObligationIntelligence.routingNeedsReview,
       isDuplicate: false,
       duplicateCandidate: false,
       conflictDetected,
@@ -1219,15 +1454,21 @@ export class IngestionService {
     sourceStatus: ObligationStatus;
     score: number;
     source: "MANUAL" | "EMAIL" | "DOCUMENT" | "INFERRED";
+    priorityScore?: number | null;
   }): CreateObligationFromIngestionInput {
     const title =
       input.extracted.title ?? `${toTitle(input.extracted.type.toLowerCase())} obligation`;
 
-    const urgencyScore = computeUrgencyScore(input.extracted.dueDate, input.score);
+    const urgencyScore = computeUrgencyScore(
+      input.extracted.dueDate,
+      input.score,
+      input.priorityScore ?? null
+    );
     const importanceScore = computeImportanceScore(
       input.extracted.type,
       input.extracted.amount,
-      input.score
+      input.score,
+      input.priorityScore ?? null
     );
 
     return {
@@ -1710,9 +1951,14 @@ function calculateConfirmedConfidence(current: Prisma.Decimal) {
   return currentValue >= 0.85 ? currentValue : Math.min(0.9, currentValue + 0.15);
 }
 
-function computeUrgencyScore(dueDateIso: string | null, confidenceScore: number) {
+function computeUrgencyScore(
+  dueDateIso: string | null,
+  confidenceScore: number,
+  priorityScore: number | null
+) {
   if (!dueDateIso) {
-    return confidenceScore >= 0.78 ? 58 : 45;
+    const base = confidenceScore >= 0.78 ? 58 : 45;
+    return priorityScore ? clamp(Math.round((base + priorityScore) / 2), 30, 98) : base;
   }
 
   const dueDate = new Date(dueDateIso);
@@ -1724,14 +1970,18 @@ function computeUrgencyScore(dueDateIso: string | null, confidenceScore: number)
   if (daysRemaining <= 1) return 90;
   if (daysRemaining <= 3) return 84;
   if (daysRemaining <= 7) return 76;
-  if (daysRemaining <= 14) return 66;
-  return 52;
+  const base =
+    daysRemaining <= 14
+      ? 66
+      : 52;
+  return priorityScore ? clamp(Math.round(base * 0.65 + priorityScore * 0.35), 30, 99) : base;
 }
 
 function computeImportanceScore(
   type: SupportedObligationType,
   amount: number | null,
-  confidenceScore: number
+  confidenceScore: number,
+  priorityScore: number | null
 ) {
   let score =
     type === "BILL"
@@ -1751,6 +2001,10 @@ function computeImportanceScore(
 
   if (confidenceScore < 0.5) score -= 10;
   if (confidenceScore >= 0.78) score += 6;
+
+  if (priorityScore !== null) {
+    score = Math.round(score * 0.6 + priorityScore * 0.4);
+  }
 
   return clamp(score, 30, 98);
 }
@@ -1792,6 +2046,146 @@ function applyValidationGuards(
     obligationStatus: ObligationStatus.DRAFT,
     rationale: [...confidence.rationale, "conflict_detected"]
   };
+}
+
+function applyIntelligenceRoutingGuards(
+  confidence: ConfidenceEvaluation,
+  input: {
+    needsReview: boolean;
+    suppress: boolean;
+  }
+): ConfidenceEvaluation {
+  if (input.suppress) {
+    return {
+      ...confidence,
+      shouldCreateObligation: false,
+      needsConfirmation: true,
+      importParseStatus: ImportParseStatus.PARTIAL,
+      obligationStatus: null,
+      rationale: [...confidence.rationale, "intelligence_suppressed"]
+    };
+  }
+
+  if (!input.needsReview) {
+    return confidence;
+  }
+
+  const adjustedScore = Math.min(confidence.score, 0.74);
+  return {
+    ...confidence,
+    score: adjustedScore,
+    band: adjustedScore >= 0.78 ? "HIGH" : adjustedScore >= 0.48 ? "MEDIUM" : "LOW",
+    needsConfirmation: true,
+    importParseStatus: confidence.shouldCreateObligation
+      ? ImportParseStatus.NEEDS_CONFIRMATION
+      : ImportParseStatus.PARTIAL,
+    obligationStatus: confidence.shouldCreateObligation ? ObligationStatus.DRAFT : null,
+    rationale: [...confidence.rationale, "intelligence_review_routed"]
+  };
+}
+
+function shouldMergeIntoCanonical(input: {
+  extracted: {
+    type: SupportedObligationType;
+    vendor: string | null;
+    amount: number | null;
+    dueDate: string | null;
+  };
+  existing: {
+    type: ObligationType;
+    vendor: string | null;
+    amount: Prisma.Decimal | null;
+    dueDate: Date | null;
+    status: ObligationStatus;
+  };
+  confidenceBand: ConfidenceBand;
+}) {
+  if (input.confidenceBand === "LOW") return false;
+  if (input.existing.status === ObligationStatus.IGNORED || input.existing.status === ObligationStatus.RESOLVED) {
+    return false;
+  }
+  if (input.existing.type !== input.extracted.type) return false;
+  if (!input.extracted.vendor || !input.existing.vendor) return false;
+  if (normalizeKey(input.extracted.vendor) !== normalizeKey(input.existing.vendor)) return false;
+
+  if (input.extracted.dueDate && input.existing.dueDate) {
+    const incoming = new Date(input.extracted.dueDate);
+    if (!Number.isNaN(incoming.getTime())) {
+      const deltaDays = Math.abs(input.existing.dueDate.getTime() - incoming.getTime()) / (1000 * 60 * 60 * 24);
+      if (deltaDays > 25) return false;
+    }
+  }
+
+  const incomingAmount = input.extracted.amount;
+  const existingAmount = decimalToNumber(input.existing.amount);
+  if (incomingAmount !== null && existingAmount !== null && Math.abs(incomingAmount - existingAmount) > 800) {
+    return false;
+  }
+
+  return true;
+}
+
+function buildCanonicalMergeUpdate(input: {
+  existing: {
+    title: string;
+    description: string | null;
+    amount: Prisma.Decimal | null;
+    currency: string | null;
+    dueDate: Date | null;
+    recurrence: string | null;
+    confidenceScore: Prisma.Decimal;
+    status: ObligationStatus;
+  };
+  extracted: {
+    title: string | null;
+    description: string | null;
+    amount: number | null;
+    currency: string | null;
+    dueDate: string | null;
+    recurrence: string | null;
+  };
+  confidenceScore: number;
+}): Prisma.ObligationUpdateInput {
+  const data: Prisma.ObligationUpdateInput = {};
+
+  if (isGenericTitle(input.existing.title) && input.extracted.title) {
+    data.title = input.extracted.title;
+  }
+
+  if (!input.existing.description && input.extracted.description) {
+    data.description = input.extracted.description;
+  }
+
+  if (input.existing.amount === null && input.extracted.amount !== null) {
+    data.amount = input.extracted.amount;
+  }
+
+  if (!input.existing.currency && input.extracted.currency) {
+    data.currency = input.extracted.currency;
+  }
+
+  if (!input.existing.dueDate && input.extracted.dueDate) {
+    const parsed = new Date(input.extracted.dueDate);
+    if (!Number.isNaN(parsed.getTime())) {
+      data.dueDate = parsed;
+    }
+  }
+
+  if (!input.existing.recurrence && input.extracted.recurrence) {
+    data.recurrence = input.extracted.recurrence;
+  }
+
+  const currentConfidence = Number(input.existing.confidenceScore);
+  const nextConfidence = clamp(Math.max(currentConfidence, input.confidenceScore), 0.2, 0.98);
+  if (nextConfidence !== currentConfidence) {
+    data.confidenceScore = nextConfidence;
+  }
+
+  if (input.existing.status === ObligationStatus.DRAFT && nextConfidence >= 0.82) {
+    data.status = ObligationStatus.ACTIVE;
+  }
+
+  return data;
 }
 
 function decimalToNumber(value: Prisma.Decimal | null) {

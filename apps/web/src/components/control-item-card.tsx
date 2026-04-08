@@ -166,6 +166,17 @@ export default function ControlItemCard(props: Props) {
           <div style={{ fontSize: 13, color: colors.textMuted }}>Expected around {dateLabel}</div>
         ) : null}
 
+        {props.item.obligationCategory || props.item.priorityBand ? (
+          <div style={{ fontSize: 12, color: colors.textMuted }}>
+            {props.item.obligationCategory
+              ? `Category: ${props.item.obligationCategory.toLowerCase().replace(/_/g, " ")}`
+              : ""}
+            {props.item.obligationCategory && props.item.priorityBand ? " · " : ""}
+            {props.item.priorityBand ? `Priority: ${props.item.priorityBand.toLowerCase()}` : ""}
+            {props.item.surfacingTarget ? ` · Surface: ${props.item.surfacingTarget.toLowerCase()}` : ""}
+          </div>
+        ) : null}
+
         {extracted.length > 0 ? (
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {extracted.slice(0, 6).map((field) => (
