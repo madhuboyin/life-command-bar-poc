@@ -11,6 +11,10 @@ import {
   toEmotionalActionType,
   toEmotionalRiskLevel
 } from "./emotional-trust.mapper";
+import type {
+  MessagePresentationStyle,
+  ReminderSuggestionStyle
+} from "./human-language.service";
 
 type ReassurancePattern =
   | "primary_reassurance"
@@ -45,12 +49,15 @@ type CommonInput = {
   scopeType?: "PERSONAL" | "HOUSEHOLD" | null;
   assigneeName?: string | null;
   remainingCount?: number | null;
+  presentationStyle?: MessagePresentationStyle;
+  reminderStyle?: ReminderSuggestionStyle;
 };
 
 type ReminderDeferralInput = {
   phase?: "before" | "after";
   remindAt?: string | null;
   repeatedDeferrals?: number;
+  reminderStyle?: ReminderSuggestionStyle;
 };
 
 type CompletionReliefInput = {
@@ -105,13 +112,18 @@ export function buildPrimaryReassurance(input: CommonInput = {}): EmotionalTrust
   });
 
   const mapping = mapStateToMessage(emotionalState);
-  return buildMessage({
+  const base = buildMessage({
     emotionalState,
     riskLevel,
     messageKey: mapping.primary,
     supportingKey: mapping.supporting,
     reassurancePattern: "primary_reassurance",
     context: input.assigneeName ? { name: input.assigneeName } : undefined
+  });
+
+  return tunePrimaryReassurance(base, {
+    presentationStyle: input.presentationStyle ?? "DEFAULT",
+    reminderStyle: input.reminderStyle ?? "DEFAULT"
   });
 }
 
@@ -195,22 +207,26 @@ export function buildReminderDeferralMessage(
   input: ReminderDeferralInput = {}
 ): EmotionalTrustMessage {
   const phase = input.phase ?? "before";
+  const reminderStyle = input.reminderStyle ?? "DEFAULT";
+
   if (phase === "after") {
     trackDeferAfterReassurance("reminder.after.primary");
-    return buildMessage({
+    const base = buildMessage({
       emotionalState: "SAFE_TO_WAIT",
       messageKey: "reminder.after.primary",
       supportingKey: "reminder.after.supporting",
       reassurancePattern: "reminder_deferral"
     });
+    return tuneReminderDeferral(base, reminderStyle, phase);
   }
 
-  return buildMessage({
+  const base = buildMessage({
     emotionalState: "SAFE_TO_WAIT",
     messageKey: "reminder.before.primary",
     supportingKey: "reminder.before.supporting",
     reassurancePattern: "reminder_deferral"
   });
+  return tuneReminderDeferral(base, reminderStyle, phase);
 }
 
 export function buildHouseholdResponsibilityMessage(input: {
@@ -443,4 +459,81 @@ function publishTelemetry() {
       __LCB_EMOTIONAL_TRUST__?: ReturnType<typeof getEmotionalTrustTelemetry>;
     }
   ).__LCB_EMOTIONAL_TRUST__ = getEmotionalTrustTelemetry();
+}
+
+function tunePrimaryReassurance(
+  base: EmotionalTrustMessage,
+  input: {
+    presentationStyle: MessagePresentationStyle;
+    reminderStyle: ReminderSuggestionStyle;
+  }
+) {
+  if (
+    input.presentationStyle === "DEFAULT" &&
+    input.reminderStyle === "DEFAULT"
+  ) {
+    return base;
+  }
+
+  if (input.presentationStyle === "COMPACT_ACTION") {
+    return {
+      ...base,
+      supporting: "Clear next step. Keep it short."
+    };
+  }
+
+  if (input.presentationStyle === "SUPPORTED_REVIEW") {
+    const supporting = base.supporting
+      ? `${base.supporting} A quick review first is enough.`
+      : "A quick review first is enough.";
+    return {
+      ...base,
+      supporting
+    };
+  }
+
+  if (input.reminderStyle === "REALISTIC_FOLLOWUP") {
+    return {
+      ...base,
+      supporting: "Review now, or choose a realistic follow-up time."
+    };
+  }
+
+  return base;
+}
+
+function tuneReminderDeferral(
+  base: EmotionalTrustMessage,
+  reminderStyle: ReminderSuggestionStyle,
+  phase: "before" | "after"
+) {
+  if (reminderStyle === "DEFAULT") {
+    return base;
+  }
+
+  if (reminderStyle === "SHORT_FOLLOWUP") {
+    return {
+      ...base,
+      primary:
+        phase === "after"
+          ? "Reminder set for soon follow-up."
+          : "Not ready? Set a near follow-up.",
+      supporting:
+        phase === "after"
+          ? "We'll nudge this again soon."
+          : "A short reminder can help you close it quickly."
+    };
+  }
+
+  return {
+    ...base,
+    primary:
+      phase === "after"
+        ? "Reminder set for a realistic follow-up."
+        : "No rush. Choose a realistic follow-up.",
+    supporting:
+      phase === "after"
+        ? "We'll bring this back at a workable time."
+        : "A practical reminder helps reduce repeat postponing."
+  };
 }

@@ -6,6 +6,8 @@ import { DailyCommandCenterService } from "./daily-command-center.service";
 import { ObligationActionsService } from "./obligation-actions.service";
 import { PersonalizationSignalService } from "./personalization-signal.service";
 import { BehaviorProfileService } from "./behavior-profile.service";
+import { PersonalizationPolicyService } from "./personalization-policy.service";
+import { toBehaviorProfileView } from "../types/personalization-policy.types";
 
 export type TodayActionKey =
   | "MARK_DONE"
@@ -23,6 +25,7 @@ export class TodayActionLoopService {
   private readonly todayService = new DailyCommandCenterService();
   private readonly personalizationSignalService = new PersonalizationSignalService();
   private readonly behaviorProfileService = new BehaviorProfileService();
+  private readonly personalizationPolicyService = new PersonalizationPolicyService();
 
   async executeAction(
     userId: string,
@@ -72,7 +75,18 @@ export class TodayActionLoopService {
         break;
       }
       case "REMIND_LATER": {
-        const until = payload.remindAt ?? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+        const requestedRemindAt = parseOptionalIsoDate(payload.remindAt);
+        const behaviorProfile = await this.behaviorProfileService
+          .getBehaviorProfile(userId)
+          .catch(() => null);
+        const reminderDecision =
+          this.personalizationPolicyService.resolveTodayReminderSchedule({
+            profile: toBehaviorProfileView(behaviorProfile),
+            dueDate: item.dueDate?.toISOString() ?? null,
+            renewalDate: item.subscription?.nextRenewalDate?.toISOString() ?? null,
+            requestedRemindAt
+          });
+        const until = reminderDecision.remindAt.toISOString();
         const updated = await this.obligations.postpone(userId, obligationId, {
           until,
           reason: payload.note ?? "Deferred from Today View"
@@ -88,7 +102,12 @@ export class TodayActionLoopService {
           .catch(() => null);
 
         status = "DEFERRED";
-        message = "Reminder moved later.";
+        message =
+          reminderDecision.reminderStyle === "SHORT_FOLLOWUP"
+            ? "Reminder set for a near follow-up."
+            : reminderDecision.reminderStyle === "REALISTIC_FOLLOWUP"
+              ? "Reminder set for a realistic follow-up."
+              : "Reminder moved later.";
         await createAuditEvent({
           userId,
           householdId: item.householdId,
@@ -97,7 +116,22 @@ export class TodayActionLoopService {
           metadata: {
             actionKey: payload.actionKey,
             remindAt: until,
-            note: payload.note ?? null
+            note: payload.note ?? null,
+            reminderStyle: reminderDecision.reminderStyle,
+            reminderReason: reminderDecision.reason
+          }
+        });
+        await createAuditEvent({
+          userId,
+          householdId: item.householdId,
+          obligationId,
+          eventType: "reminder_style_applied",
+          metadata: {
+            surface: "TODAY_VIEW",
+            reminderStyle: reminderDecision.reminderStyle,
+            reason: reminderDecision.reason,
+            usedPersonalizedDefault: reminderDecision.usedPersonalizedDefault,
+            remindAt: until
           }
         });
         break;
@@ -316,4 +350,11 @@ export class TodayActionLoopService {
     await this.personalizationSignalService.recordSignals(signals).catch(() => null);
     void this.behaviorProfileService.recomputeBehaviorProfile(userId).catch(() => null);
   }
+}
+
+function parseOptionalIsoDate(value?: string | null) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
 }

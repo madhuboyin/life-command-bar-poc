@@ -26,7 +26,8 @@ export default function TodayPrimaryItemCard({
   const recommendationMessage = buildRecommendationMessage({
     recommendationType: item.primaryAction.key,
     reason: item.whyNow,
-    issue: item.whyNow
+    issue: item.whyNow,
+    presentationStyle: item.presentationStyle
   });
   const confidenceMessage = buildDecisionConfidenceMessage({
     confidenceBand: item.confidenceBand,
@@ -39,7 +40,9 @@ export default function TodayPrimaryItemCard({
     dueAt: item.dueDate,
     renewsAt: item.renewalDate,
     scopeType: item.scopeType,
-    assigneeName: item.assignee?.name ?? item.assignee?.email ?? null
+    assigneeName: item.assignee?.name ?? item.assignee?.email ?? null,
+    presentationStyle: item.presentationStyle,
+    reminderStyle: item.reminderStyle
   });
   const riskMessage = buildRiskReassurance({
     priorityBand: item.priorityBand,

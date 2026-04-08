@@ -31,7 +31,12 @@ export default function TodayActionBar({
       }}
     >
       {actions.map((action, index) => {
-        const label = buildActionLabel(action.label || action.key);
+        const label = buildActionLabel(action.label || action.key, {
+          presentationStyle: item.presentationStyle,
+          reminderStyle:
+            action.key === "REMIND_LATER" ? item.reminderStyle : "DEFAULT",
+          isPrimary: index === 0
+        });
         return (
           <button
             key={`${item.id}_${action.key}_${index}`}

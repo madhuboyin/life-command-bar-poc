@@ -6,6 +6,7 @@ import {
   toActionKey,
   toConfidenceKey,
   toIssueKey,
+  normalize as normalizeKey,
   toRecommendationKey,
   toStatusKey
 } from "./human-language.mapper";
@@ -28,6 +29,7 @@ type RecommendationMessageInput = {
   recommendationType?: string | null;
   issue?: string | null;
   reason?: string | null;
+  presentationStyle?: MessagePresentationStyle;
 };
 
 type WhyMessageInput = {
@@ -44,6 +46,16 @@ type EmptyStateSurface =
   | "control_tower"
   | "daily_pulse"
   | "subscription_review";
+
+export type MessagePresentationStyle =
+  | "DEFAULT"
+  | "COMPACT_ACTION"
+  | "SUPPORTED_REVIEW";
+
+export type ReminderSuggestionStyle =
+  | "DEFAULT"
+  | "SHORT_FOLLOWUP"
+  | "REALISTIC_FOLLOWUP";
 
 type TelemetryState = {
   messageKeys: Record<string, number>;
@@ -108,13 +120,19 @@ export function buildRecommendationMessage(
     publishTelemetry();
   }
 
-  return {
+  const base = {
     primary: getUserFacingText(recommendationKey),
     context: (issueKey ? getUserFacingText(issueKey) : rawReason) ?? undefined,
     why: (issueKey && input.reason ? rawReason : undefined) ?? undefined,
     messageKey: recommendationKey,
     usedFallback
   };
+
+  return tuneRecommendationMessage(base, {
+    recommendationType: input.recommendationType,
+    presentationStyle: input.presentationStyle ?? "DEFAULT",
+    hasIssueKey: Boolean(issueKey)
+  });
 }
 
 export function buildWhyMessage(input: WhyMessageInput): BuilderResult {
@@ -140,8 +158,42 @@ export function buildWhyMessage(input: WhyMessageInput): BuilderResult {
   };
 }
 
-export function buildActionLabel(action: string | null | undefined) {
-  return getUserFacingText(toActionKey(action));
+export function buildActionLabel(
+  action: string | null | undefined,
+  options?: {
+    presentationStyle?: MessagePresentationStyle;
+    reminderStyle?: ReminderSuggestionStyle;
+    isPrimary?: boolean;
+  }
+) {
+  const base = getUserFacingText(toActionKey(action));
+  const presentationStyle = options?.presentationStyle ?? "DEFAULT";
+  const reminderStyle = options?.reminderStyle ?? "DEFAULT";
+  if (presentationStyle === "DEFAULT" && reminderStyle === "DEFAULT") {
+    return base;
+  }
+
+  const normalized = normalizeKey(action);
+  const isReminderAction = normalized.includes("remind") || normalized.includes("postpone");
+  if (isReminderAction) {
+    if (reminderStyle === "SHORT_FOLLOWUP") return "Remind soon";
+    if (reminderStyle === "REALISTIC_FOLLOWUP") return "Set follow-up";
+  }
+
+  if (presentationStyle === "COMPACT_ACTION") {
+    if (normalized.includes("review")) return "Review";
+    if (normalized.includes("handle") || normalized.includes("start") || normalized.includes("done")) {
+      return options?.isPrimary ? "Do now" : base;
+    }
+    return base;
+  }
+
+  if (presentationStyle === "SUPPORTED_REVIEW") {
+    if (normalized.includes("review")) return "Review first";
+    if (isReminderAction && reminderStyle !== "SHORT_FOLLOWUP") return "Follow up later";
+  }
+
+  return base;
 }
 
 export function buildEmptyStateMessage(surface: EmptyStateSurface): BuilderResult {
@@ -226,4 +278,58 @@ function publishTelemetry() {
   if (typeof window === "undefined") return;
   (window as Window & { __LCB_HUMAN_LANGUAGE__?: ReturnType<typeof getHumanLanguageTelemetry> }).__LCB_HUMAN_LANGUAGE__ =
     getHumanLanguageTelemetry();
+}
+
+function tuneRecommendationMessage(
+  base: BuilderResult,
+  input: {
+    recommendationType?: string | null;
+    presentationStyle: MessagePresentationStyle;
+    hasIssueKey: boolean;
+  }
+): BuilderResult {
+  if (input.presentationStyle === "DEFAULT") {
+    return base;
+  }
+
+  const normalizedRecommendation = normalizeKey(input.recommendationType);
+  if (input.presentationStyle === "COMPACT_ACTION") {
+    const compactPrimary = normalizedRecommendation.includes("review")
+      ? "Quick review"
+      : normalizedRecommendation.includes("mark_done") ||
+          normalizedRecommendation.includes("handle") ||
+          normalizedRecommendation.includes("confirm")
+        ? "Handle now"
+        : normalizedRecommendation.includes("open_guided") ||
+            normalizedRecommendation.includes("start")
+          ? "Start now"
+          : base.primary;
+
+    return {
+      ...base,
+      primary: compactPrimary,
+      context: input.hasIssueKey ? compactSentence(base.context) : undefined
+    };
+  }
+
+  const supportiveTail = "A quick look first is enough.";
+  const baseContext = base.context ? compactSentence(base.context) : null;
+  const tunedContext = baseContext
+    ? `${baseContext} ${supportiveTail}`.trim()
+    : supportiveTail;
+
+  return {
+    ...base,
+    primary: normalizedRecommendation.includes("review")
+      ? "Review before deciding"
+      : base.primary,
+    context: tunedContext
+  };
+}
+
+function compactSentence(value?: string | null) {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return trimmed.length > 120 ? `${trimmed.slice(0, 117)}...` : trimmed;
 }

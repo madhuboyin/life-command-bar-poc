@@ -11,6 +11,17 @@ import {
 } from "./today-prioritization.service";
 import { DailyPulseService } from "./daily-pulse.service";
 import { PersonalizationSignalService } from "./personalization-signal.service";
+import { BehaviorProfileService } from "./behavior-profile.service";
+import {
+  PersonalizationPolicyService,
+  type PersonalizedTodayItem
+} from "./personalization-policy.service";
+import {
+  toBehaviorProfileView,
+  type PersonalizationDebugMetadata,
+  type ReminderSuggestionStyle,
+  type TodayPresentationStyle
+} from "../types/personalization-policy.types";
 
 export type DailyCommandCenterItem = {
   id: string;
@@ -32,6 +43,9 @@ export type DailyCommandCenterItem = {
   whyThisMatters: string;
   sourceSummary: string;
   scopeType: "PERSONAL" | "HOUSEHOLD";
+  presentationStyle: TodayPresentationStyle;
+  reminderStyle: ReminderSuggestionStyle;
+  personalization: PersonalizationDebugMetadata;
   assignee:
     | {
         id: string;
@@ -83,10 +97,13 @@ export class DailyCommandCenterService {
   private readonly pulseService = new DailyPulseService();
   private readonly controlTowerService = new ControlTowerService();
   private readonly personalizationSignalService = new PersonalizationSignalService();
+  private readonly behaviorProfileService = new BehaviorProfileService();
+  private readonly personalizationPolicyService = new PersonalizationPolicyService();
 
   async getTodayView(userId: string, options?: { emitEvents?: boolean }): Promise<DailyCommandCenterResponse> {
     const emitEvents = options?.emitEvents ?? true;
-    const todayStart = startOfDayUTC(new Date());
+    const now = new Date();
+    const todayStart = startOfDayUTC(now);
 
     const [openRows, completedRows, pulseState, upcomingPredictions] = await Promise.all([
       this.repository.listOpenCandidates({ userId }),
@@ -143,17 +160,27 @@ export class DailyCommandCenterService {
           lastActedAt: mapped.lastActedAt,
           subscriptionId: row.subscriptionId
         };
-      })
+      }),
+      now
     );
+    const behaviorProfile = await this.behaviorProfileService
+      .getBehaviorProfile(userId)
+      .catch(() => null);
+    const personalization = this.personalizationPolicyService.applyTodayViewPersonalization({
+      items: ranked,
+      profile: toBehaviorProfileView(behaviorProfile),
+      now
+    });
+    const personalizedRanked = personalization.items;
 
-    const primaryCandidates = ranked.filter(
+    const primaryCandidates = personalizedRanked.filter(
       (item) => item.priorityBand === "URGENT" || item.priorityBand === "HIGH"
     );
 
     const primaryItems = primaryCandidates.slice(0, 5).map((item) => this.toSurfaceItem(item));
     const primaryIds = new Set(primaryItems.map((item) => item.id));
 
-    const upcomingFromRanked = ranked
+    const upcomingFromRanked = personalizedRanked
       .filter((item) => !primaryIds.has(item.id))
       .filter((item) => item.priorityBand === "MEDIUM")
       .slice(0, 5)
@@ -212,6 +239,41 @@ export class DailyCommandCenterService {
           }
         });
       }
+
+      if (personalization.personalizationApplied) {
+        await createAuditEvent({
+          userId,
+          eventType: "today_view_personalization_applied",
+          metadata: {
+            itemCount: personalizedRanked.length,
+            rankingApplied: personalization.rankingPersonalizationApplied,
+            messagingApplied: personalization.messagingPersonalizationApplied,
+            reminderApplied: personalization.reminderPersonalizationApplied,
+            presentationStyleCounts: personalization.presentationStyleCounts,
+            reminderStyleCounts: personalization.reminderStyleCounts
+          }
+        });
+      } else {
+        await createAuditEvent({
+          userId,
+          eventType: "today_view_personalization_skipped",
+          metadata: {
+            itemCount: personalizedRanked.length,
+            reason: behaviorProfile ? "profile_unknown_or_neutral" : "profile_unavailable"
+          }
+        });
+      }
+
+      if (personalization.messagingPersonalizationApplied) {
+        await createAuditEvent({
+          userId,
+          eventType: "adaptive_message_style_applied",
+          metadata: {
+            surface: "TODAY_VIEW",
+            presentationStyleCounts: personalization.presentationStyleCounts
+          }
+        });
+      }
     }
 
     void this.recordImpressionSignals(userId, primaryItems).catch(() => null);
@@ -231,7 +293,27 @@ export class DailyCommandCenterService {
     };
   }
 
-  private toSurfaceItem(item: TodayPrioritizedItem): DailyCommandCenterItem {
+  private toSurfaceItem(item: TodayPrioritizedItem | PersonalizedTodayItem): DailyCommandCenterItem {
+    const personalized =
+      "personalization" in item
+        ? {
+            presentationStyle: item.presentationStyle,
+            reminderStyle: item.reminderStyle,
+            personalization: item.personalization
+          }
+        : {
+            presentationStyle: "DEFAULT" as const,
+            reminderStyle: "DEFAULT" as const,
+            personalization: {
+              basePriorityScore: item.priorityScore,
+              finalPriorityScore: item.priorityScore,
+              personalizationApplied: false,
+              presentationStyle: "DEFAULT" as const,
+              reminderStyle: "DEFAULT" as const,
+              adjustments: []
+            }
+          };
+
     return {
       id: item.id,
       itemType: item.itemType,
@@ -252,6 +334,9 @@ export class DailyCommandCenterService {
       whyThisMatters: item.whyThisMatters,
       sourceSummary: item.sourceSummary,
       scopeType: item.scopeType,
+      presentationStyle: personalized.presentationStyle,
+      reminderStyle: personalized.reminderStyle,
+      personalization: personalized.personalization,
       assignee: item.assignee
     };
   }
@@ -273,7 +358,9 @@ export class DailyCommandCenterService {
           source: "TODAY_VIEW" as const,
           metadata: {
             priorityBand: item.priorityBand,
-            primaryAction: item.primaryAction.key
+            primaryAction: item.primaryAction.key,
+            presentationStyle: item.presentationStyle,
+            reminderStyle: item.reminderStyle
           }
         }))
       )
@@ -390,6 +477,16 @@ function mergeUpcomingWithPredictions(
       whyThisMatters: "Looking ahead reduces last-minute decision pressure.",
       sourceSummary: prediction.sourceLabel,
       scopeType: "PERSONAL",
+      presentationStyle: "DEFAULT",
+      reminderStyle: "DEFAULT",
+      personalization: {
+        basePriorityScore: 48,
+        finalPriorityScore: 48,
+        personalizationApplied: false,
+        presentationStyle: "DEFAULT",
+        reminderStyle: "DEFAULT",
+        adjustments: []
+      },
       assignee: null
     });
   }

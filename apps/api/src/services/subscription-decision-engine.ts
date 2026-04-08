@@ -15,10 +15,15 @@ import { SubscriptionInsightService } from "./subscription-insight.service";
 import type { SubscriptionFlowDecision } from "./subscription-guided-flow";
 import { AppError } from "../utils/app-error";
 import { listActiveHouseholdIdsForUser } from "../utils/household-access";
+import { BehaviorProfileService } from "./behavior-profile.service";
+import { PersonalizationPolicyService } from "./personalization-policy.service";
+import { toBehaviorProfileView } from "../types/personalization-policy.types";
 
 export class SubscriptionDecisionEngine {
   private readonly reminderService = new ReminderService();
   private readonly insightService = new SubscriptionInsightService();
+  private readonly behaviorProfileService = new BehaviorProfileService();
+  private readonly personalizationPolicyService = new PersonalizationPolicyService();
 
   async applyDecision(input: {
     userId: string;
@@ -74,6 +79,9 @@ export class SubscriptionDecisionEngine {
     };
     let lifecycleEventType: SubscriptionLifecycleEventType | null = null;
     let reminderCreatedId: string | null = null;
+    let reminderDecision: ReturnType<
+      PersonalizationPolicyService["resolveSubscriptionReminderSchedule"]
+    > | null = null;
     let createdObligationId: string | null = null;
 
     if (input.decision === "KEEP") {
@@ -113,14 +121,36 @@ export class SubscriptionDecisionEngine {
     }
 
     if (input.decision === "REMIND_LATER") {
-      const remindAt = resolveReminderDate(input.remindAt);
+      const requestedRemindAt = parseReminderDate(input.remindAt);
+      const behaviorProfile = await this.behaviorProfileService
+        .getBehaviorProfile(input.userId)
+        .catch(() => null);
+      reminderDecision =
+        this.personalizationPolicyService.resolveSubscriptionReminderSchedule({
+          profile: toBehaviorProfileView(behaviorProfile),
+          nextRenewalDate: subscription.nextRenewalDate?.toISOString() ?? null,
+          requestedRemindAt
+        });
       const reminder = await this.reminderService.create({
         userId: input.userId,
         obligationId: subscription.obligations[0]?.id,
         title: `Review subscription: ${subscription.subscriptionTitle}`,
-        scheduledFor: remindAt.toISOString()
+        scheduledFor: reminderDecision.remindAt.toISOString()
       });
       reminderCreatedId = reminder.id;
+
+      await createAuditEvent({
+        userId: input.userId,
+        eventType: "reminder_style_applied",
+        metadata: {
+          surface: "SUBSCRIPTION_REVIEW",
+          subscriptionId: subscription.id,
+          reminderStyle: reminderDecision.reminderStyle,
+          reason: reminderDecision.reason,
+          usedPersonalizedDefault: reminderDecision.usedPersonalizedDefault,
+          remindAt: reminderDecision.remindAt.toISOString()
+        }
+      });
     }
 
     const normalizedRecommendation = normalizeDecisionToRecommendation(input.decision);
@@ -182,6 +212,8 @@ export class SubscriptionDecisionEngine {
         decision: input.decision,
         recommendationType: normalizedRecommendation,
         reminderId: reminderCreatedId,
+        reminderStyle: reminderDecision?.reminderStyle ?? null,
+        reminderReason: reminderDecision?.reason ?? null,
         createdObligationId,
         note: input.note ?? null
       }
@@ -258,10 +290,8 @@ export class SubscriptionDecisionEngine {
   }
 }
 
-function resolveReminderDate(value?: string | null) {
-  if (!value) {
-    return new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-  }
+function parseReminderDate(value?: string | null) {
+  if (!value) return null;
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
     throw new AppError("VALIDATION_ERROR", "Invalid reminder date", 400);

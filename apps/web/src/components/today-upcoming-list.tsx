@@ -40,7 +40,10 @@ export default function TodayUpcomingList({ items }: { items: DailyCommandCenter
           {item.primaryAction.mode === "NAVIGATE" && item.primaryAction.href ? (
             <div>
               <Link href={item.primaryAction.href} style={{ color: "#2563eb", textDecoration: "none", fontWeight: 600 }}>
-                {buildActionLabel(item.primaryAction.label || item.primaryAction.key)}
+                {buildActionLabel(item.primaryAction.label || item.primaryAction.key, {
+                  presentationStyle: item.presentationStyle,
+                  reminderStyle: item.reminderStyle
+                })}
               </Link>
             </div>
           ) : null}

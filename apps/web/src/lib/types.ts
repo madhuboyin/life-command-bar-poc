@@ -189,6 +189,29 @@ export type TodayActionKey =
   | "REVIEW_SUBSCRIPTION"
   | "VIEW_DETAILS";
 
+export type TodayPresentationStyle =
+  | "DEFAULT"
+  | "COMPACT_ACTION"
+  | "SUPPORTED_REVIEW";
+
+export type ReminderSuggestionStyle =
+  | "DEFAULT"
+  | "SHORT_FOLLOWUP"
+  | "REALISTIC_FOLLOWUP";
+
+export interface TodayItemPersonalizationDebug {
+  basePriorityScore: number;
+  finalPriorityScore: number;
+  personalizationApplied: boolean;
+  presentationStyle: TodayPresentationStyle;
+  reminderStyle: ReminderSuggestionStyle;
+  adjustments: Array<{
+    source: "actionSpeed" | "reviewPreference" | "deferFrequency";
+    effect: string;
+    delta: number;
+  }>;
+}
+
 export interface TodayActionDescriptor {
   key: TodayActionKey;
   label: string;
@@ -216,6 +239,9 @@ export interface DailyCommandCenterItem {
   whyThisMatters: string;
   sourceSummary: string;
   scopeType: "PERSONAL" | "HOUSEHOLD";
+  presentationStyle: TodayPresentationStyle;
+  reminderStyle: ReminderSuggestionStyle;
+  personalization: TodayItemPersonalizationDebug;
   assignee:
     | {
         id: string;
