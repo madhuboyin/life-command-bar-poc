@@ -478,6 +478,24 @@ enum LlmAsyncTaskStatus {
   CANCELED
 }
 
+enum BehaviorActionSpeed {
+  FAST
+  SLOW
+  UNKNOWN
+}
+
+enum BehaviorReviewPreference {
+  QUICK_ACTION
+  REVIEW_FIRST
+  UNKNOWN
+}
+
+enum BehaviorDeferFrequency {
+  LOW
+  HIGH
+  UNKNOWN
+}
+
 model User {
   id       String  @id @default(cuid())
   email    String  @unique
@@ -530,11 +548,34 @@ model User {
   llmCacheEntries            LlmCacheEntry[]
   llmUsageRecords            LlmUsageRecord[]
   llmAsyncTasks              LlmAsyncTask[]
+  behaviorProfile            UserBehaviorProfile?
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("users")
+}
+
+model UserBehaviorProfile {
+  id String @id @default(cuid())
+
+  userId String @unique @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  actionSpeed      BehaviorActionSpeed      @default(UNKNOWN) @map("action_speed")
+  reviewPreference BehaviorReviewPreference @default(UNKNOWN) @map("review_preference")
+  deferFrequency   BehaviorDeferFrequency   @default(UNKNOWN) @map("defer_frequency")
+
+  signalSampleSize Int      @default(0) @map("signal_sample_size")
+  lastComputedAt   DateTime? @map("last_computed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([actionSpeed], map: "idx_user_behavior_profiles_action_speed")
+  @@index([reviewPreference], map: "idx_user_behavior_profiles_review_preference")
+  @@index([deferFrequency], map: "idx_user_behavior_profiles_defer_frequency")
+  @@map("user_behavior_profiles")
 }
 
 model Account {
