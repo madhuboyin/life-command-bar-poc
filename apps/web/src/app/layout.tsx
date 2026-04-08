@@ -51,6 +51,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               {isAuthenticated ? (
                 <>
                   <HouseholdSwitcher />
+                  <Link href="/today" style={{ textDecoration: "none", color: colors.textMuted }}>
+                    Today
+                  </Link>
                   <Link href="/obligations" style={{ textDecoration: "none", color: colors.textMuted }}>
                     Obligations
                   </Link>

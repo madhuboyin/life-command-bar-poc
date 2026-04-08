@@ -12,6 +12,8 @@ import type {
   DailyPulseProgressResponse,
   DailyPulseResponse,
   DailyPulseState,
+  DailyCommandCenterActionResponse,
+  DailyCommandCenterResponse,
   DashboardInsightsResponse,
   FocusSessionCreateResponse,
   FocusSessionResponse,
@@ -55,6 +57,7 @@ import type {
   SubscriptionRegistryDetail,
   SubscriptionRegistryListResponse,
   TodayFeedResponse,
+  TodayActionKey,
   ZeroInputDecisionItem,
   ZeroInputPolicy
 } from "./types";
@@ -121,6 +124,8 @@ type DailyPulseApiResponse = DailyPulseResponse;
 type DailyPulseStateApiResponse = DailyPulseState;
 type DailyPulseProgressApiResponse = DailyPulseProgressResponse;
 type DailyPulseItemUpdateApiResponse = DailyPulseItemUpdateResponse;
+type DailyCommandCenterApiResponse = DailyCommandCenterResponse;
+type DailyCommandCenterActionApiResponse = DailyCommandCenterActionResponse;
 type PersonalizationSummaryApiResponse = PersonalizationSummary;
 type PersonalizationDebugApiResponse = PersonalizationDebug;
 type UploadIngestionApiResponse = {
@@ -440,6 +445,29 @@ export async function getTodayFeed(params?: {
   });
 
   return handleResponse<TodayFeedResponse>(res);
+}
+
+export async function getTodayView(): Promise<DailyCommandCenterApiResponse> {
+  const res = await apiFetch("/today", {
+    cache: "no-store"
+  });
+  return handleResponse<DailyCommandCenterApiResponse>(res);
+}
+
+export async function applyTodayItemAction(
+  itemId: string,
+  input: {
+    actionKey: TodayActionKey;
+    remindAt?: string | null;
+    note?: string | null;
+  }
+) {
+  const res = await apiFetch(`/today/items/${itemId}/actions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  return handleResponse<DailyCommandCenterActionApiResponse>(res);
 }
 
 export async function getDashboardInsights(params?: {

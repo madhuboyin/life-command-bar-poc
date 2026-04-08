@@ -30,6 +30,7 @@ import { gmailRouter } from "./routes/gmail.routes";
 import { gmailPublicRouter } from "./routes/gmail-public.routes";
 import { subscriptionRouter } from "./routes/subscription.routes";
 import { subscriptionReviewRouter } from "./routes/subscription-review.routes";
+import { todayRouter } from "./routes/today.routes";
 
 export function createApp() {
   const app = express();
@@ -64,6 +65,7 @@ export function createApp() {
   app.use("/api/gmail", gmailRouter);
   app.use("/api/subscriptions/review", subscriptionReviewRouter);
   app.use("/api/subscriptions", subscriptionRouter);
+  app.use("/api/today", todayRouter);
   app.use("/api/admin", requireAdmin, adminObservabilityRouter);
   app.use("/api", resolutionRouter);
 

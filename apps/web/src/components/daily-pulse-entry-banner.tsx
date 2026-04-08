@@ -15,8 +15,8 @@ export default function DailyPulseEntryBanner() {
       <div style={{ color: colors.textMuted, marginBottom: 12 }}>
         Review today&apos;s top 3–5 decisions in one calm flow.
       </div>
-      <Link href="/pulse" style={buttonStyles.link}>
-        Open Daily Pulse
+      <Link href="/today" style={buttonStyles.link}>
+        Open Today View
       </Link>
     </section>
   );

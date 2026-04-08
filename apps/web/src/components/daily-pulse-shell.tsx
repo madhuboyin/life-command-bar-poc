@@ -111,9 +111,14 @@ export default function DailyPulseShell({
             Your day in five decisions.
           </p>
         </div>
-        <button onClick={refreshPulse} disabled={loading} style={buttonStyles.secondary}>
-          {loading ? "Refreshing..." : "Refresh pulse"}
-        </button>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Link href="/today" style={buttonStyles.link}>
+            Open Today View
+          </Link>
+          <button onClick={refreshPulse} disabled={loading} style={buttonStyles.secondary}>
+            {loading ? "Refreshing..." : "Refresh pulse"}
+          </button>
+        </div>
       </header>
 
       {loading && !pulse ? (

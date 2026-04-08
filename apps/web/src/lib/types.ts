@@ -180,6 +180,96 @@ export interface TodayFeedResponse {
   items: TodayFeedItem[];
 }
 
+export type TodayActionKey =
+  | "MARK_DONE"
+  | "REMIND_LATER"
+  | "DISMISS"
+  | "OPEN_GUIDED"
+  | "REVIEW"
+  | "REVIEW_SUBSCRIPTION"
+  | "VIEW_DETAILS";
+
+export interface TodayActionDescriptor {
+  key: TodayActionKey;
+  label: string;
+  mode: "INLINE" | "NAVIGATE" | "GUIDED";
+  href?: string;
+}
+
+export interface DailyCommandCenterItem {
+  id: string;
+  itemType: "OBLIGATION" | "SUBSCRIPTION_REVIEW";
+  title: string;
+  subtitle: string | null;
+  category: string;
+  vendorName: string | null;
+  amount: number | null;
+  currency: string | null;
+  dueDate: string | null;
+  renewalDate: string | null;
+  priorityScore: number;
+  priorityBand: "URGENT" | "HIGH" | "MEDIUM" | "LOW";
+  confidenceBand: ConfidenceBand;
+  primaryAction: TodayActionDescriptor;
+  secondaryActions: TodayActionDescriptor[];
+  whyNow: string;
+  whyThisMatters: string;
+  sourceSummary: string;
+  scopeType: "PERSONAL" | "HOUSEHOLD";
+  assignee:
+    | {
+        id: string;
+        email: string;
+        name: string | null;
+      }
+    | null;
+}
+
+export interface DailyCommandCenterCompletedItem {
+  id: string;
+  title: string;
+  status: "COMPLETED" | "SAFE" | "DEFERRED";
+  summary: string;
+  actedAt: string | null;
+  scopeType: "PERSONAL" | "HOUSEHOLD";
+  assignee:
+    | {
+        id: string;
+        email: string;
+        name: string | null;
+      }
+    | null;
+}
+
+export interface DailyCommandCenterResponse {
+  generatedAt: string;
+  summary: {
+    todayCount: number;
+    urgentCount: number;
+    reviewCount: number;
+    upcomingCount: number;
+    completedTodayCount: number;
+  };
+  primaryItems: DailyCommandCenterItem[];
+  upcoming: DailyCommandCenterItem[];
+  completedOrSafe: DailyCommandCenterCompletedItem[];
+  pulse: {
+    openedToday: boolean;
+    totalItems: number;
+    remainingCount: number;
+    completedCount: number;
+  };
+}
+
+export interface DailyCommandCenterActionResponse {
+  actionKey: TodayActionKey;
+  status: "COMPLETED" | "DEFERRED" | "DISMISSED" | "OPENED_GUIDED" | "ROUTED";
+  message: string;
+  targetHref: string | null;
+  nextPrimaryItemId: string | null;
+  today: DailyCommandCenterResponse;
+}
+
 export type FlowSourceType =
   | "DAILY_PULSE"
   | "TODAY_FEED"
