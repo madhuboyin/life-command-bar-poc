@@ -1,5 +1,6 @@
 import { colors, radius } from "../lib/ui";
 import type { SubscriptionOptimizationHealth } from "../lib/types";
+import { getUserFacingText } from "../lib/human-language.service";
 
 export default function SubscriptionHealthBadge({
   health
@@ -7,6 +8,12 @@ export default function SubscriptionHealthBadge({
   health: SubscriptionOptimizationHealth;
 }) {
   const style = resolveStyle(health.band);
+  const label =
+    health.band === "GOOD"
+      ? getUserFacingText("status.looks_good")
+      : health.band === "FAIR"
+        ? getUserFacingText("status.needs_review")
+        : getUserFacingText("status.not_sure_yet");
   return (
     <span
       style={{
@@ -18,7 +25,7 @@ export default function SubscriptionHealthBadge({
         color: style.color
       }}
     >
-      Health {health.score} · {health.band.toLowerCase().replace("_", " ")}
+      {label}
     </span>
   );
 }

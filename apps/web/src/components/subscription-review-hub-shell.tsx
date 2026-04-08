@@ -50,7 +50,7 @@ export default function SubscriptionReviewHubShell({
         <div>
           <h1 style={{ margin: "0 0 6px 0", fontSize: 32 }}>Subscription Review Hub</h1>
           <p style={{ margin: 0, color: "#6b7280" }}>
-            High-priority renewals and pricing changes. One decision at a time.
+            One clear subscription decision at a time.
           </p>
         </div>
         <button type="button" onClick={() => void refresh()} style={buttonStyles.secondary} disabled={loading}>

@@ -5,6 +5,10 @@ import { useState } from "react";
 import { confirmObligationCandidate, rejectObligationCandidate } from "../lib/api";
 import type { ReviewQueueItem } from "../lib/types";
 import { buttonStyles, cardStyles, colors } from "../lib/ui";
+import {
+  buildActionLabel,
+  buildRecommendationMessage
+} from "../lib/human-language.service";
 import ConfidenceBadge from "./confidence-badge";
 import SourceBadge from "./source-badge";
 import { useToast } from "./ui/toast-provider";
@@ -72,6 +76,11 @@ export default function ReviewQueueCard({ item, onUpdated }: Props) {
   const lifecycleRoutingReason =
     typeof v2Routing?.reason === "string" ? v2Routing.reason : null;
   const intelligence = item.obligationIntelligence;
+  const reviewMessage = buildRecommendationMessage({
+    recommendationType: "REVIEW",
+    issue: item.reviewReasons[0] ?? null,
+    reason: item.reviewReasons[0] ?? null
+  });
 
   async function handleConfirm() {
     try {
@@ -121,14 +130,12 @@ export default function ReviewQueueCard({ item, onUpdated }: Props) {
       </div>
 
       <div style={{ fontSize: 13, color: colors.textMuted }}>
-        {item.reviewReasons.join(" · ")}
+        {reviewMessage.primary}
       </div>
 
-      {intelligence ? (
+      {intelligence && reviewMessage.context ? (
         <div style={{ fontSize: 12, color: colors.textMuted }}>
-          Category: {intelligence.category.replace(/_/g, " ").toLowerCase()} · Priority:{" "}
-          {intelligence.priority.band.toLowerCase()} · Route:{" "}
-          {intelligence.routing.route.toLowerCase().replace(/_/g, " ")}
+          {reviewMessage.context}
         </div>
       ) : null}
 
@@ -142,31 +149,29 @@ export default function ReviewQueueCard({ item, onUpdated }: Props) {
 
       {lifecycleType || lifecyclePlan || lifecycleRecurringPrice !== null || lifecycleAmountCharged !== null ? (
         <div style={{ fontSize: 12, color: colors.textMuted }}>
-          {lifecycleType ? `Lifecycle: ${lifecycleType}` : ""}
+          {lifecycleType ? "Subscription details found" : ""}
           {lifecycleType && lifecyclePlan ? " · " : ""}
-          {lifecyclePlan ? `Plan: ${lifecyclePlan}` : ""}
+          {lifecyclePlan ? `Plan ${lifecyclePlan}` : ""}
           {(lifecycleType || lifecyclePlan) && lifecycleRecurringPrice !== null ? " · " : ""}
           {lifecycleRecurringPrice !== null
-            ? `Recurring: ${lifecycleRecurringPrice}${item.currency ? ` ${item.currency}` : ""}`
+            ? `Recurring ${lifecycleRecurringPrice}${item.currency ? ` ${item.currency}` : ""}`
             : ""}
           {(lifecycleType || lifecyclePlan || lifecycleRecurringPrice !== null) &&
           lifecycleAmountCharged !== null
             ? " · "
             : ""}
           {lifecycleAmountCharged !== null
-            ? `Charged: ${lifecycleAmountCharged}${item.currency ? ` ${item.currency}` : ""}`
+            ? `Last charge ${lifecycleAmountCharged}${item.currency ? ` ${item.currency}` : ""}`
             : ""}
         </div>
       ) : null}
 
       {lifecycleVendorName || lifecycleRoutingReason ? (
         <div style={{ fontSize: 12, color: colors.textMuted }}>
-          {lifecycleVendorName ? `Vendor intelligence: ${lifecycleVendorName}` : ""}
+          {lifecycleVendorName ? `Vendor ${lifecycleVendorName}` : ""}
           {lifecycleVendorName && lifecycleVendorCategory ? ` (${lifecycleVendorCategory})` : ""}
-          {lifecycleVendorName && lifecycleVendorScore !== null
-            ? ` · score ${Math.round(lifecycleVendorScore * 100)}%`
-            : ""}
-          {lifecycleRoutingReason ? ` · Why review: ${lifecycleRoutingReason.replace(/_/g, " ")}` : ""}
+          {lifecycleVendorName && lifecycleVendorScore !== null ? " · Match found" : ""}
+          {lifecycleRoutingReason ? ` · ${lifecycleRoutingReason.replace(/_/g, " ")}` : ""}
         </div>
       ) : null}
 
@@ -177,10 +182,10 @@ export default function ReviewQueueCard({ item, onUpdated }: Props) {
           disabled={loading !== null}
           style={buttonStyles.primary}
         >
-          {loading === "confirm" ? "Confirming..." : "Confirm"}
+          {loading === "confirm" ? "Confirming..." : buildActionLabel("confirm")}
         </button>
         <Link href={`/obligations/${item.id}/review`} style={buttonStyles.link}>
-          Edit first
+          {buildActionLabel("review")}
         </Link>
         <button
           type="button"
@@ -188,7 +193,7 @@ export default function ReviewQueueCard({ item, onUpdated }: Props) {
           disabled={loading !== null}
           style={buttonStyles.danger}
         >
-          {loading === "reject" ? "Rejecting..." : "Reject"}
+          {loading === "reject" ? "Rejecting..." : buildActionLabel("ignore")}
         </button>
       </div>
     </article>

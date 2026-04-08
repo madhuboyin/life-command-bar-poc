@@ -26,7 +26,7 @@ export default function TodaySummaryStrip({
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 10 }}>
         <Metric label="Urgent" value={summary.urgentCount} />
-        <Metric label="Needs review" value={summary.reviewCount} />
+        <Metric label="Quick look" value={summary.reviewCount} />
         <Metric label="Upcoming" value={summary.upcomingCount} />
         <Metric label="Completed" value={summary.completedTodayCount} />
       </div>

@@ -16,7 +16,7 @@ export default function ResumeGuidedJourneyCard({ journey }: Props) {
         Resume your journey
       </div>
       <div style={{ fontSize: 14, color: colors.textMuted, marginBottom: 10 }}>
-        {journey.progressPercent}% complete · Step {journey.currentStepIndex + 1} of {journey.totalSteps}
+        Step {journey.currentStepIndex + 1} of {journey.totalSteps}
       </div>
       <div>
         <Link href={`/guided/${journey.id}`} style={buttonStyles.link}>

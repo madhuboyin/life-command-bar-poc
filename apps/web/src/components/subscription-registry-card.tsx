@@ -1,6 +1,10 @@
 import Link from "next/link";
 import type { SubscriptionRegistrySummary } from "../lib/types";
 import { cardStyles, colors, radius } from "../lib/ui";
+import {
+  buildRecommendationMessage,
+  buildSummaryMessage
+} from "../lib/human-language.service";
 import SubscriptionLifecycleBadge from "./subscription-lifecycle-badge";
 import SubscriptionHealthBadge from "./subscription-health-badge";
 
@@ -9,6 +13,16 @@ export default function SubscriptionRegistryCard({
 }: {
   subscription: SubscriptionRegistrySummary;
 }) {
+  const summary = buildSummaryMessage({
+    confidence: subscription.sourceConfidenceBand
+  });
+  const recommendation = subscription.optimization
+    ? buildRecommendationMessage({
+        recommendationType: subscription.optimization.recommendation.recommendationType,
+        reason: subscription.optimization.recommendation.reason
+      })
+    : null;
+
   return (
     <article style={{ ...cardStyles.item, display: "grid", gap: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
@@ -23,16 +37,12 @@ export default function SubscriptionRegistryCard({
       </div>
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <Tag label={`Confidence ${subscription.sourceConfidenceBand.toLowerCase()}`} />
+        <Tag label={summary.primary} />
         <Tag label={`Billing ${subscription.billingPeriod.toLowerCase()}`} />
         {subscription.optimization ? (
           <SubscriptionHealthBadge health={subscription.optimization.health} />
         ) : null}
-        {subscription.optimization ? (
-          <Tag
-            label={`Recommendation ${subscription.optimization.recommendation.recommendationType.toLowerCase()}`}
-          />
-        ) : null}
+        {recommendation ? <Tag label={recommendation.primary} /> : null}
         {subscription.recurringPrice !== null ? (
           <Tag label={`Recurring ${formatMoney(subscription.recurringPrice, subscription.currency)}`} />
         ) : null}
@@ -40,8 +50,7 @@ export default function SubscriptionRegistryCard({
       </div>
 
       <div style={{ fontSize: 13, color: colors.textMuted }}>
-        Evidence {subscription.counts.evidence} · Lifecycle events {subscription.counts.lifecycleEvents} · Linked obligations{" "}
-        {subscription.counts.linkedObligations}
+        Details tracked: {subscription.counts.evidence} updates · {subscription.counts.linkedObligations} linked items
       </div>
 
       <div>

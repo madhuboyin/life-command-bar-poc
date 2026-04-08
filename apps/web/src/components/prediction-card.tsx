@@ -4,6 +4,7 @@ import { useState } from "react";
 import { confirmPrediction, dismissPrediction } from "../lib/api";
 import type { PredictionItem, PredictionSummaryItem } from "../lib/types";
 import { buttonStyles, cardStyles, colors } from "../lib/ui";
+import { buildActionLabel } from "../lib/human-language.service";
 import PredictionConfidenceBadge from "./prediction-confidence-badge";
 import PredictionRationale from "./prediction-rationale";
 
@@ -89,10 +90,10 @@ export default function PredictionCard({
           }}
         >
           <button type="button" onClick={() => void handleConfirm()} disabled={loading !== null} style={buttonStyles.secondary}>
-            {loading === "confirm" ? "Saving..." : "Confirm"}
+            {loading === "confirm" ? "Saving..." : buildActionLabel("confirm")}
           </button>
           <button type="button" onClick={() => void handleDismiss()} disabled={loading !== null} style={buttonStyles.danger}>
-            {loading === "dismiss" ? "Saving..." : "Dismiss"}
+            {loading === "dismiss" ? "Saving..." : buildActionLabel("ignore")}
           </button>
         </div>
       ) : null}

@@ -1,15 +1,21 @@
 import type { SubscriptionOptimizationRecommendation } from "../lib/types";
 import { cardStyles, colors, radius } from "../lib/ui";
+import { buildRecommendationMessage } from "../lib/human-language.service";
 
 export default function SubscriptionRecommendationCard({
   recommendation
 }: {
   recommendation: SubscriptionOptimizationRecommendation;
 }) {
+  const message = buildRecommendationMessage({
+    recommendationType: recommendation.recommendationType,
+    reason: recommendation.reason
+  });
+
   return (
     <article style={{ ...cardStyles.item, display: "grid", gap: 8 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-        <strong>Recommendation: {recommendation.recommendationType.toLowerCase()}</strong>
+        <strong>{message.primary}</strong>
         <span
           style={{
             borderRadius: radius.pill,
@@ -20,7 +26,7 @@ export default function SubscriptionRecommendationCard({
             color: colors.neutralBadgeText
           }}
         >
-          {Math.round(recommendation.confidence * 100)}%
+          {message.context ?? "Quick look"}
         </span>
       </div>
       <div style={{ color: colors.textMuted, fontSize: 14 }}>{recommendation.reason}</div>
@@ -46,4 +52,3 @@ export default function SubscriptionRecommendationCard({
     </article>
   );
 }
-

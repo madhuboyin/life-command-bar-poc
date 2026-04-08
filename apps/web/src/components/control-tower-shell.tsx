@@ -8,6 +8,11 @@ import type {
   ControlTowerSubscriptionOptimizationItem
 } from "../lib/types";
 import { buttonStyles, cardStyles, colors, pageStyles } from "../lib/ui";
+import {
+  buildActionLabel,
+  buildEmptyStateMessage,
+  buildRecommendationMessage
+} from "../lib/human-language.service";
 import ControlItemCard from "./control-item-card";
 import ControlSection from "./control-section";
 import PageHeader from "./ui/page-header";
@@ -48,6 +53,7 @@ const EMPTY_CONTROL_TOWER: ControlTowerResponse = {
 };
 
 export default function ControlTowerShell({ initialData, initialError = null }: Props) {
+  const controlEmptyMessage = buildEmptyStateMessage("control_tower");
   const [data, setData] = useState<ControlTowerResponse>(initialData ?? EMPTY_CONTROL_TOWER);
   const [error, setError] = useState<string | null>(initialError);
   const [loading, setLoading] = useState(false);
@@ -86,7 +92,7 @@ export default function ControlTowerShell({ initialData, initialError = null }: 
 
       <PageHeader
         title="Control Tower"
-        description="One calm surface for review, ready actions, upcoming signals, and visible system decisions."
+        description="One place for what needs a quick look and what you can do now."
         actions={
           <button type="button" onClick={() => void refresh()} disabled={loading} style={buttonStyles.secondary}>
             {loading ? "Refreshing..." : "Refresh"}
@@ -99,7 +105,7 @@ export default function ControlTowerShell({ initialData, initialError = null }: 
       <section style={{ ...cardStyles.bordered, marginBottom: 16, background: "#ffffff" }}>
         <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 8 }}>At a glance</div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <Pill label={`Needs review ${data.summary.reviewCount}`} />
+          <Pill label={`Quick look ${data.summary.reviewCount}`} />
           <Pill label={`Approval needed ${data.summary.approvalCount}`} />
           <Pill label={`Ready now ${data.summary.readyCount}`} />
           <Pill label={`Upcoming ${data.summary.upcomingCount}`} />
@@ -116,7 +122,7 @@ export default function ControlTowerShell({ initialData, initialError = null }: 
 
       <ControlSection
         title="Renewing Soon"
-        description="Subscriptions with upcoming renewals that likely need a keep/cancel decision."
+        description="Subscriptions renewing soon."
         count={data.subscriptionOptimization.renewingSoon.length}
       >
         <SubscriptionOptimizationList items={data.subscriptionOptimization.renewingSoon} />
@@ -124,7 +130,7 @@ export default function ControlTowerShell({ initialData, initialError = null }: 
 
       <ControlSection
         title="Price Increased"
-        description="Detected recurring price increases tied to subscription lifecycle evidence."
+        description="Subscriptions with a recent price increase."
         count={data.subscriptionOptimization.priceIncreased.length}
       >
         <SubscriptionOptimizationList items={data.subscriptionOptimization.priceIncreased} />
@@ -132,7 +138,7 @@ export default function ControlTowerShell({ initialData, initialError = null }: 
 
       <ControlSection
         title="Potentially Unused"
-        description="Subscriptions with inactivity or weak value signals."
+        description="Subscriptions you may not be using much."
         count={data.subscriptionOptimization.potentiallyUnused.length}
         defaultCollapsedOnMobile
       >
@@ -140,8 +146,8 @@ export default function ControlTowerShell({ initialData, initialError = null }: 
       </ControlSection>
 
       <ControlSection
-        title="Subscription Needs Review"
-        description="Conflicts, low-confidence states, and plan mismatches routed for review."
+        title="Subscription Quick Look"
+        description="Subscriptions with details to confirm."
         count={data.subscriptionOptimization.needsReview.length}
         defaultCollapsedOnMobile
       >
@@ -151,13 +157,13 @@ export default function ControlTowerShell({ initialData, initialError = null }: 
       <div style={{ display: "grid", gap: 16 }}>
         <ControlSection
           title="Needs Review"
-          description="Candidates and predictions that need your confirmation before activation."
+          description="Items that need a quick confirmation."
           count={data.review.length}
         >
           {data.review.length === 0 ? (
             <EmptyState
-              title="Nothing waiting for review"
-              description="New medium/low confidence items will appear here for quick confirmation."
+              title={controlEmptyMessage.primary}
+              description="New items that need a quick look will appear here."
               action={
                 <Link href="/review" style={buttonStyles.link}>
                   Open review queue
@@ -194,13 +200,13 @@ export default function ControlTowerShell({ initialData, initialError = null }: 
 
         <ControlSection
           title="Ready Now"
-          description="High-confidence actions prepared for immediate guided execution."
+          description="Actions you can do right now."
           count={data.ready.length}
         >
           {data.ready.length === 0 ? (
             <EmptyState
               title="No ready-now items"
-              description="When urgency and confidence align, we will stage a ready-to-handle action here."
+              description="When something is ready, it will show up here."
             />
           ) : (
             <div style={{ display: "grid", gap: 10 }}>
@@ -213,7 +219,7 @@ export default function ControlTowerShell({ initialData, initialError = null }: 
 
         <ControlSection
           title="Upcoming"
-          description="Near-future signals from recurring patterns and prediction windows."
+          description="What's likely coming up next."
           count={data.upcoming.items.length}
           defaultCollapsedOnMobile
         >
@@ -274,7 +280,7 @@ export default function ControlTowerShell({ initialData, initialError = null }: 
 
         <ControlSection
           title="System Decisions"
-          description="Transparent internal routing decisions, suppressions, and confidence changes."
+          description="Recent background decisions made by the system."
           count={data.systemDecisions.length}
           defaultCollapsedOnMobile
         >
@@ -327,7 +333,7 @@ function SubscriptionOptimizationList({
     return (
       <EmptyState
         title="No items right now"
-        description="High-signal subscription insights will appear here."
+        description="New subscription updates will appear here."
       />
     );
   }
@@ -340,7 +346,7 @@ function SubscriptionOptimizationList({
             <div>
               <h3 style={{ margin: "0 0 4px 0", fontSize: 16 }}>{item.title}</h3>
               <div style={{ color: colors.textMuted, fontSize: 13 }}>
-                {item.vendorName} · {item.lifecycleState.toLowerCase()}
+                {item.vendorName}
               </div>
             </div>
             <span
@@ -369,11 +375,15 @@ function SubscriptionOptimizationList({
 
           <div style={{ color: colors.textMuted, fontSize: 14 }}>{item.insightDescription}</div>
           <div style={{ fontSize: 13 }}>
-            Recommendation {item.recommendationType.toLowerCase()} · Health {item.healthScore}
+            {buildRecommendationMessage({
+              recommendationType: item.recommendationType,
+              issue: item.insightType,
+              reason: item.recommendationReason
+            }).primary}
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Link href={`/subscriptions/review/${item.subscriptionId}`} style={buttonStyles.link}>
-              {item.ctaLabel}
+              {buildActionLabel(item.ctaLabel)}
             </Link>
           </div>
         </article>

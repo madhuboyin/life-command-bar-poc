@@ -2,6 +2,7 @@
 
 import type { SubscriptionLifecycleState } from "../lib/types";
 import { colors, radius } from "../lib/ui";
+import { getUserFacingText } from "../lib/human-language.service";
 
 export default function SubscriptionLifecycleBadge({
   state
@@ -42,5 +43,17 @@ function lifecycleStyle(state: SubscriptionLifecycleState) {
 }
 
 function labelForState(state: SubscriptionLifecycleState) {
-  return state.toLowerCase().replace(/_/g, " ");
+  if (state === "UNKNOWN") {
+    return getUserFacingText("lifecycle.unknown");
+  }
+
+  if (state === "ACTIVE" || state === "RENEWING") {
+    return getUserFacingText("status.looks_good");
+  }
+
+  if (state === "PRICE_CHANGED" || state === "TRIALING" || state === "DISCOVERED") {
+    return getUserFacingText("status.needs_review");
+  }
+
+  return getUserFacingText("status.not_sure_yet");
 }

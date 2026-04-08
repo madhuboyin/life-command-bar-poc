@@ -26,8 +26,13 @@ import type {
   ControlTowerUpcomingItem
 } from "../lib/types";
 import { buttonStyles, cardStyles, colors, radius } from "../lib/ui";
+import {
+  buildActionLabel,
+  buildRecommendationMessage
+} from "../lib/human-language.service";
 import ConfidenceBadge from "./confidence-badge";
 import WhyThisExplanation from "./why-this-explanation";
+import WhyThisToggle from "./why-this-toggle";
 import { useToast } from "./ui/toast-provider";
 
 type CommonProps = {
@@ -141,13 +146,18 @@ export default function ControlItemCard(props: Props) {
 
   if (props.section === "review") {
     const extracted = formatExtractedFields(props.item.extractedFields);
+    const reviewMessage = buildRecommendationMessage({
+      recommendationType: "REVIEW",
+      issue: props.item.reviewReasons[0] ?? null,
+      reason: props.item.reviewReasons[0] ?? null
+    });
 
     return (
       <article style={{ ...cardStyles.item, display: "grid", gap: 10 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
           <div>
             <h3 style={{ margin: "0 0 6px 0" }}>{props.item.title}</h3>
-            <div style={{ color: colors.textMuted, fontSize: 13 }}>{props.item.reviewReasons.join(" · ")}</div>
+            <div style={{ color: colors.textMuted, fontSize: 13 }}>{reviewMessage.primary}</div>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
             <SourceLabelBadge label={props.item.sourceLabel} />
@@ -166,15 +176,8 @@ export default function ControlItemCard(props: Props) {
           <div style={{ fontSize: 13, color: colors.textMuted }}>Expected around {dateLabel}</div>
         ) : null}
 
-        {props.item.obligationCategory || props.item.priorityBand ? (
-          <div style={{ fontSize: 12, color: colors.textMuted }}>
-            {props.item.obligationCategory
-              ? `Category: ${props.item.obligationCategory.toLowerCase().replace(/_/g, " ")}`
-              : ""}
-            {props.item.obligationCategory && props.item.priorityBand ? " · " : ""}
-            {props.item.priorityBand ? `Priority: ${props.item.priorityBand.toLowerCase()}` : ""}
-            {props.item.surfacingTarget ? ` · Surface: ${props.item.surfacingTarget.toLowerCase()}` : ""}
-          </div>
+        {reviewMessage.context ? (
+          <div style={{ fontSize: 12, color: colors.textMuted }}>{reviewMessage.context}</div>
         ) : null}
 
         {extracted.length > 0 ? (
@@ -221,10 +224,10 @@ export default function ControlItemCard(props: Props) {
                 disabled={loadingAction !== null}
                 style={buttonStyles.primary}
               >
-                {loadingAction === "confirm" ? "Saving..." : "Confirm"}
+                {loadingAction === "confirm" ? "Saving..." : buildActionLabel("confirm")}
               </button>
               <Link href={`/obligations/${props.item.obligationId}/review`} style={buttonStyles.link}>
-                Edit
+                {buildActionLabel("review")}
               </Link>
               <button
                 type="button"
@@ -244,7 +247,7 @@ export default function ControlItemCard(props: Props) {
                 disabled={loadingAction !== null}
                 style={buttonStyles.danger}
               >
-                {loadingAction === "reject" ? "Saving..." : "Reject"}
+                {loadingAction === "reject" ? "Saving..." : buildActionLabel("ignore")}
               </button>
             </>
           ) : props.item.predictionId ? (
@@ -264,10 +267,10 @@ export default function ControlItemCard(props: Props) {
                 disabled={loadingAction !== null}
                 style={buttonStyles.primary}
               >
-                {loadingAction === "confirm" ? "Saving..." : "Confirm"}
+                {loadingAction === "confirm" ? "Saving..." : buildActionLabel("confirm")}
               </button>
               <Link href="/upcoming" style={buttonStyles.link}>
-                Inspect
+                {buildActionLabel("details")}
               </Link>
               <button
                 type="button"
@@ -287,7 +290,7 @@ export default function ControlItemCard(props: Props) {
                 disabled={loadingAction !== null}
                 style={buttonStyles.danger}
               >
-                {loadingAction === "dismiss" ? "Saving..." : "Dismiss"}
+                {loadingAction === "dismiss" ? "Saving..." : buildActionLabel("ignore")}
               </button>
             </>
           ) : null}
@@ -320,7 +323,7 @@ export default function ControlItemCard(props: Props) {
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Tag label={actionLabel} />
-          <Tag label={`Status ${props.item.status.toLowerCase()}`} />
+          <Tag label={props.item.status.toLowerCase().replace(/_/g, " ")} />
           {dateLabel ? <Tag label={`Queued ${dateLabel}`} /> : null}
         </div>
 
@@ -344,7 +347,7 @@ export default function ControlItemCard(props: Props) {
             disabled={loadingAction !== null}
             style={buttonStyles.primary}
           >
-            {loadingAction === "approve" ? "Saving..." : "Approve"}
+            {loadingAction === "approve" ? "Saving..." : buildActionLabel("confirm")}
           </button>
           {props.item.obligationId ? (
             <Link href={`/obligations/${props.item.obligationId}/review`} style={buttonStyles.link}>
@@ -372,7 +375,7 @@ export default function ControlItemCard(props: Props) {
             disabled={loadingAction !== null}
             style={buttonStyles.danger}
           >
-            {loadingAction === "reject" ? "Saving..." : "Reject"}
+            {loadingAction === "reject" ? "Saving..." : buildActionLabel("ignore")}
           </button>
         </div>
       </article>
@@ -391,7 +394,6 @@ export default function ControlItemCard(props: Props) {
         </div>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <Tag label={`Priority ${Math.round(props.item.priorityScore)}`} />
           <Tag label={props.item.reason} />
           {props.item.autoFlowId ? <Tag label="Auto-flow" /> : <Tag label="Ready now" />}
         </div>
@@ -407,10 +409,10 @@ export default function ControlItemCard(props: Props) {
             disabled={loadingAction !== null}
             style={buttonStyles.primary}
           >
-            {loadingAction === "start" ? "Preparing..." : props.item.ctaLabel || "Start"}
+            {loadingAction === "start" ? "Preparing..." : buildActionLabel(props.item.ctaLabel || "start")}
           </button>
           <Link href={`/obligations/${props.item.obligationId}`} style={buttonStyles.link}>
-            Details
+            {buildActionLabel("details")}
           </Link>
           <button
             type="button"
@@ -434,7 +436,7 @@ export default function ControlItemCard(props: Props) {
             disabled={loadingAction !== null}
             style={buttonStyles.secondary}
           >
-            {loadingAction === "dismiss" ? "Saving..." : "Dismiss"}
+            {loadingAction === "dismiss" ? "Saving..." : buildActionLabel("ignore")}
           </button>
         </div>
       </article>
@@ -470,7 +472,7 @@ export default function ControlItemCard(props: Props) {
 
         {error ? <div style={{ color: colors.errorText, fontSize: 12 }}>{error}</div> : null}
 
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <button
             type="button"
             onClick={() =>
@@ -486,7 +488,7 @@ export default function ControlItemCard(props: Props) {
             disabled={loadingAction !== null}
             style={buttonStyles.secondary}
           >
-            {loadingAction === "confirm" ? "Saving..." : "Confirm"}
+            {loadingAction === "confirm" ? "Saving..." : buildActionLabel("confirm")}
           </button>
           <button
             type="button"
@@ -503,13 +505,13 @@ export default function ControlItemCard(props: Props) {
             disabled={loadingAction !== null}
             style={buttonStyles.danger}
           >
-            {loadingAction === "dismiss" ? "Saving..." : "Dismiss"}
+            {loadingAction === "dismiss" ? "Saving..." : buildActionLabel("ignore")}
           </button>
           <Link
             href={props.item.obligationId ? `/obligations/${props.item.obligationId}` : "/upcoming"}
             style={buttonStyles.link}
           >
-            Details
+            {buildActionLabel("details")}
           </Link>
         </div>
       </article>
@@ -550,18 +552,17 @@ export default function ControlItemCard(props: Props) {
         <Tag label={props.item.decisionType} />
       </div>
       <div style={{ color: colors.textMuted }}>{props.item.explanation}</div>
-      <details>
-        <summary style={{ cursor: "pointer", fontSize: 13, color: colors.textMuted }}>
-          Source signals
-        </summary>
-        <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <WhyThisToggle>
+        <div style={{ marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
           {props.item.sourceSignals.length > 0 ? (
-            props.item.sourceSignals.map((signal) => <Tag key={`${props.item.id}_${signal}`} label={signal} />)
+            props.item.sourceSignals.map((signal) => (
+              <Tag key={`${props.item.id}_${signal}`} label={signal.replace(/_/g, " ")} />
+            ))
           ) : (
-            <span style={{ color: colors.textMuted, fontSize: 13 }}>No explicit signals recorded.</span>
+            <span style={{ color: colors.textMuted, fontSize: 13 }}>No extra details yet.</span>
           )}
         </div>
-      </details>
+      </WhyThisToggle>
       <div style={{ fontSize: 12, color: colors.textMuted }}>
         {dateLabel ? `Recorded ${dateLabel}` : "Recorded recently"}
       </div>
@@ -600,20 +601,36 @@ function formatExtractedFields(value: Record<string, unknown> | null) {
   if (!value) return [] as Array<{ key: string; value: string }>;
 
   return Object.entries(value)
+    .filter(([key]) => !isInternalFieldKey(key))
     .filter(([, raw]) => raw !== null && raw !== undefined && raw !== "")
     .map(([key, raw]) => ({
-      key,
+      key: humanizeFieldKey(key),
       value: formatFieldValue(raw)
     }))
     .filter((field) => field.value.length > 0);
 }
 
 function formatFieldValue(value: unknown): string {
-  if (typeof value === "string") return value;
+  if (typeof value === "string") return value.replace(/_/g, " ").toLowerCase();
   if (typeof value === "number" || typeof value === "boolean") return String(value);
   if (Array.isArray(value)) return value.map((entry) => formatFieldValue(entry)).join(", ");
   if (value && typeof value === "object") return "structured";
   return "";
+}
+
+function isInternalFieldKey(value: string) {
+  return (
+    value === "obligationCategory" ||
+    value === "priorityBand" ||
+    value === "surfacingTarget"
+  );
+}
+
+function humanizeFieldKey(value: string) {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/_/g, " ")
+    .toLowerCase();
 }
 
 function humanizeAction(action: string) {

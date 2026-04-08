@@ -6,6 +6,7 @@ import type {
   SubscriptionRegistryListResponse
 } from "../../lib/types";
 import { cardStyles, colors, pageStyles } from "../../lib/ui";
+import { buildEmptyStateMessage } from "../../lib/human-language.service";
 
 type Props = {
   searchParams?: Promise<Record<string, string | string[] | undefined> | undefined>;
@@ -21,6 +22,7 @@ const EMPTY_DATA: SubscriptionRegistryListResponse = {
 };
 
 export default async function SubscriptionsPage({ searchParams }: Props) {
+  const emptyMessage = buildEmptyStateMessage("subscription_review");
   const resolved = (await searchParams) ?? {};
   const lifecycle = firstSearchParam(resolved.lifecycleState);
   const lifecycleState = isLifecycleState(lifecycle) ? lifecycle : undefined;
@@ -52,7 +54,7 @@ export default async function SubscriptionsPage({ searchParams }: Props) {
       <header style={{ marginBottom: 18 }}>
         <h1 style={{ margin: "0 0 8px 0" }}>Subscription Registry</h1>
         <p style={{ margin: 0, color: colors.textMuted }}>
-          Canonical subscriptions consolidated from Gmail lifecycle signals and other ingestion evidence.
+          Your subscriptions in one clean list.
         </p>
         <div style={{ marginTop: 10 }}>
           <Link href="/subscriptions/review" style={{ color: "#2563eb", textDecoration: "none", fontWeight: 600 }}>
@@ -72,7 +74,7 @@ export default async function SubscriptionsPage({ searchParams }: Props) {
         <section style={{ ...cardStyles.bordered, color: colors.errorText }}>{error}</section>
       ) : data.items.length === 0 ? (
         <section style={{ ...cardStyles.bordered, color: colors.textMuted }}>
-          No subscriptions found yet. Connect Gmail and run sync to discover subscription lifecycle signals.
+          {emptyMessage.primary}
         </section>
       ) : (
         <section style={{ display: "grid", gap: 10 }}>

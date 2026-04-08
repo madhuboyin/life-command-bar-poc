@@ -4,6 +4,11 @@ import type {
   SubscriptionReviewHubItem
 } from "../lib/types";
 import { buttonStyles, cardStyles, colors, radius } from "../lib/ui";
+import {
+  buildActionLabel,
+  buildRecommendationMessage,
+  buildSummaryMessage
+} from "../lib/human-language.service";
 import SubscriptionLifecycleBadge from "./subscription-lifecycle-badge";
 
 export default function SubscriptionReviewCard({
@@ -11,6 +16,12 @@ export default function SubscriptionReviewCard({
 }: {
   item: SubscriptionReviewHubItem;
 }) {
+  const recommendation = buildRecommendationMessage({
+    recommendationType: item.recommendationType,
+    reason: item.recommendationReason
+  });
+  const summary = buildSummaryMessage({ confidence: item.confidenceBand });
+
   return (
     <article style={{ ...cardStyles.item, display: "grid", gap: 8 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
@@ -25,9 +36,8 @@ export default function SubscriptionReviewCard({
       </div>
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <Tag label={`Recommendation ${item.recommendationType.toLowerCase()}`} />
-        <Tag label={`Health ${item.healthScore}`} />
-        <Tag label={`Confidence ${item.confidenceBand.toLowerCase()}`} />
+        <Tag label={recommendation.primary} />
+        <Tag label={summary.primary} />
         <Tag label={`Scope ${item.scopeType.toLowerCase()}`} />
         {item.recurringPrice !== null ? (
           <Tag label={`Price ${formatMoney(item.recurringPrice, item.currency)}`} />
@@ -50,10 +60,10 @@ export default function SubscriptionReviewCard({
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <Link href={`/subscriptions/review/${item.subscriptionId}`} style={buttonStyles.primary}>
-          Review
+          {buildActionLabel("review")}
         </Link>
         <Link href={`/subscriptions/${item.subscriptionId}`} style={buttonStyles.link}>
-          Details
+          {buildActionLabel("details")}
         </Link>
       </div>
     </article>

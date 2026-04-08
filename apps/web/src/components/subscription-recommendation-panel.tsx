@@ -1,5 +1,7 @@
 import type { SubscriptionDecisionFlowData } from "../lib/types";
 import { cardStyles, colors, radius } from "../lib/ui";
+import { buildRecommendationMessage } from "../lib/human-language.service";
+import WhyThisToggle from "./why-this-toggle";
 
 export default function SubscriptionRecommendationPanel({
   recommendation,
@@ -8,10 +10,16 @@ export default function SubscriptionRecommendationPanel({
   recommendation: SubscriptionDecisionFlowData["recommendation"];
   decisionContext: SubscriptionDecisionFlowData["decisionContext"];
 }) {
+  const message = buildRecommendationMessage({
+    recommendationType: recommendation.type,
+    issue: recommendation.supportingInsights[0]?.insightType ?? null,
+    reason: recommendation.reason
+  });
+
   return (
     <section style={{ ...cardStyles.section, display: "grid", gap: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-        <strong style={{ fontSize: 18 }}>Recommendation: {recommendation.type.toLowerCase()}</strong>
+        <strong style={{ fontSize: 18 }}>{message.primary}</strong>
         <span
           style={{
             borderRadius: radius.pill,
@@ -22,16 +30,13 @@ export default function SubscriptionRecommendationPanel({
             padding: "4px 10px"
           }}
         >
-          {Math.round(recommendation.confidence * 100)}%
+          {message.context ?? "Quick review"}
         </span>
       </div>
 
-      <div style={{ fontSize: 15 }}>{recommendation.reason}</div>
+      <div style={{ fontSize: 15 }}>{decisionContext.whyNow}</div>
       <div style={{ color: colors.textMuted, fontSize: 14 }}>{decisionContext.whatChanged}</div>
-      <div style={{ color: colors.textMuted, fontSize: 14 }}>{decisionContext.whyNow}</div>
-      <div style={{ color: colors.textMuted, fontSize: 13 }}>
-        Risk {decisionContext.riskLevel.toLowerCase()} · {decisionContext.sourceSummary}
-      </div>
+      <WhyThisToggle>{decisionContext.sourceSummary}</WhyThisToggle>
 
       {recommendation.supportingInsights.length > 0 ? (
         <div style={{ display: "grid", gap: 8 }}>

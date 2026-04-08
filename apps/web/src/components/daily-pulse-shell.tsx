@@ -9,6 +9,11 @@ import type {
   DailyPulseResponse
 } from "../lib/types";
 import { buttonStyles, cardStyles, colors, pageStyles } from "../lib/ui";
+import {
+  buildActionLabel,
+  buildEmptyStateMessage,
+  buildRecommendationMessage
+} from "../lib/human-language.service";
 import DailyPulseProgress from "./daily-pulse-progress";
 import EmptyState from "./ui/empty-state";
 import LoadingCard from "./ui/loading-card";
@@ -31,6 +36,7 @@ export default function DailyPulseShell({
   initialAutoFlow,
   initialError = null
 }: Props) {
+  const pulseEmptyMessage = buildEmptyStateMessage("daily_pulse");
   const [pulse, setPulse] = useState<DailyPulseResponse | null>(initialPulse);
   const [autoFlow, setAutoFlow] = useState<AutoFlowListResponse>(initialAutoFlow);
   const [error, setError] = useState<string | null>(initialError);
@@ -108,7 +114,7 @@ export default function DailyPulseShell({
         <div>
           <h1 style={{ margin: "0 0 6px 0", fontSize: 34 }}>Today</h1>
           <p style={{ margin: 0, color: colors.textMuted }}>
-            Your day in five decisions.
+            One clear step at a time.
           </p>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -186,7 +192,7 @@ export default function DailyPulseShell({
             pulse.subscriptionSignals.summaryLine) ? (
             <section style={cardStyles.section}>
               <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 6 }}>
-                Subscription Signals
+                Subscription updates
               </div>
               {pulse.subscriptionSignals.summaryLine ? (
                 <div style={{ marginBottom: 10, color: colors.textMuted }}>
@@ -212,11 +218,14 @@ export default function DailyPulseShell({
                     </div>
                     <div style={{ color: colors.textMuted, fontSize: 13 }}>{item.insightTitle}</div>
                     <div style={{ fontSize: 13 }}>
-                      Recommendation {item.recommendationType.toLowerCase()} · Health {item.healthScore}
+                      {buildRecommendationMessage({
+                        recommendationType: item.recommendationType,
+                        issue: item.insightType
+                      }).primary}
                     </div>
                     <div>
                       <Link href={`/subscriptions/review/${item.subscriptionId}`} style={buttonStyles.link}>
-                        Review
+                        {buildActionLabel("review")}
                       </Link>
                     </div>
                   </article>
@@ -227,8 +236,8 @@ export default function DailyPulseShell({
 
           {pulse.progress.totalItems === 0 ? (
             <EmptyState
-              title="You are all caught up today"
-              description="No high-priority items need action right now. Check back tomorrow."
+              title={pulseEmptyMessage.primary}
+              description={pulseEmptyMessage.context ?? "No items need action right now."}
             />
           ) : pulse.progress.isCompletedForNow ? (
             <PulseCompletionCard onRefresh={refreshPulse} />

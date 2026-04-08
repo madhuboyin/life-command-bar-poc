@@ -21,6 +21,7 @@ import {
   formatDateTime,
   getHookBadgeStyle
 } from "../lib/ui";
+import { buildActionLabel } from "../lib/human-language.service";
 import { useIsMobile } from "../lib/use-is-mobile";
 import { useRouter } from "next/navigation";
 import ResolutionModal from "./resolution-modal";
@@ -266,7 +267,7 @@ export default function TodayFeedCard({ item, flowObligationIds, onRefresh }: Pr
             disabled={loading !== null}
             style={buttonStyles.primary}
           >
-            {loading === "guide" ? "Starting..." : "Start"}
+            {loading === "guide" ? "Starting..." : buildActionLabel("start")}
           </button>
 
           <button
@@ -274,11 +275,11 @@ export default function TodayFeedCard({ item, flowObligationIds, onRefresh }: Pr
             disabled={loading !== null}
             style={buttonStyles.secondary}
           >
-            {loading === "resolution" ? "Loading..." : item.primaryAction.label}
+            {loading === "resolution" ? "Loading..." : buildActionLabel(item.primaryAction.label || item.primaryAction.key)}
           </button>
 
           <Link href={`/obligations/${item.obligationId}`} style={buttonStyles.link}>
-            View details
+            {buildActionLabel("details")}
           </Link>
 
           <button
@@ -286,7 +287,7 @@ export default function TodayFeedCard({ item, flowObligationIds, onRefresh }: Pr
             disabled={loading !== null}
             style={buttonStyles.secondary}
           >
-            {loading === "done" ? "Saving..." : "Mark done"}
+            {loading === "done" ? "Saving..." : buildActionLabel("confirm")}
           </button>
 
           <button
@@ -302,7 +303,7 @@ export default function TodayFeedCard({ item, flowObligationIds, onRefresh }: Pr
             disabled={loading !== null}
             style={buttonStyles.danger}
           >
-            {loading === "dismiss" ? "Saving..." : "Dismiss"}
+            {loading === "dismiss" ? "Saving..." : buildActionLabel("ignore")}
           </button>
         </div>
 

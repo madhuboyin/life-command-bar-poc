@@ -1,5 +1,6 @@
 "use client";
 
+import { buildActionLabel } from "../lib/human-language.service";
 import { buttonStyles, colors, inputStyles } from "../lib/ui";
 
 type Props = {
@@ -27,10 +28,10 @@ export default function SubscriptionDecisionActions({
     <section style={{ display: "grid", gap: 10 }}>
       <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(140px, max-content))" }}>
         <button type="button" onClick={onKeep} style={buttonStyles.primary} disabled={loadingAction !== null}>
-          {loadingAction === "KEEP" ? "Saving..." : "Keep"}
+          {loadingAction === "KEEP" ? "Saving..." : buildActionLabel("keep")}
         </button>
         <button type="button" onClick={onCancel} style={buttonStyles.danger} disabled={loadingAction !== null}>
-          {loadingAction === "CANCEL" ? "Saving..." : "Cancel"}
+          {loadingAction === "CANCEL" ? "Saving..." : buildActionLabel("cancel")}
         </button>
         <button
           type="button"
@@ -42,7 +43,7 @@ export default function SubscriptionDecisionActions({
             ? "Loading..."
             : detailsOpen
               ? "Hide details"
-              : "Review details"}
+              : buildActionLabel("review")}
         </button>
       </div>
 
@@ -61,7 +62,7 @@ export default function SubscriptionDecisionActions({
             style={buttonStyles.secondary}
             disabled={loadingAction !== null}
           >
-            {loadingAction === "REMIND_LATER" ? "Saving..." : "Remind me later"}
+            {loadingAction === "REMIND_LATER" ? "Saving..." : buildActionLabel("remind")}
           </button>
         </div>
       </div>

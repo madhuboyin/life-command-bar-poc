@@ -1,11 +1,18 @@
 import type { SubscriptionOptimizationInsight } from "../lib/types";
 import { cardStyles, colors, radius } from "../lib/ui";
+import { buildRecommendationMessage } from "../lib/human-language.service";
 
 export default function SubscriptionInsightCard({
   insight
 }: {
   insight: SubscriptionOptimizationInsight;
 }) {
+  const message = buildRecommendationMessage({
+    recommendationType: "REVIEW",
+    issue: insight.insightType,
+    reason: insight.description
+  });
+
   return (
     <article style={{ ...cardStyles.item, display: "grid", gap: 8 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
@@ -35,11 +42,8 @@ export default function SubscriptionInsightCard({
       </div>
 
       <div style={{ color: colors.textMuted, fontSize: 14 }}>{insight.description}</div>
-      <div style={{ color: colors.textMuted, fontSize: 13 }}>
-        Confidence {Math.round(insight.confidence * 100)}%
-      </div>
+      <div style={{ color: colors.textMuted, fontSize: 13 }}>{message.primary}</div>
       <div style={{ fontSize: 13 }}>{insight.recommendedAction}</div>
     </article>
   );
 }
-

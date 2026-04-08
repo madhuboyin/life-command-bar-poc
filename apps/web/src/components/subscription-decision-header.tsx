@@ -3,6 +3,7 @@ import type {
   SubscriptionLifecycleState
 } from "../lib/types";
 import { colors } from "../lib/ui";
+import { buildSummaryMessage } from "../lib/human-language.service";
 import SubscriptionLifecycleBadge from "./subscription-lifecycle-badge";
 
 export default function SubscriptionDecisionHeader({
@@ -10,6 +11,11 @@ export default function SubscriptionDecisionHeader({
 }: {
   subscription: SubscriptionDecisionFlowData["subscription"];
 }) {
+  const summary = buildSummaryMessage({
+    confidence: subscription.confidenceBand,
+    issue: subscription.lifecycleState === "UNKNOWN" ? "LIFECYCLE_UNKNOWN" : null
+  });
+
   return (
     <header style={{ display: "grid", gap: 8 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
@@ -31,7 +37,8 @@ export default function SubscriptionDecisionHeader({
       </div>
 
       <div style={{ color: colors.textMuted, fontSize: 13 }}>
-        Confidence {subscription.confidenceBand.toLowerCase()} · Health {subscription.healthScore}
+        {summary.primary}
+        {summary.context ? ` · ${summary.context}` : ""}
       </div>
 
       <div style={{ color: colors.textMuted, fontSize: 12 }}>{subscription.whyVisible}</div>

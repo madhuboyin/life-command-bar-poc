@@ -19,6 +19,10 @@ import {
 import type { DailyPulseItem, DailyPulseItemUpdateResponse } from "../lib/types";
 import { buildGuidedHref } from "../lib/flow-navigation";
 import { buttonStyles, cardStyles, colors } from "../lib/ui";
+import {
+  buildActionLabel,
+  trackMessageAction
+} from "../lib/human-language.service";
 import { useFlowSession } from "./flow-session-provider";
 import { useToast } from "./ui/toast-provider";
 import SourceBadge from "./source-badge";
@@ -37,7 +41,8 @@ export default function PulseItemCard({ item, flowObligationIds, onItemUpdated }
   const router = useRouter();
   const { showToast } = useToast();
   const flow = useFlowSession();
-  const guideLabel = item.status === "OPENED_GUIDED" ? "Resume guided" : item.actionLabel;
+  const guideLabel =
+    item.status === "OPENED_GUIDED" ? "Resume" : buildActionLabel(item.actionLabel || "start");
 
   async function reportOutcome(input: {
     selectedActionKey: string;
@@ -224,16 +229,30 @@ export default function PulseItemCard({ item, flowObligationIds, onItemUpdated }
           {loading === "guide" ? "Starting..." : guideLabel}
         </button>
 
-        <button onClick={handleDone} disabled={loading !== null} style={buttonStyles.secondary}>
-          {loading === "done" ? "Saving..." : "Handle now"}
+        <button
+          onClick={() => {
+            trackMessageAction("action.confirm");
+            void handleDone();
+          }}
+          disabled={loading !== null}
+          style={buttonStyles.secondary}
+        >
+          {loading === "done" ? "Saving..." : buildActionLabel("confirm")}
         </button>
 
         <button onClick={handlePostpone} disabled={loading !== null} style={buttonStyles.secondary}>
-          {loading === "postpone" ? "Saving..." : "Postpone"}
+          {loading === "postpone" ? "Saving..." : buildActionLabel("postpone")}
         </button>
 
-        <button onClick={handleDismiss} disabled={loading !== null} style={buttonStyles.danger}>
-          {loading === "dismiss" ? "Saving..." : "Dismiss"}
+        <button
+          onClick={() => {
+            trackMessageAction("action.ignore");
+            void handleDismiss();
+          }}
+          disabled={loading !== null}
+          style={buttonStyles.danger}
+        >
+          {loading === "dismiss" ? "Saving..." : buildActionLabel("ignore")}
         </button>
 
         <Link href={`/obligations/${item.obligationId}`} style={buttonStyles.link}>

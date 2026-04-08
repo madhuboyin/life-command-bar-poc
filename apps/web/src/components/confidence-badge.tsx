@@ -1,4 +1,5 @@
 import type { ConfidenceBand } from "../lib/types";
+import { buildSummaryMessage } from "../lib/human-language.service";
 import { colors, radius } from "../lib/ui";
 
 type Props = {
@@ -13,13 +14,12 @@ export default function ConfidenceBadge({ confidenceBand, needsReview = false }:
       : confidenceBand === "MEDIUM"
         ? { bg: "#fef3c7", text: "#92400e" }
         : { bg: colors.errorBg, text: colors.errorText };
+  const message = buildSummaryMessage({
+    confidence: confidenceBand,
+    issue: needsReview && confidenceBand !== "HIGH" ? "LOW_CONFIDENCE" : null
+  });
 
-  const reviewLabel =
-    confidenceBand === "HIGH"
-      ? "High confidence"
-      : confidenceBand === "MEDIUM"
-        ? "Medium confidence - review suggested"
-        : "Low confidence - needs confirmation";
+  const reviewLabel = message.context ? `${message.primary}. ${message.context}` : message.primary;
 
   return (
     <span
@@ -35,8 +35,7 @@ export default function ConfidenceBadge({ confidenceBand, needsReview = false }:
         color: tone.text
       }}
     >
-      {confidenceBand}
-      {needsReview && confidenceBand !== "HIGH" ? " · Review" : ""}
+      {message.primary}
     </span>
   );
 }

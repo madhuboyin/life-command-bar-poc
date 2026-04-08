@@ -9,6 +9,10 @@ import {
 } from "../lib/api";
 import type { Obligation, ObligationSourceDetails } from "../lib/types";
 import { buttonStyles, cardStyles, colors, inputStyles } from "../lib/ui";
+import {
+  buildActionLabel,
+  buildSummaryMessage
+} from "../lib/human-language.service";
 import StatusMessage from "./ui/status-message";
 import { useToast } from "./ui/toast-provider";
 import SourceBadge from "./source-badge";
@@ -34,6 +38,10 @@ export default function ObligationCandidateReview({ obligation, source }: Props)
   });
   const [loading, setLoading] = useState<"activate" | "draft" | "reject" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const summary = buildSummaryMessage({
+    confidence: obligation.confidenceBand,
+    issue: source?.parseStatus === "PARTIAL" ? "SIGNALS_WEAK" : null
+  });
 
   async function handleActivate() {
     try {
@@ -147,7 +155,7 @@ export default function ObligationCandidateReview({ obligation, source }: Props)
           Parse status: <strong>{source?.parseStatus ?? "UNKNOWN"}</strong>
         </div>
         <div style={{ fontSize: 14 }}>
-          Parse confidence: <strong>{source?.parseConfidence !== null && source?.parseConfidence !== undefined ? `${Math.round(source.parseConfidence * 100)}%` : "—"}</strong>
+          {summary.primary}
         </div>
       </section>
 
@@ -225,7 +233,7 @@ export default function ObligationCandidateReview({ obligation, source }: Props)
               style={buttonStyles.primary}
               type="button"
             >
-              {loading === "activate" ? "Activating..." : "Activate"}
+              {loading === "activate" ? "Saving..." : buildActionLabel("confirm")}
             </button>
             <button
               onClick={handleSaveDraft}
@@ -233,7 +241,7 @@ export default function ObligationCandidateReview({ obligation, source }: Props)
               style={buttonStyles.secondary}
               type="button"
             >
-              {loading === "draft" ? "Saving..." : "Save Draft"}
+              {loading === "draft" ? "Saving..." : buildActionLabel("review")}
             </button>
             <button
               onClick={handleReject}
@@ -241,7 +249,7 @@ export default function ObligationCandidateReview({ obligation, source }: Props)
               style={buttonStyles.danger}
               type="button"
             >
-              {loading === "reject" ? "Rejecting..." : "Reject"}
+              {loading === "reject" ? "Saving..." : buildActionLabel("ignore")}
             </button>
           </div>
         </div>

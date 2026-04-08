@@ -1,7 +1,11 @@
 "use client";
 
 import type { DecisionTrace, WhyExplanation } from "../lib/types";
-import { colors } from "../lib/ui";
+import {
+  buildWhyMessage,
+  getUserFacingText
+} from "../lib/human-language.service";
+import WhyThisToggle from "./why-this-toggle";
 
 type Props = {
   why?: WhyExplanation | null;
@@ -9,45 +13,41 @@ type Props = {
 };
 
 export default function WhyThisExplanation({ why, decisionTrace }: Props) {
-  const primaryReason =
-    typeof why?.primaryReason === "string" && why.primaryReason.trim().length > 0
-      ? why.primaryReason
-      : "This was prioritized using current urgency, importance, and confidence signals.";
-  const signals =
-    Array.isArray(why?.signals) && why.signals.length > 0
-      ? why.signals
-      : ["system_priority"];
-  const confidence =
-    typeof why?.confidence === "number" && Number.isFinite(why.confidence)
-      ? Math.round(why.confidence * 100)
+  const confidenceBand =
+    typeof why?.confidence === "number"
+      ? why.confidence >= 0.75
+        ? "HIGH"
+        : why.confidence >= 0.5
+          ? "MEDIUM"
+          : "LOW"
       : null;
-  const personalizationReason =
-    typeof why?.personalizationReason === "string" ? why.personalizationReason : null;
+  const message = buildWhyMessage({
+    primaryReason: why?.primaryReason,
+    context: why?.personalizationReason,
+    source: why?.signals?.join(" "),
+    confidence: confidenceBand
+  });
   const rankingFactors =
     Array.isArray(decisionTrace?.rankingFactors) && decisionTrace.rankingFactors.length > 0
       ? decisionTrace.rankingFactors
       : [];
+  const traceLine =
+    rankingFactors.length > 0
+      ? rankingFactors.slice(0, 3).map((item) => item.replace(/_/g, " ")).join(" · ")
+      : null;
 
   return (
     <div style={{ display: "grid", gap: 6 }}>
-      <div style={{ fontSize: 14 }}>
-        <strong>Why this:</strong> {primaryReason}
-      </div>
-      <details>
-        <summary style={{ cursor: "pointer", fontSize: 13, color: colors.textMuted }}>
-          See reasoning
-        </summary>
-        <div style={{ marginTop: 8, fontSize: 13, color: colors.textMuted, display: "grid", gap: 6 }}>
-          <div>Signals: {signals.join(", ")}</div>
-          <div>Confidence: {confidence !== null ? `${confidence}%` : "n/a"}</div>
-          {personalizationReason ? <div>{personalizationReason}</div> : null}
-          {rankingFactors.length > 0 ? (
-            <div>
-              Trace: {rankingFactors.join(" · ")}
-            </div>
-          ) : null}
+      <div style={{ fontSize: 14, fontWeight: 600 }}>{message.primary}</div>
+      {message.context ? (
+        <div style={{ fontSize: 13, opacity: 0.8 }}>{message.context}</div>
+      ) : null}
+      <WhyThisToggle label="Why this?">
+        <div style={{ display: "grid", gap: 6 }}>
+          <div>{message.why ?? getUserFacingText("why.default_context")}</div>
+          {traceLine ? <div>{traceLine}</div> : null}
         </div>
-      </details>
+      </WhyThisToggle>
     </div>
   );
 }

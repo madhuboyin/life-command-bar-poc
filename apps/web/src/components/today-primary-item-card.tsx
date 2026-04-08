@@ -2,7 +2,12 @@
 
 import type { DailyCommandCenterItem, TodayActionKey } from "../lib/types";
 import { cardStyles, colors, formatDateTime } from "../lib/ui";
+import {
+  buildRecommendationMessage,
+  buildSummaryMessage
+} from "../lib/human-language.service";
 import TodayActionBar from "./today-action-bar";
+import WhyThisToggle from "./why-this-toggle";
 
 export default function TodayPrimaryItemCard({
   item,
@@ -13,6 +18,16 @@ export default function TodayPrimaryItemCard({
   loading: TodayActionKey | null;
   onAction: (itemId: string, actionKey: TodayActionKey) => Promise<void>;
 }) {
+  const summaryMessage = buildSummaryMessage({
+    confidence: item.confidenceBand,
+    issue: item.primaryAction.key === "REVIEW" || item.primaryAction.key === "REVIEW_SUBSCRIPTION" ? "LOW_CONFIDENCE" : null
+  });
+  const recommendationMessage = buildRecommendationMessage({
+    recommendationType: item.primaryAction.key,
+    reason: item.whyNow,
+    issue: item.whyNow
+  });
+
   return (
     <article style={{ ...cardStyles.item, display: "grid", gap: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
@@ -23,7 +38,7 @@ export default function TodayPrimaryItemCard({
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignSelf: "flex-start" }}>
           <PriorityBadge band={item.priorityBand} />
           <Tag label={item.category.replace(/_/g, " ")} />
-          <Tag label={`Confidence ${item.confidenceBand.toLowerCase()}`} />
+          <Tag label={summaryMessage.primary} />
           <ScopeBadge item={item} />
         </div>
       </div>
@@ -43,13 +58,13 @@ export default function TodayPrimaryItemCard({
       ) : null}
 
       <div style={{ display: "grid", gap: 6 }}>
-        <div>
-          <strong>Why now:</strong> {item.whyNow}
+        <div style={{ fontWeight: 600 }}>{recommendationMessage.primary}</div>
+        <div style={{ color: colors.textMuted }}>
+          {recommendationMessage.context ?? item.whyThisMatters}
         </div>
-        <div>
-          <strong>Why this matters:</strong> {item.whyThisMatters}
-        </div>
-        <div style={{ color: colors.textMuted, fontSize: 13 }}>{item.sourceSummary}</div>
+        <WhyThisToggle>
+          {recommendationMessage.why ?? item.sourceSummary}
+        </WhyThisToggle>
       </div>
 
       <TodayActionBar

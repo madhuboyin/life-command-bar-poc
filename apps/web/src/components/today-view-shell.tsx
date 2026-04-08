@@ -10,6 +10,10 @@ import {
 import { buildGuidedHref } from "../lib/flow-navigation";
 import type { DailyCommandCenterResponse, TodayActionKey } from "../lib/types";
 import { buttonStyles, cardStyles, colors, pageStyles } from "../lib/ui";
+import {
+  buildEmptyStateMessage,
+  trackMessageAction
+} from "../lib/human-language.service";
 import { useFlowSession } from "./flow-session-provider";
 import TodayCompletedCollapsed from "./today-completed-collapsed";
 import TodayEmptyState from "./today-empty-state";
@@ -25,6 +29,7 @@ export default function TodayViewShell({
   initialData: DailyCommandCenterResponse | null;
   initialError?: string | null;
 }) {
+  const todayEmptyMessage = buildEmptyStateMessage("today");
   const [data, setData] = useState<DailyCommandCenterResponse | null>(initialData);
   const [error, setError] = useState<string | null>(initialError);
   const [loadingAction, setLoadingAction] = useState<Record<string, TodayActionKey | null>>({});
@@ -39,6 +44,7 @@ export default function TodayViewShell({
 
   async function handleAction(itemId: string, actionKey: TodayActionKey) {
     try {
+      trackMessageAction(actionKey);
       setError(null);
       setLoadingAction((current) => ({
         ...current,
@@ -120,7 +126,7 @@ export default function TodayViewShell({
         <div>
           <h1 style={{ margin: "0 0 6px 0", fontSize: 34 }}>Today</h1>
           <p style={{ margin: 0, color: colors.textMuted }}>
-            The clearest answer to what to do next.
+            {todayEmptyMessage.context ?? "Clear next steps for today."}
           </p>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -147,7 +153,7 @@ export default function TodayViewShell({
             <TodayEmptyState />
           ) : (
             <section style={{ ...cardStyles.section, display: "grid", gap: 10 }}>
-              <div style={{ fontSize: 12, color: colors.textMuted }}>Needs Attention Today</div>
+              <div style={{ fontSize: 12, color: colors.textMuted }}>What's next</div>
               {data.primaryItems.map((item) => (
                 <TodayPrimaryItemCard
                   key={item.id}
@@ -166,7 +172,7 @@ export default function TodayViewShell({
             <section style={{ ...cardStyles.bordered }}>
               <div style={{ marginBottom: 6, fontWeight: 700 }}>Need more context?</div>
               <div style={{ color: colors.textMuted, marginBottom: 10 }}>
-                Some items still need review evidence before final action.
+                A few items still need a quick confirmation before you act.
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <Link href="/review" style={buttonStyles.link}>

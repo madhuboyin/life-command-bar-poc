@@ -16,6 +16,7 @@ import {
 import { buildGuidedHref, getFlowReturnPath, getSourceLabel } from "../lib/flow-navigation";
 import type { FlowSession, GuidedJourney } from "../lib/types";
 import { buttonStyles, cardStyles, colors, pageStyles, text } from "../lib/ui";
+import { buildActionLabel } from "../lib/human-language.service";
 import { useFlowSession } from "./flow-session-provider";
 import GuidedProgress from "./guided-progress";
 import GuidedStepCard from "./guided-step-card";
@@ -276,7 +277,7 @@ export default function GuidedJourneyShell({
       <header style={{ marginBottom: 20 }}>
         <h1 style={text.pageTitle}>Guided Mode</h1>
         <p style={text.bodyMuted}>
-          A deterministic, step-by-step path to resolve this obligation with intention.
+          A calm step-by-step path so you always know what to do next.
         </p>
       </header>
 
@@ -285,7 +286,7 @@ export default function GuidedJourneyShell({
       {!journey ? (
         <EmptyState
           title="Guided journey not available"
-          description="This journey could not be loaded. Try returning to the obligation and starting Guided Mode again."
+          description="This journey could not be loaded. Please try again from the item page."
           action={
             <Link href="/obligations" style={{ ...buttonStyles.link, color: colors.text }}>
               Go to obligations
@@ -391,7 +392,7 @@ export default function GuidedJourneyShell({
                   Dashboard
                 </Link>
                 <Link href="/obligations" style={buttonStyles.link}>
-                  View obligations
+                  {buildActionLabel("details")}
                 </Link>
               </div>
             </section>
@@ -477,7 +478,7 @@ export default function GuidedJourneyShell({
                     disabled={loading !== null}
                     style={buttonStyles.danger}
                   >
-                    {loading === "dismiss" ? "Working..." : "Dismiss journey"}
+                    {loading === "dismiss" ? "Working..." : buildActionLabel("ignore")}
                   </button>
                 </>
               ) : (

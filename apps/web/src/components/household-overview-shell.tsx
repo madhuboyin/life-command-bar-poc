@@ -15,6 +15,7 @@ import type {
   Obligation
 } from "../lib/types";
 import { buttonStyles, cardStyles, colors, inputStyles, pageStyles } from "../lib/ui";
+import { buildSummaryMessage } from "../lib/human-language.service";
 import AssignmentMenu from "./assignment-menu";
 import AssigneeBadge from "./assignee-badge";
 import ClaimItemButton from "./claim-item-button";
@@ -194,7 +195,7 @@ export default function HouseholdOverviewShell({
               <div key={item.id} style={cardStyles.item}>
                 <div style={{ fontWeight: 700 }}>{item.title}</div>
                 <div style={{ color: colors.textMuted, fontSize: 13 }}>
-                  {item.predictedDate ? new Date(item.predictedDate).toLocaleDateString() : "Windowed prediction"} · {item.confidenceBand}
+                  {item.predictedDate ? new Date(item.predictedDate).toLocaleDateString() : "Soon"} · {buildSummaryMessage({ confidence: item.confidenceBand }).primary}
                 </div>
               </div>
             ))

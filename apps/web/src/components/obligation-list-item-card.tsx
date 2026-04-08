@@ -7,6 +7,7 @@ import { createOrResumeGuidedJourney } from "../lib/api";
 import { buildGuidedHref } from "../lib/flow-navigation";
 import type { FlowSourceType, Obligation } from "../lib/types";
 import { buttonStyles, cardStyles, colors, formatDateTime } from "../lib/ui";
+import { buildActionLabel } from "../lib/human-language.service";
 import { useFlowSession } from "./flow-session-provider";
 import { useToast } from "./ui/toast-provider";
 import SourceBadge from "./source-badge";
@@ -88,7 +89,7 @@ export default function ObligationListItemCard({
         }}
       >
         <button onClick={handleGuideMe} disabled={startingGuide} style={buttonStyles.secondary}>
-          {startingGuide ? "Starting..." : "Guide me"}
+          {startingGuide ? "Starting..." : buildActionLabel("start")}
         </button>
         {item.scopeType === "HOUSEHOLD" ? (
           <AssignmentMenu obligation={item} />
@@ -98,11 +99,11 @@ export default function ObligationListItemCard({
         ) : null}
         {item.status === "DRAFT" && item.source !== "MANUAL" ? (
           <Link href={`/obligations/${item.id}/review`} style={buttonStyles.link}>
-            Review draft
+            {buildActionLabel("review")}
           </Link>
         ) : null}
         <Link href={`/obligations/${item.id}`} style={buttonStyles.link}>
-          View details
+          {buildActionLabel("details")}
         </Link>
       </div>
     </article>

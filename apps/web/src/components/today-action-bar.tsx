@@ -2,6 +2,10 @@
 
 import type { DailyCommandCenterItem, TodayActionKey } from "../lib/types";
 import { buttonStyles } from "../lib/ui";
+import {
+  buildActionLabel,
+  trackMessageAction
+} from "../lib/human-language.service";
 
 export default function TodayActionBar({
   item,
@@ -23,11 +27,15 @@ export default function TodayActionBar({
       }}
     >
       {actions.map((action, index) => {
+        const label = buildActionLabel(action.label || action.key);
         return (
           <button
             key={`${item.id}_${action.key}_${index}`}
             type="button"
-            onClick={() => void onAction(action.key)}
+            onClick={() => {
+              trackMessageAction(action.key);
+              void onAction(action.key);
+            }}
             disabled={loading !== null}
             style={
               index === 0
@@ -37,7 +45,7 @@ export default function TodayActionBar({
                   : buttonStyles.secondary
             }
           >
-            {loading === action.key ? "Saving..." : action.label}
+            {loading === action.key ? "Saving..." : label}
           </button>
         );
       })}

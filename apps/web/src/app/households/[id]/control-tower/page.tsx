@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { getHousehold, getHouseholdControlTower } from "../../../../lib/api";
 import { cardStyles, colors, pageStyles } from "../../../../lib/ui";
+import { buildSummaryMessage } from "../../../../lib/human-language.service";
 
 type Props = {
   params?: Promise<{ id?: string } | undefined>;
@@ -31,7 +32,7 @@ export default async function HouseholdControlTowerPage({ params }: Props) {
 
         <h1 style={{ marginTop: 0 }}>{householdRes.household.name} Control Tower</h1>
         <p style={{ color: colors.textMuted, marginTop: -4 }}>
-          Shared review, ready, approvals, upcoming, and recent decisions.
+          Shared items that need attention and what to do next.
         </p>
 
         <section style={{ ...cardStyles.section, marginBottom: 14 }}>
@@ -77,11 +78,11 @@ export default async function HouseholdControlTowerPage({ params }: Props) {
           {tower.upcoming.map((item) => (
             <article key={item.id} style={cardStyles.item}>
               <div style={{ fontWeight: 700 }}>{item.title}</div>
-              <div style={{ color: colors.textMuted, fontSize: 13 }}>
-                {item.predictedDate ? new Date(item.predictedDate).toLocaleDateString() : "Windowed"} · {item.confidenceBand}
-              </div>
-            </article>
-          ))}
+                <div style={{ color: colors.textMuted, fontSize: 13 }}>
+                {item.predictedDate ? new Date(item.predictedDate).toLocaleDateString() : "Soon"} · {buildSummaryMessage({ confidence: item.confidenceBand }).primary}
+                </div>
+              </article>
+            ))}
         </Section>
       </main>
     );

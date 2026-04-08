@@ -1,11 +1,16 @@
 import Link from "next/link";
 import { buttonStyles, cardStyles, colors } from "../lib/ui";
+import {
+  buildActionLabel,
+  buildEmptyStateMessage
+} from "../lib/human-language.service";
 
 type Props = {
   onRefresh: () => void;
 };
 
 export default function PulseCompletionCard({ onRefresh }: Props) {
+  const message = buildEmptyStateMessage("daily_pulse");
   return (
     <section
       style={{
@@ -17,9 +22,9 @@ export default function PulseCompletionCard({ onRefresh }: Props) {
       <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 6 }}>
         Daily Pulse
       </div>
-      <h2 style={{ margin: "0 0 6px 0", fontSize: 24 }}>You&apos;re done for now.</h2>
+      <h2 style={{ margin: "0 0 6px 0", fontSize: 24 }}>{message.primary}</h2>
       <p style={{ margin: "0 0 14px 0", color: colors.textMuted }}>
-        You handled today&apos;s pulse. Check back later if something new comes up.
+        {message.context ?? "Check back later if something new comes up."}
       </p>
 
       <div
@@ -41,13 +46,13 @@ export default function PulseCompletionCard({ onRefresh }: Props) {
           Start Focus Mode
         </Link>
         <Link href="/obligations" style={buttonStyles.link}>
-          View obligations
+          {buildActionLabel("details")}
         </Link>
         <Link href="/" style={buttonStyles.link}>
           Return to dashboard
         </Link>
         <button type="button" onClick={onRefresh} style={buttonStyles.secondary}>
-          Refresh pulse
+          Refresh
         </button>
       </div>
     </section>

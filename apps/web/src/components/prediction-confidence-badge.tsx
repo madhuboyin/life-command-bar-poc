@@ -1,4 +1,5 @@
 import type { ConfidenceBand } from "../lib/types";
+import { buildSummaryMessage } from "../lib/human-language.service";
 
 type Props = {
   confidenceBand: ConfidenceBand;
@@ -6,6 +7,7 @@ type Props = {
 
 export default function PredictionConfidenceBadge({ confidenceBand }: Props) {
   const style = getStyle(confidenceBand);
+  const message = buildSummaryMessage({ confidence: confidenceBand });
   return (
     <span
       style={{
@@ -18,11 +20,7 @@ export default function PredictionConfidenceBadge({ confidenceBand }: Props) {
         ...style
       }}
     >
-      {confidenceBand === "HIGH"
-        ? "High confidence"
-        : confidenceBand === "MEDIUM"
-          ? "Medium confidence"
-          : "Low confidence"}
+      {message.primary}
     </span>
   );
 }
