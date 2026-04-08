@@ -267,8 +267,27 @@ export interface DailyCommandCenterCompletedItem {
     | null;
 }
 
+export type TodayViewState =
+  | "CLEAR"
+  | "ONE_ITEM"
+  | "FEW_ITEMS"
+  | "REVIEW_NEEDED";
+
+export interface TodayNextUp {
+  title: string;
+  whenLabel: string | null;
+  href: string;
+}
+
 export interface DailyCommandCenterResponse {
   generatedAt: string;
+  todayState: TodayViewState;
+  headline: string;
+  subheadline: string;
+  primaryItem: DailyCommandCenterItem | null;
+  queuedItems: DailyCommandCenterItem[];
+  nextUp: TodayNextUp | null;
+  viewUpcomingAvailable: boolean;
   summary: {
     todayCount: number;
     urgentCount: number;

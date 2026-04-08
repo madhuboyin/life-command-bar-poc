@@ -1,16 +1,7 @@
 "use client";
 
 import type { DailyCommandCenterItem, TodayActionKey } from "../lib/types";
-import { cardStyles, colors, formatDateTime } from "../lib/ui";
-import { buildRecommendationMessage } from "../lib/human-language.service";
-import {
-  buildDecisionConfidenceMessage,
-  buildPrimaryReassurance,
-  buildRiskReassurance
-} from "../lib/emotional-trust.service";
-import DecisionConfidenceBadge from "./decision-confidence-badge";
-import ReassuranceInline from "./reassurance-inline";
-import SharedContextNote from "./shared-context-note";
+import { cardStyles, colors } from "../lib/ui";
 import TodayActionBar from "./today-action-bar";
 import WhyThisToggle from "./why-this-toggle";
 
@@ -23,85 +14,18 @@ export default function TodayPrimaryItemCard({
   loading: TodayActionKey | null;
   onAction: (itemId: string, actionKey: TodayActionKey) => Promise<void>;
 }) {
-  const recommendationMessage = buildRecommendationMessage({
-    recommendationType: item.primaryAction.key,
-    reason: item.whyNow,
-    issue: item.whyNow,
-    presentationStyle: item.presentationStyle
-  });
-  const confidenceMessage = buildDecisionConfidenceMessage({
-    confidenceBand: item.confidenceBand,
-    actionType: item.primaryAction.key
-  });
-  const reassuranceMessage = buildPrimaryReassurance({
-    confidenceBand: item.confidenceBand,
-    actionType: item.primaryAction.key,
-    priorityBand: item.priorityBand,
-    dueAt: item.dueDate,
-    renewsAt: item.renewalDate,
-    scopeType: item.scopeType,
-    assigneeName: item.assignee?.name ?? item.assignee?.email ?? null,
-    presentationStyle: item.presentationStyle,
-    reminderStyle: item.reminderStyle
-  });
-  const riskMessage = buildRiskReassurance({
-    priorityBand: item.priorityBand,
-    dueAt: item.dueDate,
-    renewsAt: item.renewalDate
-  });
+  const contextLine = buildContextLine(item);
+  const decisionLine = buildDecisionLine(item);
+  const supportLine = buildSupportLine(item);
 
   return (
-    <article style={{ ...cardStyles.item, display: "grid", gap: 10 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-        <div>
-          <h3 style={{ margin: "0 0 6px 0", fontSize: 20 }}>{item.title}</h3>
-          {item.subtitle ? <div style={{ color: colors.textMuted }}>{item.subtitle}</div> : null}
-        </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignSelf: "flex-start" }}>
-          <PriorityBadge band={item.priorityBand} />
-          <Tag label={item.category.replace(/_/g, " ")} />
-          <DecisionConfidenceBadge
-            confidenceBand={item.confidenceBand}
-            actionType={item.primaryAction.key}
-          />
-          <ScopeBadge item={item} />
-        </div>
-      </div>
-
-      {item.amount !== null ? (
-        <div style={{ fontSize: 14 }}>
-          <strong>Amount:</strong> {formatMoney(item.amount, item.currency)}
-        </div>
-      ) : null}
-
-      {item.dueDate || item.renewalDate ? (
-        <div style={{ color: colors.textMuted, fontSize: 13 }}>
-          {item.dueDate ? `Due ${formatDateTime(item.dueDate)}` : null}
-          {item.dueDate && item.renewalDate ? " · " : null}
-          {item.renewalDate ? `Renews ${formatDateTime(item.renewalDate)}` : null}
-        </div>
-      ) : null}
-
+    <article style={{ ...cardStyles.section, display: "grid", gap: 14 }}>
       <div style={{ display: "grid", gap: 6 }}>
-        <div style={{ fontWeight: 600 }}>{recommendationMessage.primary}</div>
-        <div style={{ color: colors.textMuted }}>
-          {recommendationMessage.context ?? reassuranceMessage.primary}
-        </div>
-        <ReassuranceInline
-          compact
-          message={{
-            ...confidenceMessage,
-            supporting: confidenceMessage.supporting ?? riskMessage.primary
-          }}
-        />
-        <SharedContextNote
-          scopeType={item.scopeType}
-          assigneeName={item.assignee?.name ?? item.assignee?.email ?? null}
-          dueSoon={isDueSoon(item.dueDate ?? item.renewalDate)}
-        />
-        <WhyThisToggle metricKey="today_primary_card_why">
-          {recommendationMessage.why ?? item.sourceSummary}
-        </WhyThisToggle>
+        <div style={{ fontSize: 12, color: colors.textMuted }}>{contextLine}</div>
+        <h2 style={{ margin: 0, fontSize: 30, lineHeight: 1.2 }}>{decisionLine}</h2>
+        {supportLine ? (
+          <p style={{ margin: 0, color: colors.textMuted, fontSize: 14 }}>{supportLine}</p>
+        ) : null}
       </div>
 
       <TodayActionBar
@@ -109,72 +33,110 @@ export default function TodayPrimaryItemCard({
         loading={loading}
         onAction={(actionKey) => onAction(item.id, actionKey)}
       />
+
+      <WhyThisToggle metricKey="today_resolution_loop_why">
+        {compactSentence(item.whyThisMatters) ?? compactSentence(item.whyNow) ?? "This is worth handling now."}
+      </WhyThisToggle>
     </article>
   );
 }
 
-function PriorityBadge({ band }: { band: DailyCommandCenterItem["priorityBand"] }) {
-  const colorMap = {
-    URGENT: { bg: "#fee2e2", text: "#991b1b" },
-    HIGH: { bg: "#fef3c7", text: "#92400e" },
-    MEDIUM: { bg: "#e0f2fe", text: "#0c4a6e" },
-    LOW: { bg: "#f3f4f6", text: "#374151" }
-  } as const;
-
-  const color = colorMap[band];
-  return (
-    <span
-      style={{
-        borderRadius: 999,
-        padding: "3px 10px",
-        fontSize: 12,
-        fontWeight: 700,
-        background: color.bg,
-        color: color.text
-      }}
-    >
-      {band.toLowerCase()}
-    </span>
-  );
-}
-
-function ScopeBadge({ item }: { item: DailyCommandCenterItem }) {
-  if (item.scopeType === "PERSONAL") {
-    return <Tag label="Personal" />;
+function buildContextLine(item: DailyCommandCenterItem) {
+  if (item.renewalDate) {
+    return `${item.title} renews ${relativeDateLabel(item.renewalDate)}.`;
   }
 
-  if (!item.assignee) {
-    return <Tag label="Household unassigned" />;
+  if (item.dueDate) {
+    return `${item.title} is due ${relativeDateLabel(item.dueDate)}.`;
   }
 
-  const name = item.assignee.name ?? item.assignee.email;
-  return <Tag label={`Assigned ${name}`} />;
+  return item.title;
 }
 
-function Tag({ label }: { label: string }) {
-  return (
-    <span
-      style={{
-        borderRadius: 999,
-        border: `1px solid ${colors.border}`,
-        padding: "3px 10px",
-        fontSize: 12,
-        color: colors.textMuted,
-        background: colors.surface
-      }}
-    >
-      {label}
-    </span>
-  );
+function buildDecisionLine(item: DailyCommandCenterItem) {
+  if (item.presentationStyle === "SUPPORTED_REVIEW") {
+    return "Want a quick look before deciding?";
+  }
+
+  if (item.presentationStyle === "COMPACT_ACTION") {
+    return "Handle this now?";
+  }
+
+  switch (item.primaryAction.key) {
+    case "REVIEW":
+    case "REVIEW_SUBSCRIPTION":
+      return "Worth a quick look before deciding?";
+    case "OPEN_GUIDED":
+      return "Want to get this done now?";
+    case "MARK_DONE":
+      return "Handle this now?";
+    case "VIEW_DETAILS":
+      return "Take a quick look?";
+    default:
+      return "Handle this now?";
+  }
+}
+
+function buildSupportLine(item: DailyCommandCenterItem) {
+  const dueOrRenewLine = buildDueOrRenewLine(item);
+
+  if (item.amount !== null) {
+    const amount = formatMoney(item.amount, item.currency);
+    if (dueOrRenewLine) {
+      return `${amount} · ${dueOrRenewLine}`;
+    }
+    return amount;
+  }
+
+  if (dueOrRenewLine) {
+    return dueOrRenewLine;
+  }
+
+  return compactSentence(item.subtitle) ?? compactSentence(item.whyNow);
+}
+
+function buildDueOrRenewLine(item: DailyCommandCenterItem) {
+  if (item.dueDate) {
+    return `Due ${relativeDateLabel(item.dueDate)}`;
+  }
+  if (item.renewalDate) {
+    return `Renews ${relativeDateLabel(item.renewalDate)}`;
+  }
+  return null;
+}
+
+function relativeDateLabel(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "soon";
+
+  const today = startOfDay(new Date());
+  const target = startOfDay(parsed);
+  const dayDelta = Math.floor((target.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+
+  if (dayDelta <= 0) return "today";
+  if (dayDelta === 1) return "tomorrow";
+  return `in ${dayDelta} days`;
 }
 
 function formatMoney(amount: number, currency: string | null) {
-  return `${(currency ?? "USD").toUpperCase()} ${amount.toFixed(2)}`;
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: (currency ?? "USD").toUpperCase(),
+      maximumFractionDigits: 2
+    }).format(amount);
+  } catch {
+    return `${(currency ?? "USD").toUpperCase()} ${amount.toFixed(2)}`;
+  }
 }
 
-function isDueSoon(value: string | null) {
-  if (!value) return false;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return false;
-  return parsed.getTime() - Date.now() <= 5 * 24 * 60 * 60 * 1000;
+function compactSentence(value: string | null | undefined) {
+  if (!value) return null;
+  const normalized = value.trim();
+  if (!normalized) return null;
+  return normalized.length > 120 ? `${normalized.slice(0, 117)}...` : normalized;
+}
+
+function startOfDay(value: Date) {
+  return new Date(value.getFullYear(), value.getMonth(), value.getDate());
 }

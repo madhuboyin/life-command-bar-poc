@@ -66,7 +66,7 @@ export class TodayActionLoopService {
           .catch(() => null);
 
         status = "COMPLETED";
-        message = "Marked complete.";
+        message = "Done";
         await createAuditEvent({
           userId,
           householdId: item.householdId,
@@ -144,10 +144,10 @@ export class TodayActionLoopService {
         status = "DEFERRED";
         message =
           reminderDecision.reminderStyle === "SHORT_FOLLOWUP"
-            ? "Reminder set for a near follow-up."
+            ? "We'll remind you soon"
             : reminderDecision.reminderStyle === "REALISTIC_FOLLOWUP"
-              ? "Reminder set for a realistic follow-up."
-              : "Reminder moved later.";
+              ? "We'll bring this back later"
+              : "We'll remind you";
         await createAuditEvent({
           userId,
           householdId: item.householdId,
@@ -221,7 +221,7 @@ export class TodayActionLoopService {
           .catch(() => null);
 
         status = "DISMISSED";
-        message = "Dismissed for now.";
+        message = "Got it";
         await createAuditEvent({
           userId,
           householdId: item.householdId,
@@ -394,7 +394,9 @@ export class TodayActionLoopService {
       emitEvents: false
     });
 
-    if (today.primaryItems.length === 0) {
+    const remainingCount = (today.primaryItem ? 1 : 0) + today.queuedItems.length;
+
+    if (remainingCount === 0) {
       await createAuditEvent({
         userId,
         householdId: item.householdId,
@@ -410,7 +412,7 @@ export class TodayActionLoopService {
       status,
       message,
       targetHref,
-      nextPrimaryItemId: today.primaryItems[0]?.id ?? null,
+      nextPrimaryItemId: today.primaryItem?.id ?? null,
       today
     };
   }

@@ -241,45 +241,48 @@ function selectActions(
 function buildWhyNow(item: TodayPrioritizationInput, now: Date) {
   const dueDays = daysUntil(item.dueDate, now);
   if (dueDays !== null && dueDays <= 0) {
-    return "Due now or overdue.";
+    return "This is due now.";
   }
   if (dueDays !== null && dueDays <= 7) {
-    return `Due in ${dueDays} day${dueDays === 1 ? "" : "s"}.`;
+    if (dueDays === 0) return "This is due today.";
+    if (dueDays === 1) return "This is due tomorrow.";
+    return `This is due in ${dueDays} days.`;
   }
 
   const renewalDays = daysUntil(item.renewalDate, now);
   if (renewalDays !== null && renewalDays <= 0) {
-    return "Renews now.";
+    return "This renews today.";
   }
   if (renewalDays !== null && renewalDays <= 7) {
-    return `Renews in ${renewalDays} day${renewalDays === 1 ? "" : "s"}.`;
+    if (renewalDays === 1) return "This renews tomorrow.";
+    return `This renews in ${renewalDays} days.`;
   }
 
   if (item.needsReview) {
-    return `Confidence ${item.confidenceBand.toLowerCase()} and review is recommended.`;
+    return "A quick review is safer before deciding.";
   }
 
   if (item.status === ObligationStatus.POSTPONED) {
-    return "Previously deferred and surfaced for follow-through.";
+    return "You postponed this earlier, so it is back on deck.";
   }
 
-  return "Prioritized from recent obligation signals.";
+  return "Worth handling now to keep things clear.";
 }
 
 function buildWhyThisMatters(item: TodayPrioritizationInput) {
   if (item.amount !== null && item.amount > 0) {
-    return "Financial impact is known, so acting now prevents avoidable surprises.";
+    return "Handling this now helps avoid surprise costs.";
   }
 
   if (item.subscriptionId || item.type === "SUBSCRIPTION" || item.type === "RENEWAL") {
-    return "A quick decision here prevents repeat subscription noise and surprise charges.";
+    return "A quick decision here can prevent repeat charges.";
   }
 
   if (item.scopeType === ScopeType.HOUSEHOLD && item.assignee?.name) {
-    return `Household visibility is clearer when ${item.assignee.name} has this handled.`;
+    return `Getting this handled keeps everyone on the same page with ${item.assignee.name}.`;
   }
 
-  return "Handling this now reduces carry-over and keeps today focused.";
+  return "Handling this now keeps today lighter.";
 }
 
 function toPriorityBand(score: number): TodayPriorityBand {

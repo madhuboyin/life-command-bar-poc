@@ -14,6 +14,11 @@ import { PersonalizationSignalService } from "./personalization-signal.service";
 import { BehaviorProfileService } from "./behavior-profile.service";
 import { AdaptivePersonalizationRolloutService } from "./adaptive-personalization-rollout.service";
 import {
+  buildTodayLoopModel,
+  type TodayNextUp,
+  type TodayViewState
+} from "./today-loop-state";
+import {
   PersonalizationPolicyService,
   type PersonalizedTodayItem,
   type TodayPersonalizationResult
@@ -77,6 +82,13 @@ export type DailyCommandCenterCompletedItem = {
 
 export type DailyCommandCenterResponse = {
   generatedAt: string;
+  todayState: TodayViewState;
+  headline: string;
+  subheadline: string;
+  primaryItem: DailyCommandCenterItem | null;
+  queuedItems: DailyCommandCenterItem[];
+  nextUp: TodayNextUp | null;
+  viewUpcomingAvailable: boolean;
   summary: {
     todayCount: number;
     urgentCount: number;
@@ -219,8 +231,10 @@ export class DailyCommandCenterService {
       (item) => item.priorityBand === "URGENT" || item.priorityBand === "HIGH"
     );
 
-    const primaryItems = primaryCandidates.slice(0, 5).map((item) => this.toSurfaceItem(item));
-    const primaryIds = new Set(primaryItems.map((item) => item.id));
+    const actionableItems = primaryCandidates
+      .slice(0, 3)
+      .map((item) => this.toSurfaceItem(item));
+    const primaryIds = new Set(actionableItems.map((item) => item.id));
 
     const upcomingFromRanked = personalizedRanked
       .filter((item) => !primaryIds.has(item.id))
@@ -245,10 +259,16 @@ export class DailyCommandCenterService {
       } satisfies DailyCommandCenterCompletedItem;
     });
 
+    const loopModel = buildTodayLoopModel({
+      actionableItems,
+      upcomingItems: upcoming,
+      now
+    });
+
     const summary = {
-      todayCount: primaryItems.length,
-      urgentCount: primaryItems.filter((item) => item.priorityBand === "URGENT").length,
-      reviewCount: primaryItems.filter(
+      todayCount: loopModel.totalActionableCount,
+      urgentCount: actionableItems.filter((item) => item.priorityBand === "URGENT").length,
+      reviewCount: actionableItems.filter(
         (item) =>
           item.primaryAction.key === "REVIEW" ||
           item.primaryAction.key === "REVIEW_SUBSCRIPTION"
@@ -267,6 +287,7 @@ export class DailyCommandCenterService {
           reviewCount: summary.reviewCount,
           upcomingCount: summary.upcomingCount,
           completedTodayCount: summary.completedTodayCount,
+          todayState: loopModel.todayState,
           pulseOpenedToday: pulseState.openedToday,
           pulseTotalItems: pulseState.totalItems,
           adaptivePersonalizationEnabled: rolloutState.todayPersonalizationEnabled,
@@ -275,7 +296,7 @@ export class DailyCommandCenterService {
         }
       });
 
-      if (primaryItems.length === 0) {
+      if (loopModel.todayState === "CLEAR") {
         await createAuditEvent({
           userId,
           eventType: "today_done_for_now_reached",
@@ -374,12 +395,21 @@ export class DailyCommandCenterService {
       }
     }
 
-    void this.recordImpressionSignals(userId, primaryItems).catch(() => null);
+    if (loopModel.primaryItem) {
+      void this.recordImpressionSignals(userId, [loopModel.primaryItem]).catch(() => null);
+    }
 
     return {
       generatedAt: new Date().toISOString(),
+      todayState: loopModel.todayState,
+      headline: loopModel.headline,
+      subheadline: loopModel.subheadline,
+      primaryItem: loopModel.primaryItem,
+      queuedItems: loopModel.queuedItems,
+      nextUp: loopModel.nextUp,
+      viewUpcomingAvailable: loopModel.viewUpcomingAvailable,
       summary,
-      primaryItems,
+      primaryItems: actionableItems,
       upcoming,
       completedOrSafe,
       pulse: {

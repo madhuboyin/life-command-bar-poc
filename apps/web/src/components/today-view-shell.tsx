@@ -10,21 +10,9 @@ import {
 import { buildGuidedHref } from "../lib/flow-navigation";
 import type { DailyCommandCenterResponse, TodayActionKey } from "../lib/types";
 import { buttonStyles, cardStyles, colors, pageStyles } from "../lib/ui";
-import {
-  buildEmptyStateMessage,
-  trackMessageAction
-} from "../lib/human-language.service";
-import {
-  buildActionAftercareMessage,
-  buildCompletionReliefMessage,
-  buildPrimaryReassurance
-} from "../lib/emotional-trust.service";
 import { useFlowSession } from "./flow-session-provider";
-import TodayCompletedCollapsed from "./today-completed-collapsed";
 import TodayEmptyState from "./today-empty-state";
 import TodayPrimaryItemCard from "./today-primary-item-card";
-import TodaySummaryStrip from "./today-summary-strip";
-import TodayUpcomingList from "./today-upcoming-list";
 import { useToast } from "./ui/toast-provider";
 
 export default function TodayViewShell({
@@ -34,8 +22,6 @@ export default function TodayViewShell({
   initialData: DailyCommandCenterResponse | null;
   initialError?: string | null;
 }) {
-  const todayEmptyMessage = buildEmptyStateMessage("today");
-  const headerMessage = buildPrimaryReassurance({ emotionalState: "CALM_CLEAR" });
   const [data, setData] = useState<DailyCommandCenterResponse | null>(initialData);
   const [error, setError] = useState<string | null>(initialError);
   const [loadingAction, setLoadingAction] = useState<Record<string, TodayActionKey | null>>({});
@@ -43,14 +29,20 @@ export default function TodayViewShell({
   const router = useRouter();
   const { showToast } = useToast();
 
-  const primaryIds = useMemo(
-    () => (data?.primaryItems ?? []).map((item) => item.id),
-    [data?.primaryItems]
-  );
+  const loopItemIds = useMemo(() => {
+    if (!data) return [];
+    const ids: string[] = [];
+    if (data.primaryItem) {
+      ids.push(data.primaryItem.id);
+    }
+    for (const queued of data.queuedItems) {
+      ids.push(queued.id);
+    }
+    return ids;
+  }, [data]);
 
   async function handleAction(itemId: string, actionKey: TodayActionKey) {
     try {
-      trackMessageAction(actionKey);
       setError(null);
       setLoadingAction((current) => ({
         ...current,
@@ -68,7 +60,7 @@ export default function TodayViewShell({
           sourceContext: {
             label: "Today View",
             returnPath: "/today",
-            obligationIds: primaryIds
+            obligationIds: loopItemIds
           },
           currentObligationId: itemId,
           currentJourneyId: journey.journey.id
@@ -77,7 +69,7 @@ export default function TodayViewShell({
         showToast({
           variant: "info",
           title: "Opening guided flow",
-          description: "You can come right back to Today whenever you're ready."
+          description: "You can come right back to Today whenever you are ready."
         });
 
         router.push(buildGuidedHref(journey.journey.id, session.id));
@@ -89,21 +81,17 @@ export default function TodayViewShell({
         return;
       }
 
-      const nextRemaining = result.today.primaryItems.length;
-      const aftercare = buildActionAftercareMessage({ actionType: actionKey, trackAction: true });
-      const completionRelief = buildCompletionReliefMessage({
-        remainingCount: nextRemaining,
-        trackCompletion: nextRemaining === 0
-      });
+      const nextRemaining = countRemainingItems(result.today);
       setData(result.today);
       showToast({
         variant: "success",
-        title: aftercare.primary,
+        title: result.message,
         description:
-          aftercare.supporting ??
-          (nextRemaining === 0
-            ? completionRelief.primary
-            : `${nextRemaining} left in today.`)
+          nextRemaining === 0
+            ? "You are all set for now."
+            : result.today.primaryItem
+              ? `Up next: ${result.today.primaryItem.title}`
+              : `${nextRemaining} left for today.`
       });
     } catch (actionError) {
       const message =
@@ -139,17 +127,16 @@ export default function TodayViewShell({
         <div>
           <h1 style={{ margin: "0 0 6px 0", fontSize: 34 }}>Today</h1>
           <p style={{ margin: 0, color: colors.textMuted }}>
-            {headerMessage.supporting ?? todayEmptyMessage.context ?? "Clear next steps for today."}
+            Know what matters. Act quickly. Stay in control.
           </p>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <Link href="/pulse" style={buttonStyles.link}>
-            Open Pulse
-          </Link>
-          <Link href="/control-tower" style={buttonStyles.link}>
-            Control Tower
-          </Link>
-        </div>
+        {data?.viewUpcomingAvailable ? (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Link href="/upcoming" style={buttonStyles.link}>
+              View upcoming
+            </Link>
+          </div>
+        ) : null}
       </header>
 
       {error ? (
@@ -160,47 +147,54 @@ export default function TodayViewShell({
 
       {data ? (
         <div style={{ display: "grid", gap: 12 }}>
-          <TodaySummaryStrip summary={data.summary} pulse={data.pulse} />
+          <section style={{ ...cardStyles.section, display: "grid", gap: 6 }}>
+            <div style={{ fontSize: 12, color: colors.textMuted }}>Today status</div>
+            <h2 style={{ margin: 0, fontSize: 30 }}>{data.headline}</h2>
+            <p style={{ margin: 0, color: colors.textMuted }}>{data.subheadline}</p>
+          </section>
 
-          {data.primaryItems.length === 0 ? (
-            <TodayEmptyState />
+          {data.todayState === "CLEAR" || !data.primaryItem ? (
+            <TodayEmptyState
+              headline={data.headline}
+              subheadline={data.subheadline}
+              nextUp={data.nextUp}
+              viewUpcomingAvailable={data.viewUpcomingAvailable}
+            />
           ) : (
-            <section style={{ ...cardStyles.section, display: "grid", gap: 10 }}>
-              <div style={{ fontSize: 12, color: colors.textMuted }}>What&apos;s next</div>
-              {data.primaryItems.map((item) => (
-                <TodayPrimaryItemCard
-                  key={item.id}
-                  item={item}
-                  loading={loadingAction[item.id] ?? null}
-                  onAction={handleAction}
-                />
-              ))}
-            </section>
+            <>
+              <TodayPrimaryItemCard
+                item={data.primaryItem}
+                loading={loadingAction[data.primaryItem.id] ?? null}
+                onAction={handleAction}
+              />
+
+              {data.queuedItems.length > 0 ? (
+                <section style={{ ...cardStyles.bordered, display: "grid", gap: 6 }}>
+                  <div style={{ fontSize: 12, color: colors.textMuted }}>After this</div>
+                  <div style={{ fontWeight: 700 }}>{data.queuedItems[0]?.title}</div>
+                  <div style={{ color: colors.textMuted, fontSize: 13 }}>
+                    {data.queuedItems.length === 1
+                      ? "One more item after this."
+                      : `${data.queuedItems.length} more items queued after this.`}
+                  </div>
+                </section>
+              ) : null}
+
+              {data.todayState === "REVIEW_NEEDED" ? (
+                <section style={{ ...cardStyles.bordered, color: colors.textMuted }}>
+                  You can review this now and decide with confidence.
+                </section>
+              ) : null}
+            </>
           )}
-
-          <TodayUpcomingList items={data.upcoming} />
-          <TodayCompletedCollapsed items={data.completedOrSafe} />
-
-          {data.summary.reviewCount > 0 ? (
-            <section style={{ ...cardStyles.bordered }}>
-              <div style={{ marginBottom: 6, fontWeight: 700 }}>Need more context?</div>
-              <div style={{ color: colors.textMuted, marginBottom: 10 }}>
-                A few items still need a quick check before you act.
-              </div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <Link href="/review" style={buttonStyles.link}>
-                  Open Review Queue
-                </Link>
-                <Link href="/control-tower" style={buttonStyles.link}>
-                  Open Control Tower
-                </Link>
-              </div>
-            </section>
-          ) : null}
         </div>
       ) : (
         <TodayEmptyState />
       )}
     </main>
   );
+}
+
+function countRemainingItems(today: DailyCommandCenterResponse) {
+  return (today.primaryItem ? 1 : 0) + today.queuedItems.length;
 }
