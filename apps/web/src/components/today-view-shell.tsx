@@ -166,7 +166,7 @@ export default function TodayViewShell({
             <TodayEmptyState />
           ) : (
             <section style={{ ...cardStyles.section, display: "grid", gap: 10 }}>
-              <div style={{ fontSize: 12, color: colors.textMuted }}>What's next</div>
+              <div style={{ fontSize: 12, color: colors.textMuted }}>What&apos;s next</div>
               {data.primaryItems.map((item) => (
                 <TodayPrimaryItemCard
                   key={item.id}
