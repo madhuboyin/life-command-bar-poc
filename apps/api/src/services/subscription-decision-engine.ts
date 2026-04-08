@@ -14,6 +14,7 @@ import { ReminderService } from "./reminder.service";
 import { SubscriptionInsightService } from "./subscription-insight.service";
 import type { SubscriptionFlowDecision } from "./subscription-guided-flow";
 import { AppError } from "../utils/app-error";
+import { listActiveHouseholdIdsForUser } from "../utils/household-access";
 
 export class SubscriptionDecisionEngine {
   private readonly reminderService = new ReminderService();
@@ -26,10 +27,26 @@ export class SubscriptionDecisionEngine {
     remindAt?: string | null;
     note?: string | null;
   }) {
+    const householdIds = await listActiveHouseholdIdsForUser(input.userId);
     const subscription = await prisma.subscriptionRegistry.findFirst({
       where: {
         id: input.subscriptionId,
-        userId: input.userId
+        OR: [
+          {
+            userId: input.userId,
+            scopeType: ScopeType.PERSONAL
+          },
+          ...(householdIds.length > 0
+            ? [
+                {
+                  scopeType: ScopeType.HOUSEHOLD,
+                  householdId: {
+                    in: householdIds
+                  }
+                }
+              ]
+            : [])
+        ]
       },
       include: {
         recommendation: true,
@@ -275,4 +292,3 @@ function recommendationConfidence(decision: SubscriptionFlowDecision) {
   if (decision === "REMIND_LATER") return 0.64;
   return 0.68;
 }
-

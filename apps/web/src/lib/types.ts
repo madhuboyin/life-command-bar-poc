@@ -1012,6 +1012,152 @@ export interface SubscriptionGuidedFlow {
   }>;
 }
 
+export type SubscriptionReviewGroupKey =
+  | "RENEWING_SOON"
+  | "PRICE_INCREASED"
+  | "NEEDS_CONFIRMATION"
+  | "POTENTIALLY_UNUSED"
+  | "RECENTLY_CANCELED"
+  | "STABLE_SAFE";
+
+export interface SubscriptionReviewHubItem {
+  subscriptionId: string;
+  title: string;
+  vendorName: string;
+  planName: string | null;
+  lifecycleState: SubscriptionLifecycleState | string;
+  recurringPrice: number | null;
+  currency: string | null;
+  nextRenewalDate: string | null;
+  recommendationType: SubscriptionOptimizationRecommendation["recommendationType"] | string;
+  recommendationReason: string;
+  healthScore: number;
+  confidenceBand: ConfidenceBand;
+  primaryInsight: string;
+  assignee: {
+    id: string;
+    email: string;
+    name: string | null;
+  } | null;
+  scopeType: "PERSONAL" | "HOUSEHOLD";
+}
+
+export interface SubscriptionReviewHubGroup {
+  key: SubscriptionReviewGroupKey;
+  title: string;
+  description: string;
+  items: SubscriptionReviewHubItem[];
+}
+
+export interface SubscriptionReviewHubSummary {
+  totalReviewItems: number;
+  renewingSoonCount: number;
+  priceIncreasedCount: number;
+  needsConfirmationCount: number;
+  potentialSavingsAmount: number;
+  currency: string | null;
+}
+
+export interface SubscriptionReviewHubResponse {
+  summary: SubscriptionReviewHubSummary;
+  groups: SubscriptionReviewHubGroup[];
+}
+
+export interface SubscriptionDecisionFlowData {
+  subscription: {
+    id: string;
+    title: string;
+    vendorName: string;
+    planName: string | null;
+    lifecycleState: SubscriptionLifecycleState | string;
+    recurringPrice: number | null;
+    currency: string | null;
+    nextRenewalDate: string | null;
+    confidenceBand: ConfidenceBand;
+    healthScore: number;
+    scopeType: "PERSONAL" | "HOUSEHOLD";
+    assignee: {
+      id: string;
+      email: string;
+      name: string | null;
+    } | null;
+    lastHandledBy: {
+      id: string;
+      email: string;
+      name: string | null;
+    } | null;
+    whyVisible: string;
+  };
+  recommendation: {
+    type: SubscriptionOptimizationRecommendation["recommendationType"] | string;
+    reason: string;
+    confidence: number;
+    supportingInsights: Array<{
+      insightType: SubscriptionOptimizationInsight["insightType"] | string;
+      title: string;
+      description: string;
+      severity: SubscriptionOptimizationInsight["severity"] | string;
+      confidence: number;
+      recommendedAction: string;
+    }>;
+  };
+  decisionContext: {
+    whatChanged: string;
+    whyNow: string;
+    riskLevel: "HIGH" | "MEDIUM" | "LOW" | string;
+    sourceSummary: string;
+  };
+  actions: Array<{
+    key: "KEEP" | "CANCEL" | "REMIND_LATER" | "REVIEW_DETAILS";
+    label: string;
+  }>;
+  detailSections: {
+    priceHistory: Array<{
+      id: string;
+      priceType: SubscriptionPriceHistoryItem["priceType"] | string;
+      amount: number;
+      currency: string;
+      billingPeriod: SubscriptionBillingPeriod | null;
+      effectiveDate: string | null;
+      createdAt: string;
+    }>;
+    evidenceSummary: Array<{
+      id: string;
+      sourceType: SubscriptionEvidenceItem["sourceType"] | string;
+      sourceSubType: SubscriptionEvidenceItem["sourceSubType"] | null;
+      confidenceScore: number;
+      observedAt: string;
+      summaryLine: string;
+    }>;
+    lifecycleTimeline: Array<{
+      id: string;
+      eventType: SubscriptionLifecycleEventItem["eventType"] | string;
+      previousState: SubscriptionLifecycleState | null;
+      nextState: SubscriptionLifecycleState | null;
+      eventDate: string;
+      note: string | null;
+    }>;
+    linkedObligations: SubscriptionLinkedObligationItem[];
+  };
+}
+
+export interface SubscriptionReviewActionResponse {
+  action: "KEEP" | "CANCEL" | "REMIND_LATER" | "REVIEW_DETAILS" | "REVIEWED";
+  result?: {
+    subscriptionId: string;
+    decision: "KEEP" | "CANCEL" | "DOWNGRADE" | "REVIEW" | "REMIND_LATER";
+    recommendationType: SubscriptionOptimizationRecommendation["recommendationType"] | string;
+    reminderId: string | null;
+    createdObligationId: string | null;
+  };
+  followUpObligationId?: string | null;
+  guidedHandoff?: {
+    obligationId: string;
+    journeyId: string;
+  } | null;
+  nextReviewSubscriptionId?: string | null;
+}
+
 export interface HouseholdSummary {
   id: string;
   name: string;

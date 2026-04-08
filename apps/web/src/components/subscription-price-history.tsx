@@ -1,10 +1,20 @@
 import type { SubscriptionPriceHistoryItem } from "../lib/types";
 import { cardStyles, colors } from "../lib/ui";
 
+type PriceHistoryLike = Array<{
+  id: string;
+  priceType: SubscriptionPriceHistoryItem["priceType"] | string;
+  amount: number;
+  currency: string;
+  billingPeriod: SubscriptionPriceHistoryItem["billingPeriod"] | string | null;
+  effectiveDate: string | null;
+  createdAt: string;
+}>;
+
 export default function SubscriptionPriceHistory({
   items
 }: {
-  items: SubscriptionPriceHistoryItem[];
+  items: PriceHistoryLike;
 }) {
   if (items.length === 0) {
     return (

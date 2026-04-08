@@ -754,7 +754,12 @@ export class SubscriptionRegistryService {
   }
 
   async getOptimization(userId: string, id: string) {
-    const existing = await this.repository.findForUserStrict(id, userId);
+    const householdIds = await listActiveHouseholdIdsForUser(userId);
+    const existing = await this.repository.findByIdForUser({
+      id,
+      userId,
+      householdIds
+    });
     if (!existing) return null;
 
     const optimization = await this.insightService.refreshForSubscriptions(userId, [id], {

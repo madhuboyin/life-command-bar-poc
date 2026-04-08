@@ -210,6 +210,24 @@ function mapEventType(
       return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_RECOMMENDATION_GENERATED;
     case "subscription_review_started":
       return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_REVIEW_STARTED;
+    case "subscription_review_hub_loaded":
+      return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_REVIEW_HUB_LOADED;
+    case "subscription_review_hub_empty":
+      return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_REVIEW_HUB_EMPTY;
+    case "subscription_review_item_opened":
+      return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_REVIEW_ITEM_OPENED;
+    case "subscription_review_keep_selected":
+      return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_REVIEW_KEEP_SELECTED;
+    case "subscription_review_cancel_selected":
+      return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_REVIEW_CANCEL_SELECTED;
+    case "subscription_review_remind_selected":
+      return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_REVIEW_REMIND_SELECTED;
+    case "subscription_review_details_opened":
+      return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_REVIEW_DETAILS_OPENED;
+    case "subscription_review_completed":
+      return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_REVIEW_COMPLETED;
+    case "subscription_review_guided_flow_handoff":
+      return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_REVIEW_GUIDED_FLOW_HANDOFF;
     case "subscription_decision_taken":
       return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_DECISION_TAKEN;
     case "subscription_kept":

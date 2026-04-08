@@ -107,6 +107,11 @@ export default function ControlTowerShell({ initialData, initialError = null }: 
           <Pill label={`System decisions ${data.summary.systemDecisionCount}`} />
           <Pill label={`Subscriptions ${data.summary.subscriptionOptimizationCount}`} />
         </div>
+        <div style={{ marginTop: 10 }}>
+          <Link href="/subscriptions/review" style={buttonStyles.link}>
+            Open Subscription Review Hub
+          </Link>
+        </div>
       </section>
 
       <ControlSection
@@ -367,7 +372,7 @@ function SubscriptionOptimizationList({
             Recommendation {item.recommendationType.toLowerCase()} · Health {item.healthScore}
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Link href={`/subscriptions/${item.subscriptionId}`} style={buttonStyles.link}>
+            <Link href={`/subscriptions/review/${item.subscriptionId}`} style={buttonStyles.link}>
               {item.ctaLabel}
             </Link>
           </div>

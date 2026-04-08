@@ -7,7 +7,6 @@ import SubscriptionInsightCard from "../../../components/subscription-insight-ca
 import SubscriptionMergePanel from "../../../components/subscription-merge-panel";
 import SubscriptionPriceHistory from "../../../components/subscription-price-history";
 import SubscriptionRecommendationCard from "../../../components/subscription-recommendation-card";
-import SubscriptionReviewFlow from "../../../components/subscription-review-flow";
 import { getSubscriptionById } from "../../../lib/api";
 import { cardStyles, colors, pageStyles } from "../../../lib/ui";
 
@@ -134,7 +133,18 @@ export default async function SubscriptionDetailPage({ params }: Props) {
             <SubscriptionPriceHistory items={subscription.priceHistory} />
           </section>
 
-          <SubscriptionReviewFlow subscriptionId={subscription.id} />
+          <section style={{ ...cardStyles.section, display: "grid", gap: 8 }}>
+            <h2 style={{ margin: 0 }}>Review Decision</h2>
+            <div style={{ color: colors.textMuted }}>
+              Use the focused review flow to quickly choose keep, cancel, or remind later.
+            </div>
+            <div>
+              <Link href={`/subscriptions/review/${subscription.id}`} style={{ color: "#2563eb", textDecoration: "none", fontWeight: 600 }}>
+                Open subscription review flow →
+              </Link>
+            </div>
+          </section>
+
           <SubscriptionConfirmationForm subscription={subscription} />
           <SubscriptionMergePanel primarySubscriptionId={subscription.id} />
         </div>

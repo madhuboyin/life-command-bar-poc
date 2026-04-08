@@ -188,6 +188,11 @@ export default function DailyPulseShell({
                   {pulse.subscriptionSignals.summaryLine}
                 </div>
               ) : null}
+              <div style={{ marginBottom: 10 }}>
+                <Link href="/subscriptions/review" style={buttonStyles.link}>
+                  Open Subscription Review Hub
+                </Link>
+              </div>
               <div style={{ display: "grid", gap: 10 }}>
                 {pulse.subscriptionSignals.items.map((item) => (
                   <article
@@ -205,7 +210,7 @@ export default function DailyPulseShell({
                       Recommendation {item.recommendationType.toLowerCase()} · Health {item.healthScore}
                     </div>
                     <div>
-                      <Link href={`/subscriptions/${item.subscriptionId}`} style={buttonStyles.link}>
+                      <Link href={`/subscriptions/review/${item.subscriptionId}`} style={buttonStyles.link}>
                         Review
                       </Link>
                     </div>

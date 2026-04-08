@@ -1,94 +1,360 @@
+import {
+  ObligationSource,
+  ObligationStatus,
+  ObligationType,
+  ScopeType
+} from "@prisma/client";
+import { prisma } from "../clients/prisma.client";
+import { createAuditEvent } from "../observability/audit-event";
+import { SubscriptionReviewRepository } from "../repositories/subscription-review.repository";
+import { listActiveHouseholdIdsForUser } from "../utils/household-access";
 import { AppError } from "../utils/app-error";
-import { SubscriptionRegistryRepository } from "../repositories/subscription-registry.repository";
-import { ReminderService } from "./reminder.service";
-import { SubscriptionLifecycleState } from "@prisma/client";
+import { SubscriptionDecisionEngine } from "./subscription-decision-engine";
+import { GuidedJourneyService } from "./guided-journey.service";
 import { SubscriptionInsightService } from "./subscription-insight.service";
-
-export type DecisionActionType = "KEEP" | "CANCEL" | "REMIND_LATER" | "REVIEWED";
-
-export interface DecisionActionPayload {
-  action: DecisionActionType;
-  remindAt?: string | null;
-  note?: string | null;
-}
+import { SubscriptionReviewService } from "./subscription-review.service";
 
 export class SubscriptionDecisionActionService {
-  private readonly registryRepository = new SubscriptionRegistryRepository();
-  private readonly reminderService = new ReminderService();
+  private readonly repository = new SubscriptionReviewRepository();
+  private readonly decisionEngine = new SubscriptionDecisionEngine();
+  private readonly guidedJourneyService = new GuidedJourneyService();
   private readonly insightService = new SubscriptionInsightService();
+  private readonly reviewService = new SubscriptionReviewService();
 
-  async executeAction(userId: string, subscriptionId: string, payload: DecisionActionPayload) {
-    const existing = await this.registryRepository.findForUserStrict(subscriptionId, userId);
-    if (!existing) {
+  async keep(
+    userId: string,
+    subscriptionId: string,
+    payload?: {
+      note?: string | null;
+      decisionDurationMs?: number;
+    }
+  ) {
+    const subscription = await this.requireAccessibleSubscription(userId, subscriptionId);
+
+    const result = await this.decisionEngine.applyDecision({
+      userId,
+      subscriptionId,
+      decision: "KEEP",
+      note: payload?.note ?? undefined
+    });
+
+    await createAuditEvent({
+      userId,
+      householdId: subscription.householdId,
+      eventType: "subscription_review_keep_selected",
+      metadata: {
+        subscriptionId,
+        decisionDurationMs: payload?.decisionDurationMs ?? null,
+        note: payload?.note ?? null
+      }
+    });
+
+    await createAuditEvent({
+      userId,
+      householdId: subscription.householdId,
+      eventType: "subscription_review_completed",
+      metadata: {
+        subscriptionId,
+        action: "KEEP",
+        decisionDurationMs: payload?.decisionDurationMs ?? null
+      }
+    });
+
+    const nextReviewSubscriptionId = await this.reviewService.getNextReviewSubscriptionId(
+      userId,
+      subscriptionId
+    );
+
+    return {
+      action: "KEEP",
+      result,
+      nextReviewSubscriptionId
+    };
+  }
+
+  async cancel(
+    userId: string,
+    subscriptionId: string,
+    payload?: {
+      note?: string | null;
+      handoffToGuided?: boolean;
+      decisionDurationMs?: number;
+    }
+  ) {
+    const subscription = await this.requireAccessibleSubscription(userId, subscriptionId);
+
+    const result = await this.decisionEngine.applyDecision({
+      userId,
+      subscriptionId,
+      decision: "CANCEL",
+      note: payload?.note ?? undefined
+    });
+
+    await createAuditEvent({
+      userId,
+      householdId: subscription.householdId,
+      eventType: "subscription_review_cancel_selected",
+      metadata: {
+        subscriptionId,
+        decisionDurationMs: payload?.decisionDurationMs ?? null,
+        note: payload?.note ?? null
+      }
+    });
+
+    const followUpObligationId = await this.ensureCancellationFollowUpObligation({
+      userId,
+      subscriptionId,
+      title: subscription.subscriptionTitle,
+      scopeType: subscription.scopeType,
+      householdId: subscription.householdId
+    });
+
+    let guidedHandoff: {
+      obligationId: string;
+      journeyId: string;
+    } | null = null;
+
+    const shouldHandoff = payload?.handoffToGuided ?? true;
+    if (shouldHandoff && followUpObligationId) {
+      const journey = await this.guidedJourneyService
+        .createOrResume(userId, followUpObligationId)
+        .catch(() => null);
+
+      if (journey?.journey) {
+        guidedHandoff = {
+          obligationId: followUpObligationId,
+          journeyId: journey.journey.id
+        };
+
+        await createAuditEvent({
+          userId,
+          householdId: subscription.householdId,
+          obligationId: followUpObligationId,
+          eventType: "subscription_review_guided_flow_handoff",
+          metadata: {
+            subscriptionId,
+            journeyId: journey.journey.id,
+            obligationId: followUpObligationId
+          }
+        });
+      }
+    }
+
+    await createAuditEvent({
+      userId,
+      householdId: subscription.householdId,
+      obligationId: followUpObligationId,
+      eventType: "subscription_review_completed",
+      metadata: {
+        subscriptionId,
+        action: "CANCEL",
+        decisionDurationMs: payload?.decisionDurationMs ?? null,
+        guidedHandoff: Boolean(guidedHandoff)
+      }
+    });
+
+    await this.insightService.refreshForSubscriptions(userId, [subscriptionId], {
+      emitEvents: true
+    });
+
+    const nextReviewSubscriptionId = await this.reviewService.getNextReviewSubscriptionId(
+      userId,
+      subscriptionId
+    );
+
+    return {
+      action: "CANCEL",
+      result,
+      followUpObligationId,
+      guidedHandoff,
+      nextReviewSubscriptionId
+    };
+  }
+
+  async remindLater(
+    userId: string,
+    subscriptionId: string,
+    payload?: {
+      remindAt?: string | null;
+      note?: string | null;
+      decisionDurationMs?: number;
+    }
+  ) {
+    const subscription = await this.requireAccessibleSubscription(userId, subscriptionId);
+
+    const result = await this.decisionEngine.applyDecision({
+      userId,
+      subscriptionId,
+      decision: "REMIND_LATER",
+      remindAt: payload?.remindAt,
+      note: payload?.note ?? undefined
+    });
+
+    await createAuditEvent({
+      userId,
+      householdId: subscription.householdId,
+      eventType: "subscription_review_remind_selected",
+      metadata: {
+        subscriptionId,
+        reminderId: result.reminderId,
+        remindAt: payload?.remindAt ?? null,
+        decisionDurationMs: payload?.decisionDurationMs ?? null
+      }
+    });
+
+    await createAuditEvent({
+      userId,
+      householdId: subscription.householdId,
+      eventType: "subscription_review_completed",
+      metadata: {
+        subscriptionId,
+        action: "REMIND_LATER",
+        reminderId: result.reminderId,
+        decisionDurationMs: payload?.decisionDurationMs ?? null
+      }
+    });
+
+    const nextReviewSubscriptionId = await this.reviewService.getNextReviewSubscriptionId(
+      userId,
+      subscriptionId
+    );
+
+    return {
+      action: "REMIND_LATER",
+      result,
+      nextReviewSubscriptionId
+    };
+  }
+
+  async markReviewed(
+    userId: string,
+    subscriptionId: string,
+    payload?: {
+      context?: "DETAILS_OPENED" | "COMPLETED";
+      note?: string | null;
+      decisionDurationMs?: number;
+    }
+  ) {
+    const subscription = await this.requireAccessibleSubscription(userId, subscriptionId);
+
+    await prisma.subscriptionRegistry.update({
+      where: {
+        id: subscriptionId
+      },
+      data: {
+        lastHandledByUserId: userId
+      }
+    });
+
+    const context = payload?.context ?? "COMPLETED";
+
+    if (context === "DETAILS_OPENED") {
+      await createAuditEvent({
+        userId,
+        householdId: subscription.householdId,
+        eventType: "subscription_review_details_opened",
+        metadata: {
+          subscriptionId,
+          note: payload?.note ?? null
+        }
+      });
+
+      return {
+        action: "REVIEW_DETAILS",
+        nextReviewSubscriptionId: null
+      };
+    }
+
+    await createAuditEvent({
+      userId,
+      householdId: subscription.householdId,
+      eventType: "subscription_review_completed",
+      metadata: {
+        subscriptionId,
+        action: "REVIEWED",
+        decisionDurationMs: payload?.decisionDurationMs ?? null,
+        note: payload?.note ?? null
+      }
+    });
+
+    const nextReviewSubscriptionId = await this.reviewService.getNextReviewSubscriptionId(
+      userId,
+      subscriptionId
+    );
+
+    return {
+      action: "REVIEWED",
+      nextReviewSubscriptionId
+    };
+  }
+
+  private async requireAccessibleSubscription(userId: string, subscriptionId: string) {
+    const householdIds = await listActiveHouseholdIdsForUser(userId);
+    const subscription = await this.repository.findDetailById({
+      id: subscriptionId,
+      userId,
+      householdIds
+    });
+
+    if (!subscription) {
       throw new AppError("NOT_FOUND", "Subscription not found", 404);
     }
 
-    let nextState = existing.lifecycleState;
+    return subscription;
+  }
 
-    // Handle action
-    if (payload.action === "KEEP" || payload.action === "REVIEWED") {
-        // Mark as reviewed, perhaps clear some insights or just bump lastHandled
-        await this.registryRepository.updateSubscription(subscriptionId, {
-            lastHandledByUserId: userId
-        });
-        
-        await this.registryRepository.createAuditEvent({
-            userId,
-            eventType: `subscription_review_${payload.action.toLowerCase()}`,
-            metadata: { subscriptionId, note: payload.note }
-        });
-        
-        // Refresh insights to clear pending warnings
-        await this.insightService.refreshForSubscriptions(userId, [subscriptionId], { emitEvents: true });
-
-    } else if (payload.action === "CANCEL") {
-        // Transition to CANCELING state, Guided Mode handoff can happen via UI.
-        nextState = SubscriptionLifecycleState.CANCELING;
-        
-        await this.registryRepository.updateSubscription(subscriptionId, {
-            lifecycleState: nextState,
-            lastHandledByUserId: userId
-        });
-
-        await this.registryRepository.createLifecycleEvent({
-            subscriptionId,
-            eventType: "CANCELLATION_DETECTED",
-            previousState: existing.lifecycleState,
-            nextState: nextState,
-            eventDate: new Date(),
-            metadata: { reason: "User initiated cancellation via review hub", note: payload.note }
-        });
-
-        await this.registryRepository.createAuditEvent({
-            userId,
-            eventType: "subscription_review_cancel_initiated",
-            metadata: { subscriptionId, note: payload.note }
-        });
-        
-        await this.insightService.refreshForSubscriptions(userId, [subscriptionId], { emitEvents: true });
-
-    } else if (payload.action === "REMIND_LATER") {
-        if (!payload.remindAt) {
-            throw new AppError("VALIDATION_ERROR", "remindAt is required for REMIND_LATER action", 400);
+  private async ensureCancellationFollowUpObligation(input: {
+    userId: string;
+    subscriptionId: string;
+    title: string;
+    scopeType: ScopeType;
+    householdId: string | null;
+  }) {
+    const existing = await prisma.obligation.findFirst({
+      where: {
+        userId: input.userId,
+        subscriptionId: input.subscriptionId,
+        status: {
+          in: [ObligationStatus.ACTIVE, ObligationStatus.POSTPONED, ObligationStatus.DRAFT]
         }
+      },
+      select: {
+        id: true
+      },
+      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }]
+    });
 
-        // Create a reminder (if there assumes a generic reminder service)
-        // Since Obligation might not be attached to all subscriptions, maybe we attach it if it exists.
-        // Or we just use the raw reminderService.
-        // If ReminderService needs obligationId, we'd find an active one, or just store a generic reminder.
-        // Assuming reminderService supports creating a reminder tied to the user/subscription.
-        // We will log the event for now since Reminder schema normally attaches to obligations.
-        await this.registryRepository.updateSubscription(subscriptionId, {
-            lastHandledByUserId: userId
-        });
+    if (existing?.id) return existing.id;
 
-        await this.registryRepository.createAuditEvent({
-            userId,
-            eventType: "subscription_review_remind_later",
-            metadata: { subscriptionId, remindAt: payload.remindAt, note: payload.note }
-        });
-    }
+    const created = await prisma.obligation.create({
+      data: {
+        userId: input.userId,
+        scopeType: input.scopeType,
+        householdId: input.scopeType === ScopeType.HOUSEHOLD ? input.householdId : null,
+        type: ObligationType.SUBSCRIPTION,
+        source: ObligationSource.INFERRED,
+        status: ObligationStatus.ACTIVE,
+        title: `Complete cancellation for ${input.title}`,
+        description: "Follow cancellation steps, confirm end date, and verify the final charge window.",
+        subscriptionId: input.subscriptionId,
+        confidenceScore: 0.78,
+        urgencyScore: 74,
+        importanceScore: 82
+      }
+    });
 
-    return { success: true, action: payload.action, subscriptionId, nextState };
+    await createAuditEvent({
+      userId: input.userId,
+      householdId: input.householdId,
+      obligationId: created.id,
+      eventType: "subscription_obligation_created",
+      metadata: {
+        subscriptionId: input.subscriptionId,
+        obligationId: created.id,
+        reason: "subscription_review_cancel_follow_up"
+      }
+    });
+
+    return created.id;
   }
 }

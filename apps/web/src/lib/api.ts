@@ -48,8 +48,10 @@ import type {
   ResolutionResponse,
   SortDirection,
   SubscriptionLifecycleState,
-  SubscriptionGuidedFlow,
+  SubscriptionDecisionFlowData,
   SubscriptionOptimizationRecord,
+  SubscriptionReviewActionResponse,
+  SubscriptionReviewHubResponse,
   SubscriptionRegistryDetail,
   SubscriptionRegistryListResponse,
   TodayFeedResponse,
@@ -178,10 +180,9 @@ type SubscriptionByIdResponse = {
   subscription: SubscriptionRegistryDetail;
 };
 
-type SubscriptionReviewFlowResponse = {
-  flow: SubscriptionGuidedFlow;
-  optimization: SubscriptionOptimizationRecord;
-};
+type SubscriptionReviewHubApiResponse = SubscriptionReviewHubResponse;
+type SubscriptionReviewFlowResponse = SubscriptionDecisionFlowData;
+type SubscriptionReviewActionApiResponse = SubscriptionReviewActionResponse;
 
 type SubscriptionDecisionResponse = {
   result: {
@@ -570,6 +571,13 @@ export async function getSubscriptions(params?: {
   return handleResponse<SubscriptionRegistryListResponse>(res);
 }
 
+export async function getSubscriptionReviewHub() {
+  const res = await apiFetch("/subscriptions/review", {
+    cache: "no-store"
+  });
+  return handleResponse<SubscriptionReviewHubApiResponse>(res);
+}
+
 export async function getSubscriptionById(subscriptionId: string) {
   const res = await apiFetch(`/subscriptions/${subscriptionId}`, {
     cache: "no-store"
@@ -633,6 +641,69 @@ export async function getSubscriptionReviewFlow(subscriptionId: string) {
     cache: "no-store"
   });
   return handleResponse<SubscriptionReviewFlowResponse>(res);
+}
+
+export async function applySubscriptionReviewKeep(
+  subscriptionId: string,
+  input?: {
+    note?: string | null;
+    decisionDurationMs?: number;
+  }
+) {
+  const res = await apiFetch(`/subscriptions/${subscriptionId}/review-actions/keep`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input ?? {})
+  });
+  return handleResponse<SubscriptionReviewActionApiResponse>(res);
+}
+
+export async function applySubscriptionReviewCancel(
+  subscriptionId: string,
+  input?: {
+    note?: string | null;
+    handoffToGuided?: boolean;
+    decisionDurationMs?: number;
+  }
+) {
+  const res = await apiFetch(`/subscriptions/${subscriptionId}/review-actions/cancel`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input ?? {})
+  });
+  return handleResponse<SubscriptionReviewActionApiResponse>(res);
+}
+
+export async function applySubscriptionReviewRemind(
+  subscriptionId: string,
+  input?: {
+    remindAt?: string | null;
+    note?: string | null;
+    decisionDurationMs?: number;
+  }
+) {
+  const res = await apiFetch(`/subscriptions/${subscriptionId}/review-actions/remind`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input ?? {})
+  });
+  return handleResponse<SubscriptionReviewActionApiResponse>(res);
+}
+
+export async function markSubscriptionReviewed(
+  subscriptionId: string,
+  input?: {
+    context?: "DETAILS_OPENED" | "COMPLETED";
+    note?: string | null;
+    decisionDurationMs?: number;
+  }
+) {
+  const res = await apiFetch(`/subscriptions/${subscriptionId}/review-actions/reviewed`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input ?? {})
+  });
+  return handleResponse<SubscriptionReviewActionApiResponse>(res);
 }
 
 export async function applySubscriptionDecision(

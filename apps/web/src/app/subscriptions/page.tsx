@@ -54,6 +54,11 @@ export default async function SubscriptionsPage({ searchParams }: Props) {
         <p style={{ margin: 0, color: colors.textMuted }}>
           Canonical subscriptions consolidated from Gmail lifecycle signals and other ingestion evidence.
         </p>
+        <div style={{ marginTop: 10 }}>
+          <Link href="/subscriptions/review" style={{ color: "#2563eb", textDecoration: "none", fontWeight: 600 }}>
+            Open Subscription Review Hub →
+          </Link>
+        </div>
       </header>
 
       <section style={{ ...cardStyles.bordered, marginBottom: 16 }}>

@@ -57,6 +57,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   <Link href="/subscriptions" style={{ textDecoration: "none", color: colors.textMuted }}>
                     Subscriptions
                   </Link>
+                  <Link href="/subscriptions/review" style={{ textDecoration: "none", color: colors.textMuted }}>
+                    Subscription Review
+                  </Link>
                   <Link href="/households" style={{ textDecoration: "none", color: colors.textMuted }}>
                     Households
                   </Link>
