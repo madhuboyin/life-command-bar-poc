@@ -4,6 +4,8 @@ import { AppError } from "../utils/app-error";
 import { DailyPulseService } from "./daily-pulse.service";
 import { DailyCommandCenterService } from "./daily-command-center.service";
 import { ObligationActionsService } from "./obligation-actions.service";
+import { PersonalizationSignalService } from "./personalization-signal.service";
+import { BehaviorProfileService } from "./behavior-profile.service";
 
 export type TodayActionKey =
   | "MARK_DONE"
@@ -19,6 +21,8 @@ export class TodayActionLoopService {
   private readonly obligations = new ObligationActionsService();
   private readonly pulseService = new DailyPulseService();
   private readonly todayService = new DailyCommandCenterService();
+  private readonly personalizationSignalService = new PersonalizationSignalService();
+  private readonly behaviorProfileService = new BehaviorProfileService();
 
   async executeAction(
     userId: string,
@@ -42,6 +46,8 @@ export class TodayActionLoopService {
       case "MARK_DONE": {
         const updated = await this.obligations.markDone(userId, obligationId, {
           note: payload.note ?? "Handled from Today View"
+        }, {
+          signalSource: "TODAY_VIEW"
         });
         if (!updated) {
           throw new AppError("NOT_FOUND", "Today item not found", 404);
@@ -70,6 +76,8 @@ export class TodayActionLoopService {
         const updated = await this.obligations.postpone(userId, obligationId, {
           until,
           reason: payload.note ?? "Deferred from Today View"
+        }, {
+          signalSource: "TODAY_VIEW"
         });
         if (!updated) {
           throw new AppError("NOT_FOUND", "Today item not found", 404);
@@ -122,6 +130,25 @@ export class TodayActionLoopService {
         break;
       }
       case "OPEN_GUIDED": {
+        await this.recordBehaviorSignals(userId, [
+          {
+            userId,
+            signalType: "DETAIL_OPENED",
+            obligationId,
+            itemId: obligationId,
+            category: "OBLIGATION",
+            source: "TODAY_VIEW"
+          },
+          {
+            userId,
+            signalType: "REVIEW_STARTED",
+            obligationId,
+            itemId: obligationId,
+            category: "OBLIGATION",
+            source: "TODAY_VIEW"
+          }
+        ]);
+
         await this.pulseService
           .markItemOpenedGuided(userId, obligationId, "today_view_action")
           .catch(() => null);
@@ -142,6 +169,25 @@ export class TodayActionLoopService {
         break;
       }
       case "REVIEW": {
+        await this.recordBehaviorSignals(userId, [
+          {
+            userId,
+            signalType: "DETAIL_OPENED",
+            obligationId,
+            itemId: obligationId,
+            category: "OBLIGATION",
+            source: "TODAY_VIEW"
+          },
+          {
+            userId,
+            signalType: "REVIEW_STARTED",
+            obligationId,
+            itemId: obligationId,
+            category: "OBLIGATION",
+            source: "TODAY_VIEW"
+          }
+        ]);
+
         status = "ROUTED";
         message = "Opening review details.";
         targetHref = `/obligations/${obligationId}/review`;
@@ -157,6 +203,31 @@ export class TodayActionLoopService {
         break;
       }
       case "REVIEW_SUBSCRIPTION": {
+        await this.recordBehaviorSignals(userId, [
+          {
+            userId,
+            signalType: "DETAIL_OPENED",
+            obligationId,
+            itemId: item.subscriptionId ?? obligationId,
+            category: "SUBSCRIPTION",
+            source: "TODAY_VIEW",
+            metadata: {
+              subscriptionId: item.subscriptionId ?? null
+            }
+          },
+          {
+            userId,
+            signalType: "REVIEW_STARTED",
+            obligationId,
+            itemId: item.subscriptionId ?? obligationId,
+            category: "SUBSCRIPTION",
+            source: "TODAY_VIEW",
+            metadata: {
+              subscriptionId: item.subscriptionId ?? null
+            }
+          }
+        ]);
+
         status = "ROUTED";
         message = "Opening subscription review.";
         targetHref = item.subscriptionId ? `/subscriptions/review/${item.subscriptionId}` : "/subscriptions/review";
@@ -174,6 +245,17 @@ export class TodayActionLoopService {
       }
       case "VIEW_DETAILS":
       default: {
+        await this.recordBehaviorSignals(userId, [
+          {
+            userId,
+            signalType: "DETAIL_OPENED",
+            obligationId,
+            itemId: obligationId,
+            category: "OBLIGATION",
+            source: "TODAY_VIEW"
+          }
+        ]);
+
         status = "ROUTED";
         message = "Opening item details.";
         targetHref = `/obligations/${obligationId}`;
@@ -225,5 +307,13 @@ export class TodayActionLoopService {
       nextPrimaryItemId: today.primaryItems[0]?.id ?? null,
       today
     };
+  }
+
+  private async recordBehaviorSignals(
+    userId: string,
+    signals: Parameters<PersonalizationSignalService["recordSignals"]>[0]
+  ) {
+    await this.personalizationSignalService.recordSignals(signals).catch(() => null);
+    void this.behaviorProfileService.recomputeBehaviorProfile(userId).catch(() => null);
   }
 }

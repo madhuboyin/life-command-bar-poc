@@ -13,6 +13,8 @@ import { SubscriptionDecisionEngine } from "./subscription-decision-engine";
 import { GuidedJourneyService } from "./guided-journey.service";
 import { SubscriptionInsightService } from "./subscription-insight.service";
 import { SubscriptionReviewService } from "./subscription-review.service";
+import { PersonalizationSignalService } from "./personalization-signal.service";
+import { BehaviorProfileService } from "./behavior-profile.service";
 
 export class SubscriptionDecisionActionService {
   private readonly repository = new SubscriptionReviewRepository();
@@ -20,6 +22,8 @@ export class SubscriptionDecisionActionService {
   private readonly guidedJourneyService = new GuidedJourneyService();
   private readonly insightService = new SubscriptionInsightService();
   private readonly reviewService = new SubscriptionReviewService();
+  private readonly personalizationSignalService = new PersonalizationSignalService();
+  private readonly behaviorProfileService = new BehaviorProfileService();
 
   async keep(
     userId: string,
@@ -59,6 +63,30 @@ export class SubscriptionDecisionActionService {
         decisionDurationMs: payload?.decisionDurationMs ?? null
       }
     });
+
+    await this.recordBehaviorSignals(userId, [
+      {
+        userId,
+        signalType: "ITEM_ACTED",
+        itemId: subscriptionId,
+        category: "SUBSCRIPTION",
+        source: "SUBSCRIPTION_REVIEW",
+        metadata: {
+          actionType: "KEEP",
+          timeToActionMs: payload?.decisionDurationMs ?? null
+        }
+      },
+      {
+        userId,
+        signalType: "REVIEW_COMPLETED",
+        itemId: subscriptionId,
+        category: "SUBSCRIPTION",
+        source: "SUBSCRIPTION_REVIEW",
+        metadata: {
+          actionType: "KEEP"
+        }
+      }
+    ]);
 
     const nextReviewSubscriptionId = await this.reviewService.getNextReviewSubscriptionId(
       userId,
@@ -153,6 +181,30 @@ export class SubscriptionDecisionActionService {
       }
     });
 
+    await this.recordBehaviorSignals(userId, [
+      {
+        userId,
+        signalType: "ITEM_ACTED",
+        itemId: subscriptionId,
+        category: "SUBSCRIPTION",
+        source: "SUBSCRIPTION_REVIEW",
+        metadata: {
+          actionType: "CANCEL",
+          timeToActionMs: payload?.decisionDurationMs ?? null
+        }
+      },
+      {
+        userId,
+        signalType: "REVIEW_COMPLETED",
+        itemId: subscriptionId,
+        category: "SUBSCRIPTION",
+        source: "SUBSCRIPTION_REVIEW",
+        metadata: {
+          actionType: "CANCEL"
+        }
+      }
+    ]);
+
     await this.insightService.refreshForSubscriptions(userId, [subscriptionId], {
       emitEvents: true
     });
@@ -214,6 +266,30 @@ export class SubscriptionDecisionActionService {
       }
     });
 
+    await this.recordBehaviorSignals(userId, [
+      {
+        userId,
+        signalType: "ITEM_DEFERRED",
+        itemId: subscriptionId,
+        category: "SUBSCRIPTION",
+        source: "SUBSCRIPTION_REVIEW",
+        metadata: {
+          actionType: "REMIND_LATER",
+          timeToActionMs: payload?.decisionDurationMs ?? null
+        }
+      },
+      {
+        userId,
+        signalType: "REVIEW_COMPLETED",
+        itemId: subscriptionId,
+        category: "SUBSCRIPTION",
+        source: "SUBSCRIPTION_REVIEW",
+        metadata: {
+          actionType: "REMIND_LATER"
+        }
+      }
+    ]);
+
     const nextReviewSubscriptionId = await this.reviewService.getNextReviewSubscriptionId(
       userId,
       subscriptionId
@@ -249,6 +325,23 @@ export class SubscriptionDecisionActionService {
     const context = payload?.context ?? "COMPLETED";
 
     if (context === "DETAILS_OPENED") {
+      await this.recordBehaviorSignals(userId, [
+        {
+          userId,
+          signalType: "DETAIL_OPENED",
+          itemId: subscriptionId,
+          category: "SUBSCRIPTION",
+          source: "SUBSCRIPTION_REVIEW"
+        },
+        {
+          userId,
+          signalType: "REVIEW_STARTED",
+          itemId: subscriptionId,
+          category: "SUBSCRIPTION",
+          source: "SUBSCRIPTION_REVIEW"
+        }
+      ]);
+
       await createAuditEvent({
         userId,
         householdId: subscription.householdId,
@@ -276,6 +369,20 @@ export class SubscriptionDecisionActionService {
         note: payload?.note ?? null
       }
     });
+
+    await this.recordBehaviorSignals(userId, [
+      {
+        userId,
+        signalType: "REVIEW_COMPLETED",
+        itemId: subscriptionId,
+        category: "SUBSCRIPTION",
+        source: "SUBSCRIPTION_REVIEW",
+        metadata: {
+          actionType: "REVIEW",
+          timeToActionMs: payload?.decisionDurationMs ?? null
+        }
+      }
+    ]);
 
     const nextReviewSubscriptionId = await this.reviewService.getNextReviewSubscriptionId(
       userId,
@@ -356,5 +463,13 @@ export class SubscriptionDecisionActionService {
     });
 
     return created.id;
+  }
+
+  private async recordBehaviorSignals(
+    userId: string,
+    signals: Parameters<PersonalizationSignalService["recordSignals"]>[0]
+  ) {
+    await this.personalizationSignalService.recordSignals(signals).catch(() => null);
+    void this.behaviorProfileService.recomputeBehaviorProfile(userId).catch(() => null);
   }
 }

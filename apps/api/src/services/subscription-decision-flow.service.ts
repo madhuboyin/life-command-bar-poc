@@ -3,6 +3,8 @@ import { createAuditEvent } from "../observability/audit-event";
 import { SubscriptionReviewRepository } from "../repositories/subscription-review.repository";
 import { listActiveHouseholdIdsForUser } from "../utils/household-access";
 import { SubscriptionInsightService } from "./subscription-insight.service";
+import { PersonalizationSignalService } from "./personalization-signal.service";
+import { BehaviorProfileService } from "./behavior-profile.service";
 
 const ACTIONS = [
   { key: "KEEP", label: "Keep" },
@@ -14,6 +16,8 @@ const ACTIONS = [
 export class SubscriptionDecisionFlowService {
   private readonly repository = new SubscriptionReviewRepository();
   private readonly insightService = new SubscriptionInsightService();
+  private readonly personalizationSignalService = new PersonalizationSignalService();
+  private readonly behaviorProfileService = new BehaviorProfileService();
 
   async getReviewFlow(userId: string, subscriptionId: string) {
     const householdIds = await listActiveHouseholdIdsForUser(userId);
@@ -50,6 +54,32 @@ export class SubscriptionDecisionFlowService {
         daysToRenewal
       }
     });
+
+    await this.personalizationSignalService
+      .recordSignals([
+        {
+          userId,
+          signalType: "DETAIL_OPENED",
+          itemId: subscriptionId,
+          category: "SUBSCRIPTION",
+          source: "SUBSCRIPTION_REVIEW",
+          metadata: {
+            recommendationType: optimization.recommendation.recommendationType
+          }
+        },
+        {
+          userId,
+          signalType: "REVIEW_STARTED",
+          itemId: subscriptionId,
+          category: "SUBSCRIPTION",
+          source: "SUBSCRIPTION_REVIEW",
+          metadata: {
+            recommendationType: optimization.recommendation.recommendationType
+          }
+        }
+      ])
+      .catch(() => null);
+    void this.behaviorProfileService.recomputeBehaviorProfile(userId).catch(() => null);
 
     return {
       subscription: {

@@ -10,6 +10,7 @@ import {
   type TodayPriorityBand
 } from "./today-prioritization.service";
 import { DailyPulseService } from "./daily-pulse.service";
+import { PersonalizationSignalService } from "./personalization-signal.service";
 
 export type DailyCommandCenterItem = {
   id: string;
@@ -81,6 +82,7 @@ export class DailyCommandCenterService {
   private readonly prioritizationService = new TodayPrioritizationService();
   private readonly pulseService = new DailyPulseService();
   private readonly controlTowerService = new ControlTowerService();
+  private readonly personalizationSignalService = new PersonalizationSignalService();
 
   async getTodayView(userId: string, options?: { emitEvents?: boolean }): Promise<DailyCommandCenterResponse> {
     const emitEvents = options?.emitEvents ?? true;
@@ -212,6 +214,8 @@ export class DailyCommandCenterService {
       }
     }
 
+    void this.recordImpressionSignals(userId, primaryItems).catch(() => null);
+
     return {
       generatedAt: new Date().toISOString(),
       summary,
@@ -250,6 +254,30 @@ export class DailyCommandCenterService {
       scopeType: item.scopeType,
       assignee: item.assignee
     };
+  }
+
+  private async recordImpressionSignals(
+    userId: string,
+    items: DailyCommandCenterItem[]
+  ) {
+    if (items.length === 0) return;
+
+    await this.personalizationSignalService
+      .recordSignals(
+        items.map((item) => ({
+          userId,
+          signalType: "ITEM_IMPRESSED" as const,
+          obligationId: item.itemType === "OBLIGATION" ? item.id : null,
+          itemId: item.id,
+          category: item.itemType,
+          source: "TODAY_VIEW" as const,
+          metadata: {
+            priorityBand: item.priorityBand,
+            primaryAction: item.primaryAction.key
+          }
+        }))
+      )
+      .catch(() => null);
   }
 }
 

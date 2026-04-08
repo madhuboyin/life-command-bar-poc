@@ -18,6 +18,8 @@ import { toWhyConfidence } from "../utils/trust-layer";
 import { HomeMemoryService } from "./home-memory.service";
 import { PredictionEngineService } from "./prediction-engine.service";
 import { SubscriptionInsightService } from "./subscription-insight.service";
+import { PersonalizationSignalService } from "./personalization-signal.service";
+import { BehaviorProfileService } from "./behavior-profile.service";
 
 type PulseHookType = "urgent" | "quick_win" | "money" | "postponed" | "important";
 type PulseTrend = "up" | "down" | "flat";
@@ -125,6 +127,8 @@ export class DailyPulseService {
   private readonly homeMemoryService = new HomeMemoryService();
   private readonly predictionEngineService = new PredictionEngineService();
   private readonly subscriptionInsightService = new SubscriptionInsightService();
+  private readonly personalizationSignalService = new PersonalizationSignalService();
+  private readonly behaviorProfileService = new BehaviorProfileService();
 
   async getPulse(
     userId: string,
@@ -288,6 +292,8 @@ export class DailyPulseService {
         }
       })
       .catch(() => null);
+
+    void this.recordPulseImpressionSignals(userId, items).catch(() => null);
 
     return {
       generatedAt: state.createdAt.toISOString(),
@@ -814,6 +820,15 @@ export class DailyPulseService {
           tx
         );
       });
+
+      if (options.sourceType !== "today_view_action") {
+        await this.recordStatusSignal({
+          userId,
+          obligationId,
+          targetStatus,
+          sourceType: options.sourceType
+        });
+      }
     }
 
     const progress = await this.syncProgress(state.id);
@@ -829,6 +844,98 @@ export class DailyPulseService {
         completionMessage: buildCompletionMessage(progress, momentum)
       }
     };
+  }
+
+  private async recordPulseImpressionSignals(userId: string, items: PulseItem[]) {
+    if (items.length === 0) return;
+
+    await this.personalizationSignalService
+      .recordSignals(
+        items.map((item) => ({
+          userId,
+          signalType: "ITEM_IMPRESSED" as const,
+          obligationId: item.obligationId,
+          itemId: item.obligationId,
+          category: "OBLIGATION",
+          source: "DAILY_PULSE" as const,
+          metadata: {
+            hookType: item.hookType,
+            confidenceBand: item.confidenceBand
+          }
+        }))
+      )
+      .catch(() => null);
+  }
+
+  private async recordStatusSignal(input: {
+    userId: string;
+    obligationId: string;
+    targetStatus: DailyPulseItemStatus;
+    sourceType: string;
+  }) {
+    const signals: Parameters<PersonalizationSignalService["recordSignals"]>[0] = [];
+
+    if (input.targetStatus === DailyPulseItemStatus.COMPLETED) {
+      signals.push({
+        userId: input.userId,
+        signalType: "ITEM_ACTED",
+        obligationId: input.obligationId,
+        itemId: input.obligationId,
+        category: "OBLIGATION",
+        source: "DAILY_PULSE",
+        metadata: {
+          actionType: "COMPLETE",
+          pulseSourceType: input.sourceType
+        }
+      });
+    }
+
+    if (input.targetStatus === DailyPulseItemStatus.POSTPONED) {
+      signals.push({
+        userId: input.userId,
+        signalType: "ITEM_DEFERRED",
+        obligationId: input.obligationId,
+        itemId: input.obligationId,
+        category: "OBLIGATION",
+        source: "DAILY_PULSE",
+        metadata: {
+          actionType: "REMIND_LATER",
+          pulseSourceType: input.sourceType
+        }
+      });
+    }
+
+    if (input.targetStatus === DailyPulseItemStatus.OPENED_GUIDED) {
+      signals.push(
+        {
+          userId: input.userId,
+          signalType: "DETAIL_OPENED",
+          obligationId: input.obligationId,
+          itemId: input.obligationId,
+          category: "OBLIGATION",
+          source: "DAILY_PULSE",
+          metadata: {
+            pulseSourceType: input.sourceType
+          }
+        },
+        {
+          userId: input.userId,
+          signalType: "REVIEW_STARTED",
+          obligationId: input.obligationId,
+          itemId: input.obligationId,
+          category: "OBLIGATION",
+          source: "DAILY_PULSE",
+          metadata: {
+            pulseSourceType: input.sourceType
+          }
+        }
+      );
+    }
+
+    if (signals.length === 0) return;
+
+    await this.personalizationSignalService.recordSignals(signals).catch(() => null);
+    void this.behaviorProfileService.recomputeBehaviorProfile(input.userId).catch(() => null);
   }
 
   private async syncProgress(stateId: string): Promise<PulseProgress> {
