@@ -107,36 +107,25 @@ export class PersonalizationPolicyService {
       };
     });
 
-    personalized.sort((a, b) => {
-      const scoreDelta = b.personalization.finalPriorityScore - a.personalization.finalPriorityScore;
-      if (scoreDelta !== 0) return scoreDelta;
-
-      const dueA = daysUntil(a.dueDate, now) ?? Number.MAX_SAFE_INTEGER;
-      const dueB = daysUntil(b.dueDate, now) ?? Number.MAX_SAFE_INTEGER;
-      if (dueA !== dueB) return dueA - dueB;
-
-      const renewalA = daysUntil(a.renewalDate, now) ?? Number.MAX_SAFE_INTEGER;
-      const renewalB = daysUntil(b.renewalDate, now) ?? Number.MAX_SAFE_INTEGER;
-      if (renewalA !== renewalB) return renewalA - renewalB;
-
-      const titleDelta = a.title.localeCompare(b.title);
-      if (titleDelta !== 0) return titleDelta;
-      return a._index - b._index;
-    });
-
-    const items = personalized.map(({ _index: _unused, ...item }) => item);
-
-    const presentationStyleCounts = countPresentationStyles(items);
-    const reminderStyleCounts = countReminderStyles(items);
-    const rankingPersonalizationApplied = items.some(
+    const rankingPersonalizationApplied = personalized.some(
       (item) => item.personalization.basePriorityScore !== item.personalization.finalPriorityScore
     );
-    const messagingPersonalizationApplied = items.some(
+    const messagingPersonalizationApplied = personalized.some(
       (item) => item.presentationStyle !== "DEFAULT"
     );
-    const reminderPersonalizationApplied = items.some(
+    const reminderPersonalizationApplied = personalized.some(
       (item) => item.reminderStyle !== "DEFAULT"
     );
+
+    // Stability guardrail:
+    // preserve baseline ordering whenever ranking deltas are neutral.
+    const ordered = rankingPersonalizationApplied
+      ? personalized.sort((a, b) => comparePrioritizedItems(a, b, now))
+      : personalized;
+
+    const items = ordered.map(({ _index: _unused, ...item }) => item);
+    const presentationStyleCounts = countPresentationStyles(items);
+    const reminderStyleCounts = countReminderStyles(items);
 
     return {
       items,
@@ -449,6 +438,31 @@ export class PersonalizationPolicyService {
 
     return maxDate(minDate(targetAt, latestSafeReminder), floorAt);
   }
+}
+
+function comparePrioritizedItems(
+  left: PersonalizedTodayItem & { _index: number },
+  right: PersonalizedTodayItem & { _index: number },
+  now: Date
+) {
+  const scoreDelta =
+    right.personalization.finalPriorityScore -
+    left.personalization.finalPriorityScore;
+  if (scoreDelta !== 0) return scoreDelta;
+
+  const dueLeft = daysUntil(left.dueDate, now) ?? Number.MAX_SAFE_INTEGER;
+  const dueRight = daysUntil(right.dueDate, now) ?? Number.MAX_SAFE_INTEGER;
+  if (dueLeft !== dueRight) return dueLeft - dueRight;
+
+  const renewalLeft =
+    daysUntil(left.renewalDate, now) ?? Number.MAX_SAFE_INTEGER;
+  const renewalRight =
+    daysUntil(right.renewalDate, now) ?? Number.MAX_SAFE_INTEGER;
+  if (renewalLeft !== renewalRight) return renewalLeft - renewalRight;
+
+  const titleDelta = left.title.localeCompare(right.title);
+  if (titleDelta !== 0) return titleDelta;
+  return left._index - right._index;
 }
 
 function isReviewItem(item: TodayPrioritizedItem) {

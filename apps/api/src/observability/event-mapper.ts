@@ -298,6 +298,28 @@ function mapEventType(
       return OBSERVABILITY_EVENT_TYPES.ITEM_REASSIGNED;
     case "household_invite_accepted":
       return OBSERVABILITY_EVENT_TYPES.HOUSEHOLD_INVITE_ACCEPTED;
+    case "behavior_signal_recorded":
+      return OBSERVABILITY_EVENT_TYPES.BEHAVIOR_SIGNAL_RECORDED;
+    case "behavior_profile_recomputed":
+      return OBSERVABILITY_EVENT_TYPES.BEHAVIOR_PROFILE_RECOMPUTED;
+    case "behavior_profile_insufficient_data":
+      return OBSERVABILITY_EVENT_TYPES.BEHAVIOR_PROFILE_INSUFFICIENT_DATA;
+    case "behavior_profile_changed":
+      return OBSERVABILITY_EVENT_TYPES.BEHAVIOR_PROFILE_CHANGED;
+    case "personalization_adjustment_applied":
+      return OBSERVABILITY_EVENT_TYPES.PERSONALIZATION_ADJUSTMENT_APPLIED;
+    case "today_view_personalization_applied":
+      return OBSERVABILITY_EVENT_TYPES.TODAY_VIEW_PERSONALIZATION_APPLIED;
+    case "today_view_personalization_skipped":
+      return OBSERVABILITY_EVENT_TYPES.TODAY_VIEW_PERSONALIZATION_SKIPPED;
+    case "adaptive_message_style_applied":
+      return OBSERVABILITY_EVENT_TYPES.ADAPTIVE_MESSAGE_STYLE_APPLIED;
+    case "reminder_style_applied":
+      return OBSERVABILITY_EVENT_TYPES.REMINDER_STYLE_APPLIED;
+    case "personalization_fallback_used":
+      return OBSERVABILITY_EVENT_TYPES.PERSONALIZATION_FALLBACK_USED;
+    case "personalization_error_recovered":
+      return OBSERVABILITY_EVENT_TYPES.PERSONALIZATION_ERROR_RECOVERED;
 
     case "zero_input_decision_recorded": {
       const decision = getString(metadata.decision);

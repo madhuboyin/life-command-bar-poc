@@ -150,6 +150,26 @@ export default async function AdminObservabilityPage() {
               value={`$${formatNumber(day.llmOptimization.estimatedCostUsd)}`}
               subtitle="LLM Optimization"
             />
+            <MetricsCard
+              title="Adaptive Today Applied"
+              value={toPct(day.adaptivePersonalization.todayAppliedRate)}
+              subtitle="Adaptive Personalization"
+            />
+            <MetricsCard
+              title="Adaptive Fallback Rate"
+              value={toPct(day.adaptivePersonalization.fallbackRate)}
+              subtitle="Adaptive Personalization"
+            />
+            <MetricsCard
+              title="Behavior Profile Coverage"
+              value={toPct(day.adaptivePersonalization.profileCoverageRate)}
+              subtitle="Adaptive Personalization"
+            />
+            <MetricsCard
+              title="Adaptive Error Recovery"
+              value={toPct(day.adaptivePersonalization.errorRecoveryRate)}
+              subtitle="Adaptive Personalization"
+            />
           </section>
 
           <section style={{ ...cardStyles.section, marginBottom: 16 }}>

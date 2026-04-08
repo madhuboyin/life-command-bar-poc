@@ -1,4 +1,7 @@
 import {
+  BehaviorActionSpeed,
+  BehaviorDeferFrequency,
+  BehaviorReviewPreference,
   LlmCallStatus,
   MetricTimeBucket,
   ObligationStatus,
@@ -595,6 +598,100 @@ export class MetricsRepository {
       undone,
       overridden,
       requiringApproval
+    };
+  }
+
+  async getBehaviorProfileStats(filters?: ScopeFilters) {
+    const where: Prisma.UserBehaviorProfileWhereInput = {
+      userId: filters?.userId
+    };
+
+    const [
+      totalProfiles,
+      unknownProfiles,
+      actionSpeedGroups,
+      reviewPreferenceGroups,
+      deferFrequencyGroups
+    ] = await Promise.all([
+      prismaClient.userBehaviorProfile.count({
+        where
+      }),
+      prismaClient.userBehaviorProfile.count({
+        where: {
+          ...where,
+          actionSpeed: BehaviorActionSpeed.UNKNOWN,
+          reviewPreference: BehaviorReviewPreference.UNKNOWN,
+          deferFrequency: BehaviorDeferFrequency.UNKNOWN
+        }
+      }),
+      prismaClient.userBehaviorProfile.groupBy({
+        by: ["actionSpeed"],
+        where,
+        _count: {
+          _all: true
+        }
+      }),
+      prismaClient.userBehaviorProfile.groupBy({
+        by: ["reviewPreference"],
+        where,
+        _count: {
+          _all: true
+        }
+      }),
+      prismaClient.userBehaviorProfile.groupBy({
+        by: ["deferFrequency"],
+        where,
+        _count: {
+          _all: true
+        }
+      })
+    ]);
+
+    return {
+      totalProfiles,
+      computedProfiles: Math.max(totalProfiles - unknownProfiles, 0),
+      unknownProfiles,
+      actionSpeed: {
+        FAST:
+          actionSpeedGroups.find((entry) => entry.actionSpeed === BehaviorActionSpeed.FAST)?._count
+            ._all ?? 0,
+        SLOW:
+          actionSpeedGroups.find((entry) => entry.actionSpeed === BehaviorActionSpeed.SLOW)?._count
+            ._all ?? 0,
+        UNKNOWN:
+          actionSpeedGroups.find((entry) => entry.actionSpeed === BehaviorActionSpeed.UNKNOWN)
+            ?._count._all ?? 0
+      },
+      reviewPreference: {
+        QUICK_ACTION:
+          reviewPreferenceGroups.find(
+            (entry) =>
+              entry.reviewPreference === BehaviorReviewPreference.QUICK_ACTION
+          )?._count._all ?? 0,
+        REVIEW_FIRST:
+          reviewPreferenceGroups.find(
+            (entry) =>
+              entry.reviewPreference === BehaviorReviewPreference.REVIEW_FIRST
+          )?._count._all ?? 0,
+        UNKNOWN:
+          reviewPreferenceGroups.find(
+            (entry) => entry.reviewPreference === BehaviorReviewPreference.UNKNOWN
+          )?._count._all ?? 0
+      },
+      deferFrequency: {
+        LOW:
+          deferFrequencyGroups.find(
+            (entry) => entry.deferFrequency === BehaviorDeferFrequency.LOW
+          )?._count._all ?? 0,
+        HIGH:
+          deferFrequencyGroups.find(
+            (entry) => entry.deferFrequency === BehaviorDeferFrequency.HIGH
+          )?._count._all ?? 0,
+        UNKNOWN:
+          deferFrequencyGroups.find(
+            (entry) => entry.deferFrequency === BehaviorDeferFrequency.UNKNOWN
+          )?._count._all ?? 0
+      }
     };
   }
 

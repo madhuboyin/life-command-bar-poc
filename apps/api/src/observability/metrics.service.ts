@@ -86,6 +86,25 @@ type PeriodMetrics = {
     premiumTierRate: number;
     gmailFallbackRate: number;
   };
+  adaptivePersonalization: {
+    profileCoverageRate: number;
+    profileUnknownRate: number;
+    profileRecomputeCount: number;
+    profileChangeCount: number;
+    insufficientDataRate: number;
+    todayAppliedRate: number;
+    todaySkippedRate: number;
+    fallbackRate: number;
+    errorRecoveryRate: number;
+    adjustmentAppliedCount: number;
+    messageStyleAppliedCount: number;
+    reminderStyleAppliedCount: number;
+    profileDistribution: {
+      actionSpeed: Record<"FAST" | "SLOW" | "UNKNOWN", number>;
+      reviewPreference: Record<"QUICK_ACTION" | "REVIEW_FIRST" | "UNKNOWN", number>;
+      deferFrequency: Record<"LOW" | "HIGH" | "UNKNOWN", number>;
+    };
+  };
   qualityScores: {
     ingestionQualityScore: number;
     predictionAccuracyScore: number;
@@ -250,7 +269,19 @@ export class MetricsService {
       flowSessionCount,
       focusSessionCount,
       llmUsageSummary,
-      gmailClassifiedCount
+      gmailClassifiedCount,
+      behaviorSignalRecordedCount,
+      behaviorProfileRecomputedCount,
+      behaviorProfileInsufficientDataCount,
+      behaviorProfileChangedCount,
+      personalizationAdjustmentAppliedCount,
+      todayPersonalizationAppliedCount,
+      todayPersonalizationSkippedCount,
+      adaptiveMessageStyleAppliedCount,
+      reminderStyleAppliedCount,
+      personalizationFallbackCount,
+      personalizationErrorRecoveredCount,
+      behaviorProfileStats
     ] = await Promise.all([
       this.repository.countImportSources({
         start: window.start,
@@ -436,7 +467,74 @@ export class MetricsService {
         start: window.start,
         end: window.end,
         filters
-      })
+      }),
+      this.repository.countObservabilityEvents({
+        eventType: "behavior_signal_recorded",
+        start: window.start,
+        end: window.end,
+        filters
+      }),
+      this.repository.countObservabilityEvents({
+        eventType: "behavior_profile_recomputed",
+        start: window.start,
+        end: window.end,
+        filters
+      }),
+      this.repository.countObservabilityEvents({
+        eventType: "behavior_profile_insufficient_data",
+        start: window.start,
+        end: window.end,
+        filters
+      }),
+      this.repository.countObservabilityEvents({
+        eventType: "behavior_profile_changed",
+        start: window.start,
+        end: window.end,
+        filters
+      }),
+      this.repository.countObservabilityEvents({
+        eventType: "personalization_adjustment_applied",
+        start: window.start,
+        end: window.end,
+        filters
+      }),
+      this.repository.countObservabilityEvents({
+        eventType: "today_view_personalization_applied",
+        start: window.start,
+        end: window.end,
+        filters
+      }),
+      this.repository.countObservabilityEvents({
+        eventType: "today_view_personalization_skipped",
+        start: window.start,
+        end: window.end,
+        filters
+      }),
+      this.repository.countObservabilityEvents({
+        eventType: "adaptive_message_style_applied",
+        start: window.start,
+        end: window.end,
+        filters
+      }),
+      this.repository.countObservabilityEvents({
+        eventType: "reminder_style_applied",
+        start: window.start,
+        end: window.end,
+        filters
+      }),
+      this.repository.countObservabilityEvents({
+        eventType: "personalization_fallback_used",
+        start: window.start,
+        end: window.end,
+        filters
+      }),
+      this.repository.countObservabilityEvents({
+        eventType: "personalization_error_recovered",
+        start: window.start,
+        end: window.end,
+        filters
+      }),
+      this.repository.getBehaviorProfileStats(filters)
     ]);
 
     const predictionOutcomesTotal =
@@ -524,6 +622,22 @@ export class MetricsService {
       Math.max(llmTotalRequests, 1)
     );
     const gmailFallbackRate = safePct(llmUsageSummary.gmailTaskCount, Math.max(gmailClassifiedCount, 1));
+    const personalizationDecisionCount =
+      todayPersonalizationAppliedCount + todayPersonalizationSkippedCount;
+    const profileTotal = behaviorProfileStats.totalProfiles;
+    const profileKnown = behaviorProfileStats.computedProfiles;
+    const insufficientDataRate = safePct(
+      behaviorProfileInsufficientDataCount,
+      Math.max(behaviorProfileRecomputedCount, 1)
+    );
+    const fallbackRate = safePct(
+      personalizationFallbackCount,
+      Math.max(personalizationDecisionCount, 1)
+    );
+    const errorRecoveryRate = safePct(
+      personalizationErrorRecoveredCount,
+      Math.max(personalizationDecisionCount, 1)
+    );
 
     const periodMetrics: PeriodMetrics = {
       bucket,
@@ -610,6 +724,34 @@ export class MetricsService {
         premiumTierRate,
         gmailFallbackRate
       },
+      adaptivePersonalization: {
+        profileCoverageRate: safePct(profileKnown, Math.max(profileTotal, 1)),
+        profileUnknownRate: safePct(
+          behaviorProfileStats.unknownProfiles,
+          Math.max(profileTotal, 1)
+        ),
+        profileRecomputeCount: behaviorProfileRecomputedCount,
+        profileChangeCount: behaviorProfileChangedCount,
+        insufficientDataRate,
+        todayAppliedRate: safePct(
+          todayPersonalizationAppliedCount,
+          Math.max(personalizationDecisionCount, 1)
+        ),
+        todaySkippedRate: safePct(
+          todayPersonalizationSkippedCount,
+          Math.max(personalizationDecisionCount, 1)
+        ),
+        fallbackRate,
+        errorRecoveryRate,
+        adjustmentAppliedCount: personalizationAdjustmentAppliedCount,
+        messageStyleAppliedCount: adaptiveMessageStyleAppliedCount,
+        reminderStyleAppliedCount,
+        profileDistribution: {
+          actionSpeed: behaviorProfileStats.actionSpeed,
+          reviewPreference: behaviorProfileStats.reviewPreference,
+          deferFrequency: behaviorProfileStats.deferFrequency
+        }
+      },
       qualityScores: {
         ingestionQualityScore,
         predictionAccuracyScore,
@@ -676,6 +818,7 @@ const DEFAULT_TREND_METRICS = [
   "ingestion.low_confidence_rate",
   "prediction.confirmed_rate",
   "auto_flow.dismissed_rate",
+  "adaptive.today_applied_rate",
   "llm.cache_hit_rate",
   "llm.cost_usd",
   "scores.trust"
@@ -736,6 +879,22 @@ function flattenMetricValues(metrics: PeriodMetrics) {
     "llm.reasoning_tier_rate": metrics.llmOptimization.reasoningTierRate,
     "llm.premium_tier_rate": metrics.llmOptimization.premiumTierRate,
     "llm.gmail_fallback_rate": metrics.llmOptimization.gmailFallbackRate,
+
+    "adaptive.profile_coverage_rate": metrics.adaptivePersonalization.profileCoverageRate,
+    "adaptive.profile_unknown_rate": metrics.adaptivePersonalization.profileUnknownRate,
+    "adaptive.profile_recompute_count": metrics.adaptivePersonalization.profileRecomputeCount,
+    "adaptive.profile_change_count": metrics.adaptivePersonalization.profileChangeCount,
+    "adaptive.insufficient_data_rate": metrics.adaptivePersonalization.insufficientDataRate,
+    "adaptive.today_applied_rate": metrics.adaptivePersonalization.todayAppliedRate,
+    "adaptive.today_skipped_rate": metrics.adaptivePersonalization.todaySkippedRate,
+    "adaptive.fallback_rate": metrics.adaptivePersonalization.fallbackRate,
+    "adaptive.error_recovery_rate": metrics.adaptivePersonalization.errorRecoveryRate,
+    "adaptive.adjustment_applied_count":
+      metrics.adaptivePersonalization.adjustmentAppliedCount,
+    "adaptive.message_style_applied_count":
+      metrics.adaptivePersonalization.messageStyleAppliedCount,
+    "adaptive.reminder_style_applied_count":
+      metrics.adaptivePersonalization.reminderStyleAppliedCount,
 
     "scores.ingestion_quality": metrics.qualityScores.ingestionQualityScore,
     "scores.prediction_accuracy": metrics.qualityScores.predictionAccuracyScore,

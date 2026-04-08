@@ -12,11 +12,15 @@ import {
 import { DailyPulseService } from "./daily-pulse.service";
 import { PersonalizationSignalService } from "./personalization-signal.service";
 import { BehaviorProfileService } from "./behavior-profile.service";
+import { AdaptivePersonalizationRolloutService } from "./adaptive-personalization-rollout.service";
 import {
   PersonalizationPolicyService,
-  type PersonalizedTodayItem
+  type PersonalizedTodayItem,
+  type TodayPersonalizationResult
 } from "./personalization-policy.service";
 import {
+  type BehaviorProfileView,
+  UNKNOWN_BEHAVIOR_PROFILE,
   toBehaviorProfileView,
   type PersonalizationDebugMetadata,
   type ReminderSuggestionStyle,
@@ -98,7 +102,7 @@ export class DailyCommandCenterService {
   private readonly controlTowerService = new ControlTowerService();
   private readonly personalizationSignalService = new PersonalizationSignalService();
   private readonly behaviorProfileService = new BehaviorProfileService();
-  private readonly personalizationPolicyService = new PersonalizationPolicyService();
+  private readonly rolloutService = new AdaptivePersonalizationRolloutService();
 
   async getTodayView(userId: string, options?: { emitEvents?: boolean }): Promise<DailyCommandCenterResponse> {
     const emitEvents = options?.emitEvents ?? true;
@@ -163,15 +167,53 @@ export class DailyCommandCenterService {
       }),
       now
     );
-    const behaviorProfile = await this.behaviorProfileService
-      .getBehaviorProfile(userId)
-      .catch(() => null);
-    const personalization = this.personalizationPolicyService.applyTodayViewPersonalization({
-      items: ranked,
-      profile: toBehaviorProfileView(behaviorProfile),
-      now
+    const rolloutState = this.rolloutService.getUserRolloutState(userId);
+    const personalizationPolicyService = new PersonalizationPolicyService({
+      flags: {
+        enableRanking: rolloutState.rankingEnabled,
+        enableMessaging: rolloutState.messagingEnabled,
+        enableReminderTuning: rolloutState.reminderTuningEnabled
+      }
     });
-    const personalizedRanked = personalization.items;
+
+    let behaviorProfile: Awaited<
+      ReturnType<BehaviorProfileService["getBehaviorProfile"]>
+    > | null = null;
+    let profileForPersonalization: BehaviorProfileView = UNKNOWN_BEHAVIOR_PROFILE;
+    let fallbackReason:
+      | "ROLLOUT_DISABLED"
+      | "PROFILE_FETCH_FAILED"
+      | "POLICY_EVALUATION_FAILED"
+      | null = null;
+
+    if (!rolloutState.todayPersonalizationEnabled) {
+      fallbackReason = "ROLLOUT_DISABLED";
+    } else {
+      try {
+        behaviorProfile = await this.behaviorProfileService.getBehaviorProfile(userId);
+        profileForPersonalization = toBehaviorProfileView(behaviorProfile);
+      } catch {
+        fallbackReason = "PROFILE_FETCH_FAILED";
+      }
+    }
+
+    let personalization = this.buildBaselineTodayPersonalization(ranked);
+    if (!fallbackReason) {
+      try {
+        personalization = personalizationPolicyService.applyTodayViewPersonalization({
+          items: ranked,
+          profile: profileForPersonalization,
+          now
+        });
+      } catch {
+        fallbackReason = "POLICY_EVALUATION_FAILED";
+        personalization = this.buildBaselineTodayPersonalization(ranked);
+      }
+    }
+
+    const personalizedRanked = rolloutState.debugMetadataEnabled
+      ? personalization.items
+      : stripPersonalizationDebugMetadata(personalization.items);
 
     const primaryCandidates = personalizedRanked.filter(
       (item) => item.priorityBand === "URGENT" || item.priorityBand === "HIGH"
@@ -226,7 +268,10 @@ export class DailyCommandCenterService {
           upcomingCount: summary.upcomingCount,
           completedTodayCount: summary.completedTodayCount,
           pulseOpenedToday: pulseState.openedToday,
-          pulseTotalItems: pulseState.totalItems
+          pulseTotalItems: pulseState.totalItems,
+          adaptivePersonalizationEnabled: rolloutState.todayPersonalizationEnabled,
+          adaptiveRolloutReason: rolloutState.reason,
+          adaptiveFallbackReason: fallbackReason
         }
       });
 
@@ -250,16 +295,35 @@ export class DailyCommandCenterService {
             messagingApplied: personalization.messagingPersonalizationApplied,
             reminderApplied: personalization.reminderPersonalizationApplied,
             presentationStyleCounts: personalization.presentationStyleCounts,
-            reminderStyleCounts: personalization.reminderStyleCounts
+            reminderStyleCounts: personalization.reminderStyleCounts,
+            fallbackReason
           }
         });
+
+        const topAdjustments = summarizeTopAdjustments(personalization.items, 6);
+        if (topAdjustments.length > 0) {
+          await createAuditEvent({
+            userId,
+            eventType: "personalization_adjustment_applied",
+            metadata: {
+              surface: "TODAY_VIEW",
+              itemCount: personalizedRanked.length,
+              topAdjustments
+            }
+          });
+        }
       } else {
         await createAuditEvent({
           userId,
           eventType: "today_view_personalization_skipped",
           metadata: {
             itemCount: personalizedRanked.length,
-            reason: behaviorProfile ? "profile_unknown_or_neutral" : "profile_unavailable"
+            reason: fallbackReason
+              ? fallbackReason.toLowerCase()
+              : behaviorProfile
+                ? "profile_unknown_or_neutral"
+                : "profile_unavailable",
+            rolloutReason: rolloutState.reason
           }
         });
       }
@@ -271,6 +335,40 @@ export class DailyCommandCenterService {
           metadata: {
             surface: "TODAY_VIEW",
             presentationStyleCounts: personalization.presentationStyleCounts
+          }
+        });
+      }
+
+      if (fallbackReason) {
+        await createAuditEvent({
+          userId,
+          eventType: "personalization_fallback_used",
+          metadata: {
+            surface: "TODAY_VIEW",
+            reason: fallbackReason,
+            rolloutReason: rolloutState.reason
+          }
+        });
+      }
+
+      if (fallbackReason === "PROFILE_FETCH_FAILED") {
+        await createAuditEvent({
+          userId,
+          eventType: "personalization_error_recovered",
+          metadata: {
+            surface: "TODAY_VIEW",
+            layer: "PROFILE_FETCH",
+            recovery: "BASELINE_FALLBACK"
+          }
+        });
+      } else if (fallbackReason === "POLICY_EVALUATION_FAILED") {
+        await createAuditEvent({
+          userId,
+          eventType: "personalization_error_recovered",
+          metadata: {
+            surface: "TODAY_VIEW",
+            layer: "POLICY_EVALUATION",
+            recovery: "BASELINE_FALLBACK"
           }
         });
       }
@@ -304,14 +402,7 @@ export class DailyCommandCenterService {
         : {
             presentationStyle: "DEFAULT" as const,
             reminderStyle: "DEFAULT" as const,
-            personalization: {
-              basePriorityScore: item.priorityScore,
-              finalPriorityScore: item.priorityScore,
-              personalizationApplied: false,
-              presentationStyle: "DEFAULT" as const,
-              reminderStyle: "DEFAULT" as const,
-              adjustments: []
-            }
+            personalization: buildDefaultPersonalizationMetadata(item.priorityScore)
           };
 
     return {
@@ -366,6 +457,95 @@ export class DailyCommandCenterService {
       )
       .catch(() => null);
   }
+
+  private buildBaselineTodayPersonalization(
+    items: TodayPrioritizedItem[]
+  ): TodayPersonalizationResult {
+    return {
+      items: items.map((item) => ({
+        ...item,
+        presentationStyle: "DEFAULT",
+        reminderStyle: "DEFAULT",
+        personalization: buildDefaultPersonalizationMetadata(item.priorityScore)
+      })),
+      personalizationApplied: false,
+      rankingPersonalizationApplied: false,
+      messagingPersonalizationApplied: false,
+      reminderPersonalizationApplied: false,
+      presentationStyleCounts: {
+        DEFAULT: items.length,
+        COMPACT_ACTION: 0,
+        SUPPORTED_REVIEW: 0
+      },
+      reminderStyleCounts: {
+        DEFAULT: items.length,
+        SHORT_FOLLOWUP: 0,
+        REALISTIC_FOLLOWUP: 0
+      }
+    };
+  }
+}
+
+function buildDefaultPersonalizationMetadata(
+  priorityScore: number
+): PersonalizationDebugMetadata {
+  return {
+    basePriorityScore: priorityScore,
+    finalPriorityScore: priorityScore,
+    personalizationApplied: false,
+    presentationStyle: "DEFAULT",
+    reminderStyle: "DEFAULT",
+    adjustments: []
+  };
+}
+
+function stripPersonalizationDebugMetadata(
+  items: PersonalizedTodayItem[]
+): PersonalizedTodayItem[] {
+  return items.map((item) => ({
+    ...item,
+    personalization: buildDefaultPersonalizationMetadata(item.priorityScore)
+  }));
+}
+
+function summarizeTopAdjustments(items: PersonalizedTodayItem[], limit: number) {
+  const effectTotals = new Map<
+    string,
+    {
+      count: number;
+      totalDelta: number;
+    }
+  >();
+
+  for (const item of items) {
+    for (const adjustment of item.personalization.adjustments) {
+      const key = `${adjustment.source}:${adjustment.effect}`;
+      const current = effectTotals.get(key) ?? {
+        count: 0,
+        totalDelta: 0
+      };
+      current.count += 1;
+      current.totalDelta += adjustment.delta;
+      effectTotals.set(key, current);
+    }
+  }
+
+  return Array.from(effectTotals.entries())
+    .sort((left, right) => {
+      const delta = Math.abs(right[1].totalDelta) - Math.abs(left[1].totalDelta);
+      if (delta !== 0) return delta;
+      return right[1].count - left[1].count;
+    })
+    .slice(0, limit)
+    .map(([key, value]) => {
+      const [source, effect] = key.split(":");
+      return {
+        source,
+        effect,
+        count: value.count,
+        totalDelta: value.totalDelta
+      };
+    });
 }
 
 function buildSubtitle(vendor: string | null, dueDate: string | null, renewalDate: string | null) {
@@ -479,14 +659,7 @@ function mergeUpcomingWithPredictions(
       scopeType: "PERSONAL",
       presentationStyle: "DEFAULT",
       reminderStyle: "DEFAULT",
-      personalization: {
-        basePriorityScore: 48,
-        finalPriorityScore: 48,
-        personalizationApplied: false,
-        presentationStyle: "DEFAULT",
-        reminderStyle: "DEFAULT",
-        adjustments: []
-      },
+      personalization: buildDefaultPersonalizationMetadata(48),
       assignee: null
     });
   }

@@ -1,3 +1,5 @@
+import { Prisma } from "@prisma/client";
+import { createAuditEvent } from "../observability/audit-event";
 import { BEHAVIOR_SIGNAL_ACTION_TYPES, BEHAVIOR_SIGNAL_TYPES } from "../types/behavior-profile.types";
 import {
   type BehaviorProfileComputationInput,
@@ -24,15 +26,34 @@ const QUICK_ACTION_THRESHOLD_MS = 15 * 60 * 1000;
 type ServiceDependencies = {
   repository?: PersonalizationSignalRepository;
   now?: () => Date;
+  emitInternalEvent?: (input: {
+    userId: string;
+    eventType: string;
+    metadata: Record<string, unknown>;
+  }) => Promise<void>;
 };
 
 export class PersonalizationSignalService {
   private readonly repository: PersonalizationSignalRepository;
   private readonly now: () => Date;
+  private readonly emitInternalEventFn: (input: {
+    userId: string;
+    eventType: string;
+    metadata: Record<string, unknown>;
+  }) => Promise<void>;
 
   constructor(dependencies: ServiceDependencies = {}) {
     this.repository = dependencies.repository ?? new PersonalizationSignalRepository();
     this.now = dependencies.now ?? (() => new Date());
+    this.emitInternalEventFn =
+      dependencies.emitInternalEvent ??
+      (async (input) => {
+        await createAuditEvent({
+          userId: input.userId,
+          eventType: input.eventType,
+          metadata: input.metadata as Prisma.InputJsonValue
+        }).catch(() => null);
+      });
   }
 
   async recordSignal(input: RecordBehaviorSignalInput): Promise<void> {
@@ -41,6 +62,11 @@ export class PersonalizationSignalService {
       userId: normalized.userId,
       obligationId: normalized.obligationId,
       metadata: toPersistedSignalMetadata(normalized)
+    });
+    await this.emitInternalEvent(normalized.userId, "behavior_signal_recorded", {
+      source: normalized.source,
+      signalCount: 1,
+      signalTypes: [normalized.signalType]
     });
   }
 
@@ -56,6 +82,33 @@ export class PersonalizationSignalService {
           userId: signal.userId,
           obligationId: signal.obligationId,
           metadata: toPersistedSignalMetadata(signal)
+        })
+      )
+    );
+
+    const signalCountsByUser = new Map<
+      string,
+      {
+        signalCount: number;
+        signalTypes: Set<BehaviorSignalType>;
+      }
+    >();
+    for (const signal of uniqueSignals) {
+      const current = signalCountsByUser.get(signal.userId) ?? {
+        signalCount: 0,
+        signalTypes: new Set<BehaviorSignalType>()
+      };
+      current.signalCount += 1;
+      current.signalTypes.add(signal.signalType);
+      signalCountsByUser.set(signal.userId, current);
+    }
+
+    await Promise.all(
+      Array.from(signalCountsByUser.entries()).map(([userId, entry]) =>
+        this.emitInternalEvent(userId, "behavior_signal_recorded", {
+          signalCount: entry.signalCount,
+          signalTypes: Array.from(entry.signalTypes).sort(),
+          batch: true
         })
       )
     );
@@ -269,6 +322,18 @@ export class PersonalizationSignalService {
       sampleSize: summary.sampleSize,
       signals: summary.signals
     };
+  }
+
+  private async emitInternalEvent(
+    userId: string,
+    eventType: string,
+    metadata: Record<string, unknown>
+  ) {
+    await this.emitInternalEventFn({
+      userId,
+      eventType,
+      metadata
+    }).catch(() => null);
   }
 }
 

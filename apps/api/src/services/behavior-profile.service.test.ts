@@ -13,6 +13,7 @@ import {
 import type { BehaviorSignalSummary } from "../types/behavior-profile.types";
 import type { BehaviorProfileRepository } from "../repositories/behavior-profile.repository";
 import type { PersonalizationSignalService } from "./personalization-signal.service";
+import type { AdaptivePersonalizationRolloutService } from "./adaptive-personalization-rollout.service";
 
 const FIXED_NOW = new Date("2026-02-10T12:00:00.000Z");
 
@@ -59,9 +60,15 @@ function createServiceHarness(input?: {
   summary?: BehaviorSignalSummary;
   summarySampleSize?: number;
   signalDeltaSinceLast?: number;
+  profileInferenceEnabled?: boolean;
 }) {
   let profile = input?.existingProfile ?? null;
   let upsertCallCount = 0;
+  const emittedEvents: Array<{
+    userId: string;
+    eventType: string;
+    metadata: Record<string, unknown>;
+  }> = [];
 
   const repository = {
     async getByUserId() {
@@ -120,15 +127,42 @@ function createServiceHarness(input?: {
   const service = new BehaviorProfileService({
     repository,
     signalService,
+    rolloutService: {
+      getUserRolloutState() {
+        const profileInferenceEnabled = input?.profileInferenceEnabled ?? true;
+        return {
+          userId: "user_test",
+          config: {
+            globalEnabled: true,
+            rolloutPercent: 100,
+            profileInferenceEnabled,
+            todayRankingEnabled: true,
+            messagingEnabled: true,
+            reminderTuningEnabled: true,
+            debugMetadataEnabled: true,
+            rolloutSalt: "test-salt"
+          },
+          inRolloutCohort: true,
+          profileInferenceEnabled,
+          todayPersonalizationEnabled: true,
+          rankingEnabled: true,
+          messagingEnabled: true,
+          reminderTuningEnabled: true,
+          debugMetadataEnabled: true,
+          reason: "ENABLED" as const
+        };
+      }
+    } as unknown as AdaptivePersonalizationRolloutService,
     now: () => FIXED_NOW,
-    emitInternalEvent: async () => {
-      return;
+    emitInternalEvent: async (event) => {
+      emittedEvents.push(event);
     }
   });
 
   return {
     service,
-    getUpsertCallCount: () => upsertCallCount
+    getUpsertCallCount: () => upsertCallCount,
+    emittedEvents
   };
 }
 
@@ -403,5 +437,26 @@ test("recomputeBehaviorProfile applies anti-oscillation and preserves borderline
   assert.equal(
     recomputed.profile.reviewPreference,
     BehaviorReviewPreference.QUICK_ACTION
+  );
+});
+
+test("recomputeBehaviorProfile skips inference when profile-inference rollout is disabled", async () => {
+  const { service, getUpsertCallCount, emittedEvents } = createServiceHarness({
+    existingProfile: createProfile({
+      userId: "user_rollout_off",
+      signalSampleSize: 0,
+      lastComputedAt: null
+    }),
+    profileInferenceEnabled: false
+  });
+
+  const result = await service.recomputeBehaviorProfile("user_rollout_off");
+
+  assert.equal(result.status, "SKIPPED_NOT_NEEDED");
+  assert.equal(result.recomputeDecision.reason, "SKIPPED_NOT_NEEDED");
+  assert.equal(getUpsertCallCount(), 0);
+  assert.equal(
+    emittedEvents.some((event) => event.eventType === "personalization_fallback_used"),
+    true
   );
 });

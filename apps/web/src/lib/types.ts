@@ -1831,6 +1831,25 @@ export interface AdminPeriodMetrics {
     premiumTierRate: number;
     gmailFallbackRate: number;
   };
+  adaptivePersonalization: {
+    profileCoverageRate: number;
+    profileUnknownRate: number;
+    profileRecomputeCount: number;
+    profileChangeCount: number;
+    insufficientDataRate: number;
+    todayAppliedRate: number;
+    todaySkippedRate: number;
+    fallbackRate: number;
+    errorRecoveryRate: number;
+    adjustmentAppliedCount: number;
+    messageStyleAppliedCount: number;
+    reminderStyleAppliedCount: number;
+    profileDistribution: {
+      actionSpeed: Record<"FAST" | "SLOW" | "UNKNOWN", number>;
+      reviewPreference: Record<"QUICK_ACTION" | "REVIEW_FIRST" | "UNKNOWN", number>;
+      deferFrequency: Record<"LOW" | "HIGH" | "UNKNOWN", number>;
+    };
+  };
   qualityScores: {
     ingestionQualityScore: number;
     predictionAccuracyScore: number;

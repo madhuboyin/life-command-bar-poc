@@ -17,6 +17,11 @@ function createSignalServiceHarness() {
     createdAt: Date;
   }> = [];
   let id = 0;
+  const emitted: Array<{
+    userId: string;
+    eventType: string;
+    metadata: Record<string, unknown>;
+  }> = [];
 
   const repository = {
     async createSignalEvent(input: {
@@ -65,17 +70,21 @@ function createSignalServiceHarness() {
 
   const service = new PersonalizationSignalService({
     repository,
-    now: () => new Date("2026-02-01T00:00:00.000Z")
+    now: () => new Date("2026-02-01T00:00:00.000Z"),
+    emitInternalEvent: async (input) => {
+      emitted.push(input);
+    }
   });
 
   return {
     service,
-    rows
+    rows,
+    emitted
   };
 }
 
 test("recordSignal persists a behavior signal event", async () => {
-  const { service, rows } = createSignalServiceHarness();
+  const { service, rows, emitted } = createSignalServiceHarness();
 
   await service.recordSignal({
     userId: "user_signal",
@@ -92,6 +101,31 @@ test("recordSignal persists a behavior signal event", async () => {
   assert.equal(metadata.signalType, "ITEM_ACTED");
   assert.equal(metadata.itemId, "obl_1");
   assert.equal(metadata.source, "TODAY_VIEW");
+  assert.equal(emitted.length, 1);
+  assert.equal(emitted[0]?.eventType, "behavior_signal_recorded");
+});
+
+test("recordSignals emits one compact behavior-signal event per user", async () => {
+  const { service, emitted } = createSignalServiceHarness();
+
+  await service.recordSignals([
+    {
+      userId: "user_batch",
+      signalType: "ITEM_IMPRESSED",
+      itemId: "obl_1",
+      source: "TODAY_VIEW"
+    },
+    {
+      userId: "user_batch",
+      signalType: "ITEM_ACTED",
+      itemId: "obl_1",
+      source: "TODAY_VIEW"
+    }
+  ]);
+
+  assert.equal(emitted.length, 1);
+  assert.equal(emitted[0]?.eventType, "behavior_signal_recorded");
+  assert.equal(emitted[0]?.metadata.signalCount, 2);
 });
 
 test("summarizeBehaviorSignals computes deterministic counts and medians", async () => {

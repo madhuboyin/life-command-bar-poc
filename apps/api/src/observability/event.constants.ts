@@ -124,7 +124,19 @@ export const OBSERVABILITY_EVENT_TYPES = {
   ITEM_CLAIMED: "item_claimed",
   ITEM_REASSIGNED: "item_reassigned",
 
-  HOUSEHOLD_INVITE_ACCEPTED: "household_invite_accepted"
+  HOUSEHOLD_INVITE_ACCEPTED: "household_invite_accepted",
+
+  BEHAVIOR_SIGNAL_RECORDED: "behavior_signal_recorded",
+  BEHAVIOR_PROFILE_RECOMPUTED: "behavior_profile_recomputed",
+  BEHAVIOR_PROFILE_INSUFFICIENT_DATA: "behavior_profile_insufficient_data",
+  BEHAVIOR_PROFILE_CHANGED: "behavior_profile_changed",
+  PERSONALIZATION_ADJUSTMENT_APPLIED: "personalization_adjustment_applied",
+  TODAY_VIEW_PERSONALIZATION_APPLIED: "today_view_personalization_applied",
+  TODAY_VIEW_PERSONALIZATION_SKIPPED: "today_view_personalization_skipped",
+  ADAPTIVE_MESSAGE_STYLE_APPLIED: "adaptive_message_style_applied",
+  REMINDER_STYLE_APPLIED: "reminder_style_applied",
+  PERSONALIZATION_FALLBACK_USED: "personalization_fallback_used",
+  PERSONALIZATION_ERROR_RECOVERED: "personalization_error_recovered"
 } as const;
 
 export type ObservabilityEventType =

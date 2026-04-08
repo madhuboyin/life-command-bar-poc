@@ -17,13 +17,18 @@ import { AppError } from "../utils/app-error";
 import { listActiveHouseholdIdsForUser } from "../utils/household-access";
 import { BehaviorProfileService } from "./behavior-profile.service";
 import { PersonalizationPolicyService } from "./personalization-policy.service";
-import { toBehaviorProfileView } from "../types/personalization-policy.types";
+import { AdaptivePersonalizationRolloutService } from "./adaptive-personalization-rollout.service";
+import {
+  UNKNOWN_BEHAVIOR_PROFILE,
+  toBehaviorProfileView
+} from "../types/personalization-policy.types";
 
 export class SubscriptionDecisionEngine {
   private readonly reminderService = new ReminderService();
   private readonly insightService = new SubscriptionInsightService();
   private readonly behaviorProfileService = new BehaviorProfileService();
   private readonly personalizationPolicyService = new PersonalizationPolicyService();
+  private readonly rolloutService = new AdaptivePersonalizationRolloutService();
 
   async applyDecision(input: {
     userId: string;
@@ -122,15 +127,49 @@ export class SubscriptionDecisionEngine {
 
     if (input.decision === "REMIND_LATER") {
       const requestedRemindAt = parseReminderDate(input.remindAt);
-      const behaviorProfile = await this.behaviorProfileService
-        .getBehaviorProfile(input.userId)
-        .catch(() => null);
-      reminderDecision =
-        this.personalizationPolicyService.resolveSubscriptionReminderSchedule({
-          profile: toBehaviorProfileView(behaviorProfile),
+      const rolloutState = this.rolloutService.getUserRolloutState(input.userId);
+      const reminderPolicyService = new PersonalizationPolicyService({
+        flags: {
+          enableRanking: false,
+          enableMessaging: false,
+          enableReminderTuning: rolloutState.reminderTuningEnabled
+        }
+      });
+      let fallbackReason:
+        | "ROLLOUT_DISABLED"
+        | "PROFILE_FETCH_FAILED"
+        | "POLICY_EVALUATION_FAILED"
+        | null = null;
+      let profile = UNKNOWN_BEHAVIOR_PROFILE;
+
+      if (!rolloutState.reminderTuningEnabled) {
+        fallbackReason = "ROLLOUT_DISABLED";
+      } else {
+        try {
+          const behaviorProfile = await this.behaviorProfileService.getBehaviorProfile(
+            input.userId
+          );
+          profile = toBehaviorProfileView(behaviorProfile);
+        } catch {
+          fallbackReason = "PROFILE_FETCH_FAILED";
+        }
+      }
+
+      try {
+        reminderDecision = reminderPolicyService.resolveSubscriptionReminderSchedule({
+          profile,
           nextRenewalDate: subscription.nextRenewalDate?.toISOString() ?? null,
           requestedRemindAt
         });
+      } catch {
+        fallbackReason = "POLICY_EVALUATION_FAILED";
+        reminderDecision =
+          this.personalizationPolicyService.resolveSubscriptionReminderSchedule({
+            profile: UNKNOWN_BEHAVIOR_PROFILE,
+            nextRenewalDate: subscription.nextRenewalDate?.toISOString() ?? null,
+            requestedRemindAt
+          });
+      }
       const reminder = await this.reminderService.create({
         userId: input.userId,
         obligationId: subscription.obligations[0]?.id,
@@ -151,6 +190,36 @@ export class SubscriptionDecisionEngine {
           remindAt: reminderDecision.remindAt.toISOString()
         }
       });
+      if (fallbackReason) {
+        await createAuditEvent({
+          userId: input.userId,
+          eventType: "personalization_fallback_used",
+          metadata: {
+            surface: "SUBSCRIPTION_REMINDER",
+            subscriptionId: subscription.id,
+            reason: fallbackReason,
+            rolloutReason: rolloutState.reason
+          }
+        });
+      }
+      if (
+        fallbackReason === "PROFILE_FETCH_FAILED" ||
+        fallbackReason === "POLICY_EVALUATION_FAILED"
+      ) {
+        await createAuditEvent({
+          userId: input.userId,
+          eventType: "personalization_error_recovered",
+          metadata: {
+            surface: "SUBSCRIPTION_REMINDER",
+            subscriptionId: subscription.id,
+            layer:
+              fallbackReason === "PROFILE_FETCH_FAILED"
+                ? "PROFILE_FETCH"
+                : "POLICY_EVALUATION",
+            recovery: "BASELINE_FALLBACK"
+          }
+        });
+      }
     }
 
     const normalizedRecommendation = normalizeDecisionToRecommendation(input.decision);

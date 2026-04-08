@@ -212,6 +212,33 @@ test("UNKNOWN profile cleanly falls back to baseline without style changes", () 
   assert.equal(result.items[0]?.reminderStyle, "DEFAULT");
 });
 
+test("UNKNOWN profile preserves baseline ordering when ranking deltas are neutral", () => {
+  const service = createService();
+
+  const laterDue = createItem({
+    id: "later_due",
+    dueDate: "2026-03-30T00:00:00.000Z",
+    priorityScore: 72
+  });
+  const soonerDue = createItem({
+    id: "sooner_due",
+    dueDate: "2026-03-16T00:00:00.000Z",
+    priorityScore: 72
+  });
+
+  const result = service.applyTodayViewPersonalization({
+    items: [laterDue, soonerDue],
+    profile: UNKNOWN_BEHAVIOR_PROFILE,
+    now: FIXED_NOW
+  });
+
+  assert.equal(result.rankingPersonalizationApplied, false);
+  assert.deepEqual(
+    result.items.map((item) => item.id),
+    ["later_due", "sooner_due"]
+  );
+});
+
 test("policy feature flags can cleanly disable all personalization adjustments", () => {
   const service = new PersonalizationPolicyService({
     now: () => FIXED_NOW,
@@ -250,6 +277,72 @@ test("policy feature flags can cleanly disable all personalization adjustments",
     result.items[0]?.personalization.finalPriorityScore,
     result.items[0]?.personalization.basePriorityScore
   );
+});
+
+test("layer-specific rollout can disable ranking while preserving adaptive messaging", () => {
+  const service = new PersonalizationPolicyService({
+    now: () => FIXED_NOW,
+    flags: {
+      enableRanking: false,
+      enableMessaging: true,
+      enableReminderTuning: false
+    }
+  });
+
+  const review = createItem({
+    id: "review_only",
+    needsReview: true,
+    confidenceBand: "LOW",
+    primaryAction: {
+      key: "REVIEW",
+      label: "Review",
+      mode: "NAVIGATE"
+    },
+    priorityScore: 81
+  });
+
+  const result = service.applyTodayViewPersonalization({
+    items: [review],
+    profile: {
+      actionSpeed: BehaviorActionSpeed.SLOW,
+      reviewPreference: BehaviorReviewPreference.REVIEW_FIRST,
+      deferFrequency: BehaviorDeferFrequency.HIGH
+    },
+    now: FIXED_NOW
+  });
+
+  assert.equal(result.rankingPersonalizationApplied, false);
+  assert.equal(result.messagingPersonalizationApplied, true);
+  assert.equal(result.items[0]?.presentationStyle, "SUPPORTED_REVIEW");
+  assert.equal(result.items[0]?.reminderStyle, "DEFAULT");
+  assert.equal(result.items[0]?.personalization.finalPriorityScore, 81);
+});
+
+test("ranking deltas stay bounded by conservative amplitude caps", () => {
+  const service = createService();
+
+  const direct = createItem({
+    id: "max_boost",
+    priorityScore: 80,
+    primaryAction: {
+      key: "MARK_DONE",
+      label: "Handle now",
+      mode: "INLINE"
+    },
+    dueDate: "2026-03-25T00:00:00.000Z"
+  });
+
+  const result = service.applyTodayViewPersonalization({
+    items: [direct],
+    profile: {
+      actionSpeed: BehaviorActionSpeed.FAST,
+      reviewPreference: BehaviorReviewPreference.QUICK_ACTION,
+      deferFrequency: BehaviorDeferFrequency.LOW
+    },
+    now: FIXED_NOW
+  });
+
+  assert.equal(result.items[0]?.personalization.finalPriorityScore, 86);
 });
 
 test("today reminder scheduling uses deterministic style windows", () => {

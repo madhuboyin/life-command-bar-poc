@@ -8,6 +8,7 @@ import {
 import { createAuditEvent } from "../observability/audit-event";
 import { BehaviorProfileRepository } from "../repositories/behavior-profile.repository";
 import { PersonalizationSignalService } from "./personalization-signal.service";
+import { AdaptivePersonalizationRolloutService } from "./adaptive-personalization-rollout.service";
 import type {
   BehaviorProfileComputationDiagnostics,
   BehaviorProfileComputationInput,
@@ -49,6 +50,7 @@ const MIN_SWITCH_SAMPLE_SIZE = 40;
 type BehaviorProfileServiceDependencies = {
   repository?: BehaviorProfileRepository;
   signalService?: PersonalizationSignalService;
+  rolloutService?: AdaptivePersonalizationRolloutService;
   now?: () => Date;
   emitInternalEvent?: (input: {
     userId: string;
@@ -67,6 +69,7 @@ export type RecomputeBehaviorProfileResult = {
 export class BehaviorProfileService {
   private readonly repository: BehaviorProfileRepository;
   private readonly signalService: PersonalizationSignalService;
+  private readonly rolloutService: AdaptivePersonalizationRolloutService;
   private readonly now: () => Date;
   private readonly emitInternalEventFn: (input: {
     userId: string;
@@ -78,6 +81,9 @@ export class BehaviorProfileService {
     this.repository = dependencies.repository ?? new BehaviorProfileRepository();
     this.signalService =
       dependencies.signalService ?? new PersonalizationSignalService();
+    this.rolloutService =
+      dependencies.rolloutService ??
+      new AdaptivePersonalizationRolloutService();
     this.now = dependencies.now ?? (() => new Date());
     this.emitInternalEventFn =
       dependencies.emitInternalEvent ??
@@ -250,6 +256,30 @@ export class BehaviorProfileService {
   ): Promise<RecomputeBehaviorProfileResult> {
     const now = this.now();
     const existingProfile = await this.repository.getByUserId(userId);
+    const rolloutState = this.rolloutService.getUserRolloutState(userId);
+
+    if (!rolloutState.profileInferenceEnabled) {
+      const persistedProfile =
+        existingProfile ??
+        (await this.repository.getOrCreateByUserId(userId));
+      const profile = mapProfile(persistedProfile);
+
+      await this.emitInternalEvent(userId, "personalization_fallback_used", {
+        surface: "BEHAVIOR_PROFILE_INFERENCE",
+        reason: "PROFILE_INFERENCE_DISABLED",
+        rolloutReason: rolloutState.reason
+      });
+
+      return {
+        profile,
+        computedProfile: mapPersistedToComputedProfile(persistedProfile),
+        status: "SKIPPED_NOT_NEEDED",
+        recomputeDecision: {
+          shouldRecompute: false,
+          reason: "SKIPPED_NOT_NEEDED"
+        }
+      };
+    }
 
     const signalSummary = await this.signalService.summarizeSignalsForUser({
       userId,

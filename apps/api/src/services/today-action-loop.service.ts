@@ -7,7 +7,11 @@ import { ObligationActionsService } from "./obligation-actions.service";
 import { PersonalizationSignalService } from "./personalization-signal.service";
 import { BehaviorProfileService } from "./behavior-profile.service";
 import { PersonalizationPolicyService } from "./personalization-policy.service";
-import { toBehaviorProfileView } from "../types/personalization-policy.types";
+import { AdaptivePersonalizationRolloutService } from "./adaptive-personalization-rollout.service";
+import {
+  UNKNOWN_BEHAVIOR_PROFILE,
+  toBehaviorProfileView
+} from "../types/personalization-policy.types";
 
 export type TodayActionKey =
   | "MARK_DONE"
@@ -26,6 +30,7 @@ export class TodayActionLoopService {
   private readonly personalizationSignalService = new PersonalizationSignalService();
   private readonly behaviorProfileService = new BehaviorProfileService();
   private readonly personalizationPolicyService = new PersonalizationPolicyService();
+  private readonly rolloutService = new AdaptivePersonalizationRolloutService();
 
   async executeAction(
     userId: string,
@@ -76,16 +81,51 @@ export class TodayActionLoopService {
       }
       case "REMIND_LATER": {
         const requestedRemindAt = parseOptionalIsoDate(payload.remindAt);
-        const behaviorProfile = await this.behaviorProfileService
-          .getBehaviorProfile(userId)
-          .catch(() => null);
-        const reminderDecision =
-          this.personalizationPolicyService.resolveTodayReminderSchedule({
-            profile: toBehaviorProfileView(behaviorProfile),
+        const rolloutState = this.rolloutService.getUserRolloutState(userId);
+        const reminderPolicyService = new PersonalizationPolicyService({
+          flags: {
+            enableRanking: false,
+            enableMessaging: false,
+            enableReminderTuning: rolloutState.reminderTuningEnabled
+          }
+        });
+
+        let fallbackReason:
+          | "ROLLOUT_DISABLED"
+          | "PROFILE_FETCH_FAILED"
+          | "POLICY_EVALUATION_FAILED"
+          | null = null;
+        let profile = UNKNOWN_BEHAVIOR_PROFILE;
+
+        if (!rolloutState.reminderTuningEnabled) {
+          fallbackReason = "ROLLOUT_DISABLED";
+        } else {
+          try {
+            const behaviorProfile = await this.behaviorProfileService.getBehaviorProfile(userId);
+            profile = toBehaviorProfileView(behaviorProfile);
+          } catch {
+            fallbackReason = "PROFILE_FETCH_FAILED";
+          }
+        }
+
+        let reminderDecision:
+          ReturnType<PersonalizationPolicyService["resolveTodayReminderSchedule"]>;
+        try {
+          reminderDecision = reminderPolicyService.resolveTodayReminderSchedule({
+            profile,
             dueDate: item.dueDate?.toISOString() ?? null,
             renewalDate: item.subscription?.nextRenewalDate?.toISOString() ?? null,
             requestedRemindAt
           });
+        } catch {
+          fallbackReason = "POLICY_EVALUATION_FAILED";
+          reminderDecision = this.personalizationPolicyService.resolveTodayReminderSchedule({
+            profile: UNKNOWN_BEHAVIOR_PROFILE,
+            dueDate: item.dueDate?.toISOString() ?? null,
+            renewalDate: item.subscription?.nextRenewalDate?.toISOString() ?? null,
+            requestedRemindAt
+          });
+        }
         const until = reminderDecision.remindAt.toISOString();
         const updated = await this.obligations.postpone(userId, obligationId, {
           until,
@@ -134,6 +174,38 @@ export class TodayActionLoopService {
             remindAt: until
           }
         });
+        if (fallbackReason) {
+          await createAuditEvent({
+            userId,
+            householdId: item.householdId,
+            obligationId,
+            eventType: "personalization_fallback_used",
+            metadata: {
+              surface: "TODAY_REMINDER",
+              reason: fallbackReason,
+              rolloutReason: rolloutState.reason
+            }
+          });
+        }
+        if (
+          fallbackReason === "PROFILE_FETCH_FAILED" ||
+          fallbackReason === "POLICY_EVALUATION_FAILED"
+        ) {
+          await createAuditEvent({
+            userId,
+            householdId: item.householdId,
+            obligationId,
+            eventType: "personalization_error_recovered",
+            metadata: {
+              surface: "TODAY_REMINDER",
+              layer:
+                fallbackReason === "PROFILE_FETCH_FAILED"
+                  ? "PROFILE_FETCH"
+                  : "POLICY_EVALUATION",
+              recovery: "BASELINE_FALLBACK"
+            }
+          });
+        }
         break;
       }
       case "DISMISS": {
