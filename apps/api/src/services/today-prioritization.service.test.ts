@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ObligationStatus, ScopeType } from "@prisma/client";
+import { AnchorCategory, ObligationStatus, ScopeType } from "@prisma/client";
 import { TodayPrioritizationService, type TodayPrioritizationInput } from "./today-prioritization.service";
 
 const FIXED_NOW = new Date("2026-04-08T12:00:00.000Z");
@@ -36,7 +36,8 @@ function createInput(input: Partial<TodayPrioritizationInput> = {}): TodayPriori
     scopeType: input.scopeType ?? ScopeType.PERSONAL,
     assignee: input.assignee ?? null,
     lastActedAt: input.lastActedAt ?? null,
-    subscriptionId: input.subscriptionId ?? null
+    subscriptionId: input.subscriptionId ?? null,
+    trackedAnchor: input.trackedAnchor
   };
 }
 
@@ -86,4 +87,50 @@ test("postponed items use human follow-through wording", () => {
 
   assert.equal(ranked[0]?.whyNow, "You postponed this earlier, so it is back on deck.");
   assert.equal(ranked[0]?.whyThisMatters, "Handling this now keeps today lighter.");
+});
+
+test("urgent obligation stays ahead of weak-timing tracked anchor", () => {
+  const service = new TodayPrioritizationService();
+  const ranked = service.rank(
+    [
+      createInput({
+        id: "anchor_item",
+        itemType: "TRACKED_ANCHOR",
+        title: "Gym membership",
+        type: "COMMITMENT",
+        amount: null,
+        dueDate: null,
+        renewalDate: null,
+        confidenceBand: "LOW",
+        confidenceScore: 0.62,
+        urgencyScore: 46,
+        importanceScore: 54,
+        trackedAnchor: {
+          anchorId: "anchor_1",
+          category: AnchorCategory.MEMBERSHIP,
+          dueReason: "INSUFFICIENT_TIMING",
+          dueUrgency: "NONE",
+          recurrenceType: "UNKNOWN",
+          timingKnown: false
+        }
+      }),
+      createInput({
+        id: "urgent_bill",
+        itemType: "OBLIGATION",
+        title: "Electric bill",
+        type: "BILL",
+        dueDate: "2026-04-08T08:00:00.000Z",
+        confidenceBand: "HIGH",
+        confidenceScore: 0.9,
+        urgencyScore: 95,
+        importanceScore: 84
+      })
+    ],
+    FIXED_NOW
+  );
+
+  assert.equal(ranked[0]?.id, "urgent_bill");
+  assert.equal(ranked[1]?.id, "anchor_item");
+  assert.equal(ranked[1]?.primaryAction.label, "Review");
+  assert.match(ranked[1]?.whyNow ?? "", /may be coming up soon/i);
 });

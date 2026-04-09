@@ -31,10 +31,13 @@ import {
   type ReminderSuggestionStyle,
   type TodayPresentationStyle
 } from "../types/personalization-policy.types";
+import { TrackedAnchorService } from "./tracked-anchor.service";
+import { AnchorTodayNormalizerService } from "./anchor-today-normalizer.service";
+import { fromTrackedAnchorTodayItemId } from "../utils/tracked-anchor-today-id";
 
 export type DailyCommandCenterItem = {
   id: string;
-  itemType: "OBLIGATION" | "SUBSCRIPTION_REVIEW";
+  itemType: "OBLIGATION" | "SUBSCRIPTION_REVIEW" | "TRACKED_ANCHOR";
   title: string;
   subtitle: string | null;
   category: string;
@@ -115,13 +118,16 @@ export class DailyCommandCenterService {
   private readonly personalizationSignalService = new PersonalizationSignalService();
   private readonly behaviorProfileService = new BehaviorProfileService();
   private readonly rolloutService = new AdaptivePersonalizationRolloutService();
+  private readonly trackedAnchorService = new TrackedAnchorService();
+  private readonly anchorTodayNormalizer = new AnchorTodayNormalizerService();
 
   async getTodayView(userId: string, options?: { emitEvents?: boolean }): Promise<DailyCommandCenterResponse> {
     const emitEvents = options?.emitEvents ?? true;
     const now = new Date();
     const todayStart = startOfDayUTC(now);
 
-    const [openRows, completedRows, pulseState, upcomingPredictions] = await Promise.all([
+    const [openRows, completedRows, pulseState, upcomingPredictions, activeAnchors] =
+      await Promise.all([
       this.repository.listOpenCandidates({ userId }),
       this.repository.listCompletedOrSafeToday({
         userId,
@@ -142,41 +148,54 @@ export class DailyCommandCenterService {
       this.controlTowerService
         .getUpcoming(userId, 3)
         .then((data) => data.items)
-        .catch(() => [])
+        .catch(() => []),
+      this.trackedAnchorService.listActiveForUser(userId).catch(() => [])
     ]);
 
-    const ranked = this.prioritizationService.rank(
-      openRows.map((row) => {
-        const mapped = mapObligation(row);
-        const category = mapped.obligationIntelligence?.category ?? mapped.type;
-        const renewalDate = row.subscription?.nextRenewalDate?.toISOString() ?? null;
+    const overlapKeys = buildObligationOverlapKeys(openRows);
+    const anchorCandidates = this.anchorTodayNormalizer.normalizeAnchorsForToday({
+      anchors: activeAnchors,
+      suppressionKeys: overlapKeys,
+      now
+    });
 
-        return {
-          id: mapped.id,
-          itemType: row.subscriptionId ? ("SUBSCRIPTION_REVIEW" as const) : ("OBLIGATION" as const),
-          title: mapped.title,
-          subtitle: buildSubtitle(mapped.vendor, mapped.dueDate, renewalDate),
-          category,
-          type: mapped.type,
-          status: row.status,
-          vendorName: mapped.vendor,
-          amount: mapped.amount,
-          currency: mapped.currency,
-          dueDate: mapped.dueDate,
-          renewalDate,
-          priorityHintScore: mapped.obligationIntelligence?.priority.score ?? null,
-          confidenceBand: mapped.confidenceBand,
-          confidenceScore: mapped.confidenceScore,
-          urgencyScore: mapped.urgencyScore,
-          importanceScore: mapped.importanceScore,
-          needsReview: mapped.needsReview,
-          sourceSummary: buildSourceSummary(mapped, row.subscription?.vendorName ?? null),
-          scopeType: mapped.scopeType,
-          assignee: mapped.assignee,
-          lastActedAt: mapped.lastActedAt,
-          subscriptionId: row.subscriptionId
-        };
-      }),
+    const ranked = this.prioritizationService.rank(
+      [
+        ...openRows.map((row) => {
+          const mapped = mapObligation(row);
+          const category = mapped.obligationIntelligence?.category ?? mapped.type;
+          const renewalDate = row.subscription?.nextRenewalDate?.toISOString() ?? null;
+
+          return {
+            id: mapped.id,
+            itemType: row.subscriptionId
+              ? ("SUBSCRIPTION_REVIEW" as const)
+              : ("OBLIGATION" as const),
+            title: mapped.title,
+            subtitle: buildSubtitle(mapped.vendor, mapped.dueDate, renewalDate),
+            category,
+            type: mapped.type,
+            status: row.status,
+            vendorName: mapped.vendor,
+            amount: mapped.amount,
+            currency: mapped.currency,
+            dueDate: mapped.dueDate,
+            renewalDate,
+            priorityHintScore: mapped.obligationIntelligence?.priority.score ?? null,
+            confidenceBand: mapped.confidenceBand,
+            confidenceScore: mapped.confidenceScore,
+            urgencyScore: mapped.urgencyScore,
+            importanceScore: mapped.importanceScore,
+            needsReview: mapped.needsReview,
+            sourceSummary: buildSourceSummary(mapped, row.subscription?.vendorName ?? null),
+            scopeType: mapped.scopeType,
+            assignee: mapped.assignee,
+            lastActedAt: mapped.lastActedAt,
+            subscriptionId: row.subscriptionId
+          };
+        }),
+        ...anchorCandidates.map((item) => item.candidate)
+      ],
       now
     );
     const rolloutState = this.rolloutService.getUserRolloutState(userId);
@@ -227,8 +246,10 @@ export class DailyCommandCenterService {
       ? personalization.items
       : stripPersonalizationDebugMetadata(personalization.items);
 
-    const primaryCandidates = personalizedRanked.filter(
-      (item) => item.priorityBand === "URGENT" || item.priorityBand === "HIGH"
+    const primaryCandidates = selectActionableCandidates(
+      personalizedRanked.filter(
+        (item) => item.priorityBand === "URGENT" || item.priorityBand === "HIGH"
+      )
     );
 
     const actionableItems = primaryCandidates
@@ -236,11 +257,12 @@ export class DailyCommandCenterService {
       .map((item) => this.toSurfaceItem(item));
     const primaryIds = new Set(actionableItems.map((item) => item.id));
 
-    const upcomingFromRanked = personalizedRanked
+    const upcomingFromRanked = selectUpcomingCandidates(
+      personalizedRanked
       .filter((item) => !primaryIds.has(item.id))
       .filter((item) => item.priorityBand === "MEDIUM")
       .slice(0, 5)
-      .map((item) => this.toSurfaceItem(item));
+    ).map((item) => this.toSurfaceItem(item));
 
     const upcoming = mergeUpcomingWithPredictions(upcomingFromRanked, upcomingPredictions).slice(0, 6);
 
@@ -398,6 +420,9 @@ export class DailyCommandCenterService {
     if (loopModel.primaryItem) {
       void this.recordImpressionSignals(userId, [loopModel.primaryItem]).catch(() => null);
     }
+    if (actionableItems.length > 0 || upcoming.length > 0) {
+      void this.markSurfacedAnchors(userId, [...actionableItems, ...upcoming]).catch(() => null);
+    }
 
     return {
       generatedAt: new Date().toISOString(),
@@ -486,6 +511,25 @@ export class DailyCommandCenterService {
         }))
       )
       .catch(() => null);
+  }
+
+  private async markSurfacedAnchors(
+    userId: string,
+    items: DailyCommandCenterItem[]
+  ) {
+    const anchorIds = new Set<string>();
+    for (const item of items) {
+      const anchorId = fromTrackedAnchorTodayItemId(item.id);
+      if (anchorId) {
+        anchorIds.add(anchorId);
+      }
+    }
+
+    await Promise.all(
+      Array.from(anchorIds).map((anchorId) =>
+        this.trackedAnchorService.markSurfaced(anchorId, userId).catch(() => null)
+      )
+    );
   }
 
   private buildBaselineTodayPersonalization(
@@ -635,6 +679,88 @@ function buildCompletedSummary(
   }
 
   return `${obligation.title} marked safe for now.`;
+}
+
+function selectActionableCandidates<T extends { itemType: DailyCommandCenterItem["itemType"] }>(
+  items: T[]
+) {
+  const selected: T[] = [];
+  let anchorCount = 0;
+
+  for (const item of items) {
+    if (item.itemType === "TRACKED_ANCHOR" && anchorCount >= 1) {
+      continue;
+    }
+
+    selected.push(item);
+    if (item.itemType === "TRACKED_ANCHOR") {
+      anchorCount += 1;
+    }
+
+    if (selected.length >= 3) {
+      break;
+    }
+  }
+
+  return selected;
+}
+
+function selectUpcomingCandidates<T extends { itemType: DailyCommandCenterItem["itemType"] }>(
+  items: T[]
+) {
+  const selected: T[] = [];
+  let anchorCount = 0;
+
+  for (const item of items) {
+    if (item.itemType === "TRACKED_ANCHOR" && anchorCount >= 2) {
+      continue;
+    }
+
+    selected.push(item);
+    if (item.itemType === "TRACKED_ANCHOR") {
+      anchorCount += 1;
+    }
+
+    if (selected.length >= 5) {
+      break;
+    }
+  }
+
+  return selected;
+}
+
+function buildObligationOverlapKeys(
+  rows: Array<{
+    title: string;
+    vendor: string | null;
+    subscription?: {
+      vendorName?: string | null;
+    } | null;
+  }>
+) {
+  const keys = new Set<string>();
+  for (const row of rows) {
+    const titleKey = normalizeOverlapLabel(row.title);
+    if (titleKey) keys.add(titleKey);
+
+    const vendorKey = normalizeOverlapLabel(row.vendor);
+    if (vendorKey) keys.add(vendorKey);
+
+    const subscriptionVendorKey = normalizeOverlapLabel(
+      row.subscription?.vendorName ?? null
+    );
+    if (subscriptionVendorKey) keys.add(subscriptionVendorKey);
+  }
+  return keys;
+}
+
+function normalizeOverlapLabel(value: string | null | undefined) {
+  if (!value) return "";
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function startOfDayUTC(now: Date) {

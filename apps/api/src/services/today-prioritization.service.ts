@@ -1,4 +1,9 @@
-import { ObligationStatus, ScopeType } from "@prisma/client";
+import {
+  AnchorCategory,
+  ObligationStatus,
+  ScopeType
+} from "@prisma/client";
+import type { AnchorDueReason, AnchorDueUrgency } from "../types/anchor-tracking.types";
 
 export type TodayPriorityBand = "URGENT" | "HIGH" | "MEDIUM" | "LOW";
 
@@ -18,7 +23,7 @@ export type TodayAction = {
 
 export type TodayPrioritizationInput = {
   id: string;
-  itemType: "OBLIGATION" | "SUBSCRIPTION_REVIEW";
+  itemType: "OBLIGATION" | "SUBSCRIPTION_REVIEW" | "TRACKED_ANCHOR";
   title: string;
   subtitle: string | null;
   category: string;
@@ -46,6 +51,14 @@ export type TodayPrioritizationInput = {
     | null;
   lastActedAt: string | null;
   subscriptionId: string | null;
+  trackedAnchor?: {
+    anchorId: string;
+    category: AnchorCategory;
+    dueReason: AnchorDueReason;
+    dueUrgency: AnchorDueUrgency;
+    recurrenceType: "RECURRING" | "ONE_TIME" | "UNKNOWN";
+    timingKnown: boolean;
+  };
 };
 
 export type TodayPrioritizedItem = TodayPrioritizationInput & {
@@ -161,6 +174,10 @@ function selectActions(
   primaryAction: TodayAction;
   secondaryActions: TodayAction[];
 } {
+  if (item.itemType === "TRACKED_ANCHOR") {
+    return selectTrackedAnchorActions(item);
+  }
+
   const detailsAction: TodayAction = {
     key: "VIEW_DETAILS",
     label: "View details",
@@ -239,6 +256,10 @@ function selectActions(
 }
 
 function buildWhyNow(item: TodayPrioritizationInput, now: Date) {
+  if (item.itemType === "TRACKED_ANCHOR") {
+    return buildTrackedAnchorWhyNow(item);
+  }
+
   const dueDays = daysUntil(item.dueDate, now);
   if (dueDays !== null && dueDays <= 0) {
     return "This is due now.";
@@ -270,6 +291,10 @@ function buildWhyNow(item: TodayPrioritizationInput, now: Date) {
 }
 
 function buildWhyThisMatters(item: TodayPrioritizationInput) {
+  if (item.itemType === "TRACKED_ANCHOR") {
+    return buildTrackedAnchorWhyThisMatters(item);
+  }
+
   if (item.amount !== null && item.amount > 0) {
     return "Handling this now helps avoid surprise costs.";
   }
@@ -315,4 +340,129 @@ function clamp(value: number, min: number, max: number) {
   if (value < min) return min;
   if (value > max) return max;
   return value;
+}
+
+function selectTrackedAnchorActions(item: TodayPrioritizationInput): {
+  primaryAction: TodayAction;
+  secondaryActions: TodayAction[];
+} {
+  const remindLater: TodayAction = {
+    key: "REMIND_LATER",
+    label: "Remind later",
+    mode: "INLINE"
+  };
+
+  const category = item.trackedAnchor?.category ?? "OTHER";
+  const weakTiming =
+    item.trackedAnchor?.dueReason === "INSUFFICIENT_TIMING" ||
+    !item.trackedAnchor?.timingKnown;
+
+  if (weakTiming) {
+    return {
+      primaryAction: {
+        key: "REVIEW",
+        label: "Review",
+        mode: "NAVIGATE",
+        href: "/settings#watch-list"
+      },
+      secondaryActions: [
+        remindLater,
+        {
+          key: "DISMISS",
+          label: "Stop watching",
+          mode: "INLINE"
+        }
+      ]
+    };
+  }
+
+  if (category === "SUBSCRIPTION" || category === "MEMBERSHIP") {
+    return {
+      primaryAction: {
+        key: "MARK_DONE",
+        label: "Keep",
+        mode: "INLINE"
+      },
+      secondaryActions: [
+        {
+          key: "DISMISS",
+          label: "Cancel",
+          mode: "INLINE"
+        },
+        remindLater
+      ]
+    };
+  }
+
+  if (category === "BILL" || category === "LOAN" || category === "TAX") {
+    return {
+      primaryAction: {
+        key: "MARK_DONE",
+        label: "Pay",
+        mode: "INLINE"
+      },
+      secondaryActions: [remindLater]
+    };
+  }
+
+  if (category === "INSURANCE") {
+    return {
+      primaryAction: {
+        key: "REVIEW",
+        label: "Review",
+        mode: "NAVIGATE",
+        href: "/settings#watch-list"
+      },
+      secondaryActions: [
+        {
+          key: "MARK_DONE",
+          label: "Keep",
+          mode: "INLINE"
+        },
+        remindLater
+      ]
+    };
+  }
+
+  return {
+    primaryAction: {
+      key: "REVIEW",
+      label: "Review",
+      mode: "NAVIGATE",
+      href: "/settings#watch-list"
+    },
+    secondaryActions: [remindLater]
+  };
+}
+
+function buildTrackedAnchorWhyNow(item: TodayPrioritizationInput) {
+  const label = item.title;
+  const category = item.trackedAnchor?.category ?? "OTHER";
+  const dueReason = item.trackedAnchor?.dueReason ?? "INSUFFICIENT_TIMING";
+
+  if (dueReason === "INSUFFICIENT_TIMING") {
+    return "This may be coming up soon. Worth a quick check?";
+  }
+
+  if (category === "SUBSCRIPTION" || category === "MEMBERSHIP") {
+    return `${label} is likely coming up soon. Still using it?`;
+  }
+
+  if (category === "BILL" || category === "LOAN" || category === "TAX") {
+    return `${label} is probably due around now. Want to take care of it?`;
+  }
+
+  if (category === "INSURANCE") {
+    return `${label} is coming up soon. Worth a quick review?`;
+  }
+
+  return `${label} may be coming up soon. Worth a quick check?`;
+}
+
+function buildTrackedAnchorWhyThisMatters(item: TodayPrioritizationInput) {
+  if (item.trackedAnchor?.dueReason === "INSUFFICIENT_TIMING") {
+    return "You asked us to keep an eye on this, so we brought it back for a quick check.";
+  }
+
+  return "You asked us to keep an eye on this, so we brought it back around the likely timing.";
 }

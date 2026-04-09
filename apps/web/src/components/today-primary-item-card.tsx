@@ -42,6 +42,10 @@ export default function TodayPrimaryItemCard({
 }
 
 function buildContextLine(item: DailyCommandCenterItem) {
+  if (item.itemType === "TRACKED_ANCHOR") {
+    return compactSentence(item.sourceSummary) ?? item.title;
+  }
+
   if (item.renewalDate) {
     return `${item.title} renews ${relativeDateLabel(item.renewalDate)}.`;
   }
@@ -54,6 +58,10 @@ function buildContextLine(item: DailyCommandCenterItem) {
 }
 
 function buildDecisionLine(item: DailyCommandCenterItem) {
+  if (item.itemType === "TRACKED_ANCHOR") {
+    return compactSentence(item.whyNow) ?? "Worth a quick check?";
+  }
+
   if (item.presentationStyle === "SUPPORTED_REVIEW") {
     return "Want a quick look before deciding?";
   }
@@ -78,6 +86,15 @@ function buildDecisionLine(item: DailyCommandCenterItem) {
 }
 
 function buildSupportLine(item: DailyCommandCenterItem) {
+  if (item.itemType === "TRACKED_ANCHOR") {
+    const amount = item.amount !== null ? formatMoney(item.amount, item.currency) : null;
+    const timing = buildDueOrRenewLine(item) ?? compactSentence(item.subtitle);
+    if (amount && timing) {
+      return `${amount} · ${timing}`;
+    }
+    return amount ?? timing ?? compactSentence(item.whyThisMatters);
+  }
+
   const dueOrRenewLine = buildDueOrRenewLine(item);
 
   if (item.amount !== null) {

@@ -221,7 +221,7 @@ export interface TodayActionDescriptor {
 
 export interface DailyCommandCenterItem {
   id: string;
-  itemType: "OBLIGATION" | "SUBSCRIPTION_REVIEW";
+  itemType: "OBLIGATION" | "SUBSCRIPTION_REVIEW" | "TRACKED_ANCHOR";
   title: string;
   subtitle: string | null;
   category: string;

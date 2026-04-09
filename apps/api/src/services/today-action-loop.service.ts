@@ -12,6 +12,9 @@ import {
   UNKNOWN_BEHAVIOR_PROFILE,
   toBehaviorProfileView
 } from "../types/personalization-policy.types";
+import { TrackedAnchorService } from "./tracked-anchor.service";
+import { fromTrackedAnchorTodayItemId } from "../utils/tracked-anchor-today-id";
+import { AnchorRecurrenceType } from "@prisma/client";
 
 export type TodayActionKey =
   | "MARK_DONE"
@@ -31,16 +34,23 @@ export class TodayActionLoopService {
   private readonly behaviorProfileService = new BehaviorProfileService();
   private readonly personalizationPolicyService = new PersonalizationPolicyService();
   private readonly rolloutService = new AdaptivePersonalizationRolloutService();
+  private readonly trackedAnchorService = new TrackedAnchorService();
 
   async executeAction(
     userId: string,
-    obligationId: string,
+    itemId: string,
     payload: {
       actionKey: TodayActionKey;
       remindAt?: string | null;
       note?: string | null;
     }
   ) {
+    const trackedAnchorId = fromTrackedAnchorTodayItemId(itemId);
+    if (trackedAnchorId) {
+      return this.executeTrackedAnchorAction(userId, trackedAnchorId, itemId, payload);
+    }
+    const obligationId = itemId;
+
     const item = await this.repository.findByIdForUser(userId, obligationId);
     if (!item) {
       throw new AppError("NOT_FOUND", "Today item not found", 404);
@@ -417,6 +427,153 @@ export class TodayActionLoopService {
     };
   }
 
+  private async executeTrackedAnchorAction(
+    userId: string,
+    anchorId: string,
+    itemId: string,
+    payload: {
+      actionKey: TodayActionKey;
+      remindAt?: string | null;
+      note?: string | null;
+    }
+  ) {
+    const anchor = await this.trackedAnchorService.getAnchorForUser(anchorId, userId);
+    if (!anchor) {
+      throw new AppError("NOT_FOUND", "Today item not found", 404);
+    }
+
+    const now = new Date();
+    const plan = deriveTrackedAnchorActionPlan({
+      actionKey: payload.actionKey,
+      remindAt: payload.remindAt ?? null,
+      now
+    });
+
+    let status: "COMPLETED" | "DEFERRED" | "DISMISSED" | "OPENED_GUIDED" | "ROUTED" =
+      "ROUTED";
+    let message = "Saved";
+    let targetHref: string | null = null;
+
+    if (plan.kind === "CONFIRM_AND_ADVANCE") {
+      await this.trackedAnchorService.markConfirmed(anchorId, userId, now);
+      await this.trackedAnchorService.markObserved(anchorId, userId, now);
+      if (anchor.recurrenceType === AnchorRecurrenceType.RECURRING) {
+        await this.trackedAnchorService.advanceAnchorCycle(anchorId, userId, now);
+      } else {
+        await this.trackedAnchorService.archiveAnchor(anchorId, userId);
+      }
+
+      status = "COMPLETED";
+      message = "Done";
+
+      await this.recordBehaviorSignals(userId, [
+        {
+          userId,
+          signalType: "ITEM_ACTED",
+          itemId,
+          category: "TRACKED_ANCHOR",
+          source: "TODAY_VIEW",
+          metadata: {
+            actionType: "CONFIRM",
+            anchorId
+          }
+        }
+      ]);
+    } else if (plan.kind === "SNOOZE") {
+      await this.trackedAnchorService.snoozeAnchor(anchorId, userId, plan.until);
+      status = "DEFERRED";
+      message = "We'll bring this back later";
+
+      await this.recordBehaviorSignals(userId, [
+        {
+          userId,
+          signalType: "ITEM_DEFERRED",
+          itemId,
+          category: "TRACKED_ANCHOR",
+          source: "TODAY_VIEW",
+          metadata: {
+            actionType: "REMIND_LATER",
+            anchorId,
+            remindAt: plan.until.toISOString()
+          }
+        }
+      ]);
+    } else if (plan.kind === "CANCEL") {
+      await this.trackedAnchorService.cancelAnchor(anchorId, userId);
+      status = "DISMISSED";
+      message = "Okay, we'll stop watching this";
+
+      await this.recordBehaviorSignals(userId, [
+        {
+          userId,
+          signalType: "ITEM_ACTED",
+          itemId,
+          category: "TRACKED_ANCHOR",
+          source: "TODAY_VIEW",
+          metadata: {
+            actionType: "CANCEL",
+            anchorId
+          }
+        }
+      ]);
+    } else {
+      await this.trackedAnchorService.markObserved(anchorId, userId, now);
+      status = "ROUTED";
+      message = "Opening details.";
+      targetHref = "/settings#watch-list";
+
+      await this.recordBehaviorSignals(userId, [
+        {
+          userId,
+          signalType: "DETAIL_OPENED",
+          itemId,
+          category: "TRACKED_ANCHOR",
+          source: "TODAY_VIEW",
+          metadata: {
+            anchorId
+          }
+        }
+      ]);
+    }
+
+    await createAuditEvent({
+      userId,
+      eventType: "today_primary_action_taken",
+      metadata: {
+        actionKey: payload.actionKey,
+        status,
+        itemType: "TRACKED_ANCHOR",
+        anchorId,
+        note: payload.note ?? null,
+        remindAt: payload.remindAt ?? null
+      }
+    });
+
+    const today = await this.todayService.getTodayView(userId, {
+      emitEvents: false
+    });
+
+    const remainingCount = (today.primaryItem ? 1 : 0) + today.queuedItems.length;
+    if (remainingCount === 0) {
+      await createAuditEvent({
+        userId,
+        eventType: "today_done_for_now_reached",
+        metadata: {
+          reason: "action_completed_all_primary"
+        }
+      });
+    }
+
+    return {
+      actionKey: payload.actionKey,
+      status,
+      message,
+      targetHref,
+      nextPrimaryItemId: today.primaryItem?.id ?? null,
+      today
+    };
+  }
+
   private async recordBehaviorSignals(
     userId: string,
     signals: Parameters<PersonalizationSignalService["recordSignals"]>[0]
@@ -431,4 +588,34 @@ function parseOptionalIsoDate(value?: string | null) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return null;
   return parsed;
+}
+
+export function deriveTrackedAnchorActionPlan(input: {
+  actionKey: TodayActionKey;
+  remindAt: string | null;
+  now: Date;
+}):
+  | { kind: "CONFIRM_AND_ADVANCE" }
+  | { kind: "SNOOZE"; until: Date }
+  | { kind: "CANCEL" }
+  | { kind: "REVIEW" } {
+  if (input.actionKey === "MARK_DONE") {
+    return { kind: "CONFIRM_AND_ADVANCE" };
+  }
+
+  if (input.actionKey === "REMIND_LATER") {
+    const parsed = parseOptionalIsoDate(input.remindAt);
+    return {
+      kind: "SNOOZE",
+      until:
+        parsed ??
+        new Date(input.now.getTime() + 7 * 24 * 60 * 60 * 1000)
+    };
+  }
+
+  if (input.actionKey === "DISMISS") {
+    return { kind: "CANCEL" };
+  }
+
+  return { kind: "REVIEW" };
 }
