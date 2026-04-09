@@ -31,6 +31,7 @@ import { gmailPublicRouter } from "./routes/gmail-public.routes";
 import { subscriptionRouter } from "./routes/subscription.routes";
 import { subscriptionReviewRouter } from "./routes/subscription-review.routes";
 import { todayRouter } from "./routes/today.routes";
+import { trackedAnchorRouter } from "./routes/tracked-anchor.routes";
 
 export function createApp() {
   const app = express();
@@ -66,6 +67,7 @@ export function createApp() {
   app.use("/api/subscriptions/review", subscriptionReviewRouter);
   app.use("/api/subscriptions", subscriptionRouter);
   app.use("/api/today", todayRouter);
+  app.use("/api/tracked-anchors", trackedAnchorRouter);
   app.use("/api/admin", requireAdmin, adminObservabilityRouter);
   app.use("/api", resolutionRouter);
 

@@ -88,7 +88,7 @@ export default function TodayViewShell({
         title: result.message,
         description:
           nextRemaining === 0
-            ? "You are all set for now."
+            ? "You are all set for now. Want us to keep an eye on anything important?"
             : result.today.primaryItem
               ? `Up next: ${result.today.primaryItem.title}`
               : `${nextRemaining} left for today.`

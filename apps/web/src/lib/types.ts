@@ -556,6 +556,65 @@ export interface Reminder {
   updatedAt: string;
 }
 
+export type TrackedAnchorCategory =
+  | "SUBSCRIPTION"
+  | "BILL"
+  | "INSURANCE"
+  | "MEMBERSHIP"
+  | "LOAN"
+  | "TAX"
+  | "OTHER";
+
+export type TrackedAnchorStatus =
+  | "ACTIVE"
+  | "PAUSED"
+  | "CANCELLED"
+  | "ARCHIVED";
+
+export type TrackedAnchorRecurrenceType =
+  | "RECURRING"
+  | "ONE_TIME"
+  | "UNKNOWN";
+
+export type TrackedAnchorRecurrenceUnit =
+  | "WEEK"
+  | "MONTH"
+  | "QUARTER"
+  | "YEAR"
+  | null;
+
+export interface TrackedAnchorItem {
+  id: string;
+  label: string;
+  category: TrackedAnchorCategory;
+  categoryLabel: string;
+  status: TrackedAnchorStatus;
+  statusLabel: string;
+  recurrenceType: TrackedAnchorRecurrenceType;
+  recurrenceInterval: number | null;
+  recurrenceUnit: TrackedAnchorRecurrenceUnit;
+  cadenceLabel: string;
+  nextExpectedDate: string | null;
+  expectedWindowStart: string | null;
+  expectedWindowEnd: string | null;
+  timingSummary: string | null;
+  expectedAmount: number | null;
+  currencyCode: string | null;
+  reminderLeadDays: number | null;
+  notes: string | null;
+  lastSnoozedUntil: string | null;
+  availableActions: Array<"EDIT" | "PAUSE" | "CANCEL" | "ARCHIVE" | "SNOOZE">;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TrackedAnchorCreateSuccess {
+  title: string;
+  description: string;
+  reassurance: string;
+  nextTimingLine: string | null;
+}
+
 export interface DailyPulseTopInsight {
   title: string;
   description: string;

@@ -47,6 +47,8 @@ import type {
   PredictionUpcomingResponse,
   ReviewQueueResponse,
   Reminder,
+  TrackedAnchorCreateSuccess,
+  TrackedAnchorItem,
   ResolutionResponse,
   SortDirection,
   SubscriptionLifecycleState,
@@ -102,6 +104,27 @@ type RemindersListResponse = {
 
 type ReminderResponse = {
   reminder: Reminder;
+};
+
+type TrackedAnchorListResponse = {
+  items: TrackedAnchorItem[];
+  statusFilter: "ACTIVE" | "PAUSED" | "CANCELLED" | "ARCHIVED" | "ALL";
+};
+
+type TrackedAnchorResponse = {
+  item: TrackedAnchorItem;
+  message?: string;
+};
+
+type TrackedAnchorCreateResponse = {
+  item: TrackedAnchorItem;
+  success: TrackedAnchorCreateSuccess;
+  duplicateHint:
+    | {
+        message: string;
+        similarItemLabel: string;
+      }
+    | null;
 };
 
 type GuidedJourneyResponse = {
@@ -1645,6 +1668,124 @@ export async function createReminder(input: {
   });
 
   return handleResponse<ReminderResponse>(res);
+}
+
+export async function getTrackedAnchors(params?: {
+  status?: "ACTIVE" | "PAUSED" | "CANCELLED" | "ARCHIVED" | "ALL";
+}): Promise<TrackedAnchorListResponse> {
+  const query = new URLSearchParams();
+  if (params?.status) {
+    query.set("status", params.status);
+  }
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+
+  const res = await apiFetch(`/tracked-anchors${suffix}`, {
+    cache: "no-store"
+  });
+  return handleResponse<TrackedAnchorListResponse>(res);
+}
+
+export async function getTrackedAnchorById(
+  anchorId: string
+): Promise<TrackedAnchorResponse> {
+  const res = await apiFetch(`/tracked-anchors/${anchorId}`, {
+    cache: "no-store"
+  });
+  return handleResponse<TrackedAnchorResponse>(res);
+}
+
+export async function createTrackedAnchor(input: {
+  label: string;
+  category?: "SUBSCRIPTION" | "BILL" | "INSURANCE" | "MEMBERSHIP" | "LOAN" | "TAX" | "OTHER";
+  recurrenceType?: "RECURRING" | "ONE_TIME" | "UNKNOWN";
+  recurrenceInterval?: number | null;
+  recurrenceUnit?: "WEEK" | "MONTH" | "QUARTER" | "YEAR" | null;
+  expectedAmount?: number | null;
+  currencyCode?: string | null;
+  nextExpectedDate?: string | null;
+  timingHint?: "THIS_WEEK" | "NEXT_WEEK" | "END_OF_MONTH" | "SPECIFIC_DATE" | "NOT_SURE";
+  timingDate?: string | null;
+  reminderLeadDays?: number | null;
+  notes?: string | null;
+}) {
+  const res = await apiFetch("/tracked-anchors", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  return handleResponse<TrackedAnchorCreateResponse>(res);
+}
+
+export async function updateTrackedAnchor(
+  anchorId: string,
+  input: {
+    label?: string;
+    category?:
+      | "SUBSCRIPTION"
+      | "BILL"
+      | "INSURANCE"
+      | "MEMBERSHIP"
+      | "LOAN"
+      | "TAX"
+      | "OTHER";
+    recurrenceType?: "RECURRING" | "ONE_TIME" | "UNKNOWN";
+    recurrenceInterval?: number | null;
+    recurrenceUnit?: "WEEK" | "MONTH" | "QUARTER" | "YEAR" | null;
+    expectedAmount?: number | null;
+    currencyCode?: string | null;
+    nextExpectedDate?: string | null;
+    timingHint?: "THIS_WEEK" | "NEXT_WEEK" | "END_OF_MONTH" | "SPECIFIC_DATE" | "NOT_SURE";
+    timingDate?: string | null;
+    reminderLeadDays?: number | null;
+    notes?: string | null;
+    status?: "ACTIVE" | "PAUSED" | "CANCELLED" | "ARCHIVED";
+  }
+): Promise<TrackedAnchorResponse> {
+  const res = await apiFetch(`/tracked-anchors/${anchorId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  return handleResponse<TrackedAnchorResponse>(res);
+}
+
+export async function pauseTrackedAnchor(anchorId: string): Promise<TrackedAnchorResponse> {
+  const res = await apiFetch(`/tracked-anchors/${anchorId}/pause`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
+  return handleResponse<TrackedAnchorResponse>(res);
+}
+
+export async function cancelTrackedAnchor(anchorId: string): Promise<TrackedAnchorResponse> {
+  const res = await apiFetch(`/tracked-anchors/${anchorId}/cancel`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
+  return handleResponse<TrackedAnchorResponse>(res);
+}
+
+export async function archiveTrackedAnchor(anchorId: string): Promise<TrackedAnchorResponse> {
+  const res = await apiFetch(`/tracked-anchors/${anchorId}/archive`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
+  return handleResponse<TrackedAnchorResponse>(res);
+}
+
+export async function snoozeTrackedAnchor(
+  anchorId: string,
+  until: string
+): Promise<TrackedAnchorResponse> {
+  const res = await apiFetch(`/tracked-anchors/${anchorId}/snooze`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ until })
+  });
+  return handleResponse<TrackedAnchorResponse>(res);
 }
 
 export async function uploadFile(file: File): Promise<UploadIngestionApiResponse> {

@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { TodayNextUp } from "../lib/types";
 import { buttonStyles, cardStyles, colors } from "../lib/ui";
 import { buildCompletionReliefMessage } from "../lib/emotional-trust.service";
+import TrackedAnchorAddFlow from "./tracked-anchor-add-flow";
 
 export default function TodayEmptyState({
   headline = "You're all set for now",
@@ -43,12 +44,23 @@ export default function TodayEmptyState({
         </div>
       ) : null}
       {viewUpcomingAvailable ? (
-        <div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <Link href="/upcoming" style={buttonStyles.link}>
             View upcoming
           </Link>
+          <TrackedAnchorAddFlow
+            triggerLabel="Want us to keep an eye on something?"
+            triggerStyle="secondary"
+            headline="What do you want us to keep an eye on?"
+          />
         </div>
-      ) : null}
+      ) : (
+        <TrackedAnchorAddFlow
+          triggerLabel="Want us to keep an eye on something?"
+          triggerStyle="secondary"
+          headline="What do you want us to keep an eye on?"
+        />
+      )}
     </section>
   );
 }

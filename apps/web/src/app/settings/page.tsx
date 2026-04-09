@@ -1,16 +1,19 @@
 import { redirect } from "next/navigation";
 import { auth } from "../../auth";
 import AccountSettingsPanel from "../../components/account-settings-panel";
+import TrackedAnchorManagerPanel from "../../components/tracked-anchor-manager-panel";
 import ZeroInputSettingsPanel from "../../components/zero-input-settings-panel";
 import {
   getGmailConnectionStatus,
   getHouseholds,
+  getTrackedAnchors,
   getZeroInputDecisions,
   getZeroInputPolicy
 } from "../../lib/api";
 import type {
   GmailConnectionStatus,
   HouseholdSummary,
+  TrackedAnchorItem,
   ZeroInputDecisionItem,
   ZeroInputPolicy
 } from "../../lib/types";
@@ -52,22 +55,25 @@ export default async function SettingsPage({ searchParams }: Props) {
   let decisions: ZeroInputDecisionItem[] = [];
   let gmailConnection: GmailConnectionStatus | null = null;
   let households: HouseholdSummary[] = [];
+  let trackedItems: TrackedAnchorItem[] = [];
   let error: string | null = null;
 
   try {
-    const [policyResult, decisionResult, gmailResult, householdResult] = await Promise.all([
+    const [policyResult, decisionResult, gmailResult, householdResult, trackedAnchorResult] = await Promise.all([
       getZeroInputPolicy(),
       getZeroInputDecisions({
         limit: 12,
         decision: ["EXECUTED", "SUPPRESSED", "REVIEW", "APPROVAL_REQUIRED"]
       }),
       getGmailConnectionStatus().catch(() => ({ connection: null })),
-      getHouseholds().catch(() => ({ households: [] }))
+      getHouseholds().catch(() => ({ households: [] })),
+      getTrackedAnchors({ status: "ALL" }).catch(() => ({ items: [], statusFilter: "ALL" as const }))
     ]);
     policy = policyResult.policy;
     decisions = decisionResult.items;
     gmailConnection = gmailResult.connection;
     households = householdResult.households;
+    trackedItems = trackedAnchorResult.items;
   } catch (fetchError) {
     error =
       fetchError instanceof Error
@@ -88,6 +94,7 @@ export default async function SettingsPage({ searchParams }: Props) {
           gmailConnection={gmailConnection}
           households={households}
         />
+        <TrackedAnchorManagerPanel initialItems={trackedItems} />
       </main>
       <ZeroInputSettingsPanel
         initialPolicy={policy}

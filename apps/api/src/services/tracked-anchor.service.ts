@@ -15,16 +15,26 @@ import type {
 } from "../types/anchor-tracking.types";
 import { AnchorTrackingEngineService } from "./anchor-tracking-engine.service";
 
+const timingHintSchema = z.enum([
+  "THIS_WEEK",
+  "NEXT_WEEK",
+  "END_OF_MONTH",
+  "SPECIFIC_DATE",
+  "NOT_SURE"
+]);
+
 const createTrackedAnchorSchema = z.object({
   label: z.string().trim().min(1),
   normalizedLabel: z.string().trim().min(1).nullable().optional(),
-  category: z.nativeEnum(AnchorCategory),
+  category: z.nativeEnum(AnchorCategory).optional(),
   recurrenceType: z.nativeEnum(AnchorRecurrenceType).optional(),
   recurrenceInterval: z.number().int().positive().nullable().optional(),
   recurrenceUnit: z.nativeEnum(AnchorRecurrenceUnit).nullable().optional(),
   expectedAmount: z.number().nonnegative().nullable().optional(),
   currencyCode: z.string().trim().length(3).nullable().optional(),
   nextExpectedDate: z.string().datetime().nullable().optional(),
+  timingHint: timingHintSchema.optional(),
+  timingDate: z.string().datetime().nullable().optional(),
   reminderLeadDays: z.number().int().min(0).max(180).nullable().optional(),
   notes: z.string().trim().max(2000).nullable().optional(),
   source: z.nativeEnum(AnchorSource).optional(),
@@ -43,6 +53,8 @@ const updateTrackedAnchorSchema = z.object({
   expectedAmount: z.number().nonnegative().nullable().optional(),
   currencyCode: z.string().trim().length(3).nullable().optional(),
   nextExpectedDate: z.string().datetime().nullable().optional(),
+  timingHint: timingHintSchema.optional(),
+  timingDate: z.string().datetime().nullable().optional(),
   expectedWindowStart: z.string().datetime().nullable().optional(),
   expectedWindowEnd: z.string().datetime().nullable().optional(),
   status: z.nativeEnum(AnchorStatus).optional(),
@@ -75,7 +87,7 @@ export class TrackedAnchorService {
 
   async createAnchor(userId: string, payload: unknown) {
     const parsed = createTrackedAnchorSchema.parse(payload);
-    const input = normalizeCreateInput(parsed);
+    const input = normalizeCreateInput(parsed, this.now());
     const recurrence = this.trackingEngine.normalizeRecurrenceDefinition({
       recurrenceType: input.recurrenceType,
       recurrenceInterval: input.recurrenceInterval,
@@ -110,7 +122,23 @@ export class TrackedAnchorService {
     return this.repository.getByUserId(anchorId, userId);
   }
 
-  async listForUser(userId: string) {
+  async listForUser(
+    userId: string,
+    options?: { status?: AnchorStatus | "ALL" }
+  ) {
+    if (options?.status === AnchorStatus.ACTIVE || !options?.status) {
+      return this.repository.listActiveForUser(userId);
+    }
+
+    const all = await this.repository.listForUser(userId);
+    if (options.status === "ALL") {
+      return all;
+    }
+
+    return all.filter((item) => item.status === options.status);
+  }
+
+  async listAllForUser(userId: string) {
     return this.repository.listForUser(userId);
   }
 
@@ -120,7 +148,7 @@ export class TrackedAnchorService {
 
   async updateAnchor(userId: string, anchorId: string, payload: unknown) {
     const parsed = updateTrackedAnchorSchema.parse(payload);
-    const patch = normalizeUpdateInput(parsed);
+    const patch = normalizeUpdateInput(parsed, this.now());
     if (hasOwn(parsed, "label") && !hasOwn(parsed, "normalizedLabel") && parsed.label) {
       patch.normalizedLabel = normalizeLabel(parsed.label);
     }
@@ -301,18 +329,20 @@ export class TrackedAnchorService {
 }
 
 function normalizeCreateInput(
-  input: z.infer<typeof createTrackedAnchorSchema>
+  input: z.infer<typeof createTrackedAnchorSchema>,
+  now: Date
 ): CreateTrackedAnchorInput {
+  const hintedDate = resolveTimingHintDate(input.timingHint, input.timingDate, now);
   return {
     label: input.label.trim(),
     normalizedLabel: input.normalizedLabel ?? normalizeLabel(input.label),
-    category: input.category,
+    category: input.category ?? AnchorCategory.OTHER,
     recurrenceType: input.recurrenceType ?? AnchorRecurrenceType.UNKNOWN,
     recurrenceInterval: input.recurrenceInterval ?? null,
     recurrenceUnit: input.recurrenceUnit ?? null,
     expectedAmount: input.expectedAmount ?? null,
     currencyCode: normalizeCurrencyCode(input.currencyCode),
-    nextExpectedDate: input.nextExpectedDate ?? null,
+    nextExpectedDate: input.nextExpectedDate ?? hintedDate ?? null,
     reminderLeadDays: input.reminderLeadDays ?? null,
     notes: input.notes ?? null,
     source: input.source ?? AnchorSource.USER_ADDED,
@@ -323,8 +353,10 @@ function normalizeCreateInput(
 }
 
 function normalizeUpdateInput(
-  input: z.infer<typeof updateTrackedAnchorSchema>
+  input: z.infer<typeof updateTrackedAnchorSchema>,
+  now: Date
 ): UpdateTrackedAnchorInput {
+  const hintedDate = resolveTimingHintDate(input.timingHint, input.timingDate, now);
   return {
     label: input.label?.trim(),
     normalizedLabel: input.normalizedLabel,
@@ -334,7 +366,7 @@ function normalizeUpdateInput(
     recurrenceUnit: input.recurrenceUnit,
     expectedAmount: input.expectedAmount,
     currencyCode: normalizeCurrencyCode(input.currencyCode),
-    nextExpectedDate: input.nextExpectedDate,
+    nextExpectedDate: input.nextExpectedDate ?? hintedDate,
     expectedWindowStart: input.expectedWindowStart,
     expectedWindowEnd: input.expectedWindowEnd,
     status: input.status,
@@ -399,4 +431,37 @@ function resolveDateForTiming(
 
 function hasOwn<T extends object>(input: T, key: keyof T) {
   return Object.prototype.hasOwnProperty.call(input, key);
+}
+
+function resolveTimingHintDate(
+  hint: z.infer<typeof timingHintSchema> | undefined,
+  timingDate: string | null | undefined,
+  now: Date
+) {
+  if (!hint || hint === "NOT_SURE") return null;
+  if (hint === "SPECIFIC_DATE") {
+    if (!timingDate) return null;
+    return timingDate;
+  }
+
+  if (hint === "END_OF_MONTH") {
+    const end = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 12, 0, 0, 0)
+    );
+    return end.toISOString();
+  }
+
+  const offsetDays = hint === "THIS_WEEK" ? 3 : 10;
+  const date = new Date(
+    Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate() + offsetDays,
+      12,
+      0,
+      0,
+      0
+    )
+  );
+  return date.toISOString();
 }

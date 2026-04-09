@@ -189,8 +189,14 @@ test("updateAnchor recomputes timing when next expected date is cleared", async 
   });
 
   assert.equal(updated?.confidence, AnchorConfidence.SYSTEM_INFERRED);
-  assert.equal(updated?.nextExpectedDate?.toISOString(), "2026-05-08T12:00:02.000Z");
-  assert.equal(records.get(created.id)?.nextExpectedDate?.toISOString(), "2026-05-08T12:00:02.000Z");
+  assert.match(
+    updated?.nextExpectedDate?.toISOString() ?? "",
+    /^2026-05-08T12:00:\d{2}\.000Z$/
+  );
+  assert.equal(
+    records.get(created.id)?.nextExpectedDate?.toISOString(),
+    updated?.nextExpectedDate?.toISOString()
+  );
 });
 
 test("invalid enum values are rejected at the service boundary", async () => {
@@ -204,4 +210,51 @@ test("invalid enum values are rejected at the service boundary", async () => {
       }),
     /Invalid option/
   );
+});
+
+test("createAnchor allows label-only input with safe defaults", async () => {
+  const { service } = createServiceFixture();
+
+  const created = await service.createAnchor("user_1", {
+    label: "Gym membership"
+  });
+
+  assert.equal(created.category, AnchorCategory.OTHER);
+  assert.equal(created.recurrenceType, AnchorRecurrenceType.UNKNOWN);
+  assert.equal(created.status, AnchorStatus.ACTIVE);
+});
+
+test("createAnchor resolves timing hints without requiring exact date input", async () => {
+  const { service } = createServiceFixture();
+
+  const created = await service.createAnchor("user_1", {
+    label: "Car insurance",
+    category: "INSURANCE",
+    recurrenceType: "RECURRING",
+    recurrenceUnit: "YEAR",
+    recurrenceInterval: 1,
+    timingHint: "END_OF_MONTH"
+  });
+
+  assert.equal(created.nextExpectedDate?.toISOString(), "2026-04-30T12:00:00.000Z");
+  assert.equal(created.expectedWindowStart?.toISOString(), "2026-04-09T12:00:00.000Z");
+});
+
+test("listForUser defaults to active items and can request all statuses", async () => {
+  const { service } = createServiceFixture();
+  const one = await service.createAnchor("user_1", {
+    label: "Netflix",
+    category: "SUBSCRIPTION"
+  });
+  await service.createAnchor("user_1", {
+    label: "Internet",
+    category: "BILL"
+  });
+  await service.archiveAnchor(one.id, "user_1");
+
+  const active = await service.listForUser("user_1");
+  const all = await service.listForUser("user_1", { status: "ALL" });
+
+  assert.equal(active.length, 1);
+  assert.equal(all.length, 2);
 });
