@@ -136,6 +136,48 @@ enum SubscriptionConfidenceBand {
   LOW
 }
 
+enum AnchorCategory {
+  SUBSCRIPTION
+  BILL
+  INSURANCE
+  MEMBERSHIP
+  LOAN
+  TAX
+  OTHER
+}
+
+enum AnchorRecurrenceType {
+  RECURRING
+  ONE_TIME
+  UNKNOWN
+}
+
+enum AnchorRecurrenceUnit {
+  WEEK
+  MONTH
+  QUARTER
+  YEAR
+}
+
+enum AnchorStatus {
+  ACTIVE
+  PAUSED
+  CANCELLED
+  ARCHIVED
+}
+
+enum AnchorSource {
+  USER_ADDED
+  USER_CONFIRMED_FROM_SIGNAL
+  SYSTEM_SUGGESTED
+}
+
+enum AnchorConfidence {
+  USER_PROVIDED
+  GMAIL_CONFIRMED
+  SYSTEM_INFERRED
+}
+
 enum SubscriptionInsightType {
   PRICE_INCREASE
   RENEWAL_UPCOMING
@@ -545,6 +587,7 @@ model User {
   lastHandledSubscriptions   SubscriptionRegistry[] @relation("SubscriptionLastHandledBy")
   subscriptionInsights       SubscriptionInsight[]
   subscriptionRecommendations SubscriptionRecommendation[]
+  trackedAnchors              TrackedAnchor[]
   llmCacheEntries            LlmCacheEntry[]
   llmUsageRecords            LlmUsageRecord[]
   llmAsyncTasks              LlmAsyncTask[]
@@ -765,6 +808,7 @@ model Obligation {
   promotedPredictions Prediction[] @relation("PredictionPromotedObligation")
   autonomyDecisions   AutonomyDecision[]
   externalMessageIngestions ExternalMessageIngestion[]
+  trackedAnchors      TrackedAnchor[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -782,6 +826,55 @@ model Obligation {
   @@index([importSourceId], map: "idx_obligations_import_source_id")
   @@index([subscriptionId], map: "idx_obligations_subscription_id")
   @@map("obligations")
+}
+
+model TrackedAnchor {
+  id String @id @default(cuid())
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  label           String
+  normalizedLabel String? @map("normalized_label")
+  category        AnchorCategory
+
+  recurrenceType     AnchorRecurrenceType @map("recurrence_type")
+  recurrenceInterval Int?                 @map("recurrence_interval")
+  recurrenceUnit     AnchorRecurrenceUnit? @map("recurrence_unit")
+
+  expectedAmount Decimal? @map("expected_amount") @db.Decimal(12, 2)
+  currencyCode   String?  @map("currency_code") @db.VarChar(3)
+
+  nextExpectedDate    DateTime? @map("next_expected_date")
+  expectedWindowStart DateTime? @map("expected_window_start")
+  expectedWindowEnd   DateTime? @map("expected_window_end")
+
+  status     AnchorStatus     @default(ACTIVE)
+  source     AnchorSource     @default(USER_ADDED)
+  confidence AnchorConfidence @default(USER_PROVIDED)
+
+  notes            String?
+  reminderLeadDays Int? @map("reminder_lead_days")
+
+  lastConfirmedAt DateTime? @map("last_confirmed_at")
+  lastObservedAt  DateTime? @map("last_observed_at")
+  lastSurfacedAt  DateTime? @map("last_surfaced_at")
+  lastSnoozedUntil DateTime? @map("last_snoozed_until")
+
+  vendorId String? @map("vendor_id")
+
+  linkedObligationId String?      @map("linked_obligation_id")
+  linkedObligation   Obligation? @relation(fields: [linkedObligationId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, status], map: "idx_tracked_anchors_user_id_status")
+  @@index([userId, nextExpectedDate], map: "idx_tracked_anchors_user_id_next_expected_date")
+  @@index([userId, expectedWindowStart, expectedWindowEnd], map: "idx_tracked_anchors_user_id_expected_window")
+  @@index([category], map: "idx_tracked_anchors_category")
+  @@index([linkedObligationId], map: "idx_tracked_anchors_linked_obligation_id")
+  @@map("tracked_anchors")
 }
 
 model SubscriptionRegistry {
