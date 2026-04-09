@@ -55,6 +55,7 @@ test("all-clear CTA copy is explicit and value-led", () => {
   assert.equal(html.includes(ALL_CLEAR_PROTECTION_BUTTON), true);
   assert.equal(html.includes("Want us to keep an eye on something?"), false);
   assert.equal(html.includes("What do you want us to keep an eye on?"), false);
+  assert.equal(html.includes("What should we keep an eye on?"), false);
 });
 
 test("view upcoming is rendered after anchor CTA block to keep hierarchy calm", () => {

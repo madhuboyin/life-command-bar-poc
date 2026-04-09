@@ -4,7 +4,9 @@ import React from "react";
 import Link from "next/link";
 import type { TodayNextUp } from "../lib/types";
 import { buttonStyles, cardStyles, colors } from "../lib/ui";
-import TrackedAnchorAddFlow from "./tracked-anchor-add-flow";
+import TrackedAnchorAddFlow, {
+  TRACKED_ANCHOR_FIRST_STEP_TITLE
+} from "./tracked-anchor-add-flow";
 
 export const ALL_CLEAR_PROTECTION_HEADLINE = "Never miss a renewal or bill again";
 export const ALL_CLEAR_PROTECTION_SUPPORTING =
@@ -72,7 +74,7 @@ export default function TodayEmptyState({
             <TrackedAnchorAddFlow
               triggerLabel={ALL_CLEAR_PROTECTION_BUTTON}
               triggerStyle="primary"
-              headline="What should we keep an eye on?"
+              headline={TRACKED_ANCHOR_FIRST_STEP_TITLE}
             />
           </div>
         </div>
