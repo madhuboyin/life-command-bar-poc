@@ -167,7 +167,7 @@ export default function TrackedAnchorAddFlow({
             {created ? (
               <div style={{ display: "grid", gap: 12 }}>
                 <div style={{ fontSize: 12, color: colors.textMuted }}>
-                  You're covered
+                  You&apos;re covered
                 </div>
                 <h2 style={{ margin: 0, fontSize: isMobile ? 24 : 28 }}>
                   {created.success.title}
@@ -191,7 +191,7 @@ export default function TrackedAnchorAddFlow({
                     Done
                   </button>
                   <a href="/settings#watch-list" style={buttonStyles.link}>
-                    View what we're watching
+                    View what we&apos;re watching
                   </a>
                 </div>
               </div>
