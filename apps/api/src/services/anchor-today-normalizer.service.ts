@@ -31,14 +31,20 @@ export class AnchorTodayNormalizerService {
   normalizeAnchorsForToday(input: {
     anchors: TrackedAnchor[];
     suppressionKeys?: Set<string>;
+    suppressedAnchorIds?: Set<string>;
     now?: Date;
   }): AnchorTodayCandidate[] {
     const now = input.now ?? new Date();
     const suppressionKeys = input.suppressionKeys ?? new Set<string>();
+    const suppressedAnchorIds = input.suppressedAnchorIds ?? new Set<string>();
     const strongCandidates: AnchorTodayCandidate[] = [];
     const weakTimingCandidates: AnchorTodayCandidate[] = [];
 
     for (const anchor of input.anchors) {
+      if (suppressedAnchorIds.has(anchor.id)) {
+        continue;
+      }
+
       const dueEvaluation = this.trackingEngine.evaluateAnchorDueStatus(
         {
           recurrenceType: anchor.recurrenceType,

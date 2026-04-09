@@ -34,6 +34,11 @@ import {
 import { TrackedAnchorService } from "./tracked-anchor.service";
 import { AnchorTodayNormalizerService } from "./anchor-today-normalizer.service";
 import { fromTrackedAnchorTodayItemId } from "../utils/tracked-anchor-today-id";
+import {
+  AnchorCandidateDedupeService,
+  type DedupeObligationCandidate
+} from "./anchor-candidate-dedupe.service";
+import { AnchorTrackingRolloutService } from "./anchor-tracking-rollout.service";
 
 export type DailyCommandCenterItem = {
   id: string;
@@ -120,6 +125,8 @@ export class DailyCommandCenterService {
   private readonly rolloutService = new AdaptivePersonalizationRolloutService();
   private readonly trackedAnchorService = new TrackedAnchorService();
   private readonly anchorTodayNormalizer = new AnchorTodayNormalizerService();
+  private readonly anchorDedupeService = new AnchorCandidateDedupeService();
+  private readonly anchorRolloutService = new AnchorTrackingRolloutService();
 
   async getTodayView(userId: string, options?: { emitEvents?: boolean }): Promise<DailyCommandCenterResponse> {
     const emitEvents = options?.emitEvents ?? true;
@@ -152,10 +159,62 @@ export class DailyCommandCenterService {
       this.trackedAnchorService.listActiveForUser(userId).catch(() => [])
     ]);
 
-    const overlapKeys = buildObligationOverlapKeys(openRows);
+    let overlapKeys = buildObligationOverlapKeys(openRows);
+    let suppressedAnchorIds = new Set<string>();
+    const anchorRolloutState = this.anchorRolloutService.getState();
+
+    if (
+      anchorRolloutState.step4Enabled &&
+      anchorRolloutState.dedupeRefinementEnabled
+    ) {
+      try {
+        const dedupePlan = this.anchorDedupeService.buildSuppressionPlan({
+          anchors: activeAnchors,
+          obligations: openRows.map((row) => toDedupeObligationCandidate(row)),
+          now
+        });
+        overlapKeys = mergeStringSets(overlapKeys, dedupePlan.suppressionKeys);
+        suppressedAnchorIds = dedupePlan.suppressedAnchorIds;
+
+        if (emitEvents && dedupePlan.decisions.length > 0) {
+          await Promise.all(
+            dedupePlan.decisions.map((decision) =>
+              createAuditEvent({
+                userId,
+                obligationId: decision.obligationId,
+                eventType:
+                  decision.decision === "SUPPRESSED_IN_FAVOR_OF_GMAIL"
+                    ? "anchor_candidate_suppressed_by_dedupe"
+                    : "anchor_matching_ambiguous",
+                metadata: {
+                  anchorId: decision.anchorId,
+                  obligationId: decision.obligationId,
+                  score: decision.score,
+                  reason: decision.reason,
+                  stage: "today_candidate_merge"
+                }
+              })
+            )
+          );
+        }
+      } catch {
+        if (emitEvents) {
+          await createAuditEvent({
+            userId,
+            eventType: "anchor_fallback_used",
+            metadata: {
+              stage: "today_dedupe_refinement",
+              reason: "dedupe_refinement_failed"
+            }
+          });
+        }
+      }
+    }
+
     const anchorCandidates = this.anchorTodayNormalizer.normalizeAnchorsForToday({
       anchors: activeAnchors,
       suppressionKeys: overlapKeys,
+      suppressedAnchorIds,
       now
     });
 
@@ -527,7 +586,19 @@ export class DailyCommandCenterService {
 
     await Promise.all(
       Array.from(anchorIds).map((anchorId) =>
-        this.trackedAnchorService.markSurfaced(anchorId, userId).catch(() => null)
+        this.trackedAnchorService
+          .markSurfaced(anchorId, userId)
+          .then(() =>
+            createAuditEvent({
+              userId,
+              eventType: "anchor_surfaced",
+              metadata: {
+                anchorId,
+                surface: "today_view"
+              }
+            })
+          )
+          .catch(() => null)
       )
     );
   }
@@ -820,5 +891,54 @@ function mergeUpcomingWithPredictions(
     });
   }
 
+  return merged;
+}
+
+function toDedupeObligationCandidate(row: {
+  id: string;
+  title: string;
+  vendor: string | null;
+  type: DedupeObligationCandidate["obligationType"];
+  dueDate: Date | null;
+  recurrence: string | null;
+  amount: unknown;
+  currency: string | null;
+  confidenceScore: unknown;
+  source: DedupeObligationCandidate["sourceType"];
+  importSource?: {
+    subtype: DedupeObligationCandidate["importSourceSubtype"];
+  } | null;
+  subscription?: {
+    vendorName: string | null;
+    nextRenewalDate: Date | null;
+  } | null;
+}): DedupeObligationCandidate {
+  return {
+    obligationId: row.id,
+    title: row.title,
+    vendorName: row.vendor ?? row.subscription?.vendorName ?? null,
+    obligationType: row.type,
+    dueDate: row.dueDate,
+    renewalDate: row.subscription?.nextRenewalDate ?? null,
+    recurrence: row.recurrence,
+    amount: toNumberOrNull(row.amount),
+    currencyCode: row.currency,
+    confidenceScore: toNumberOrNull(row.confidenceScore),
+    sourceType: row.source,
+    importSourceSubtype: row.importSource?.subtype ?? null
+  };
+}
+
+function toNumberOrNull(value: unknown) {
+  if (value === null || value === undefined) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function mergeStringSets(left: Set<string>, right: Set<string>) {
+  const merged = new Set(left);
+  for (const value of right) {
+    merged.add(value);
+  }
   return merged;
 }

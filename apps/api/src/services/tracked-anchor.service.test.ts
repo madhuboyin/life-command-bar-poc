@@ -139,7 +139,8 @@ function createServiceFixture() {
   const service = new TrackedAnchorService({
     repository: repository as unknown as TrackedAnchorRepository,
     trackingEngine: new AnchorTrackingEngineService(),
-    now
+    now,
+    emitAuditEvent: async () => null as never
   });
 
   return {

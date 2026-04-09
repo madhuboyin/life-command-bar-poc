@@ -7,6 +7,12 @@ import {
 import { GmailDedupeService } from "./gmail-dedupe.service";
 import { runGmailSubscriptionHeuristics, GmailSubscriptionHeuristicResult } from "./gmail-subscription-heuristics";
 import { SubscriptionRegistryService } from "./subscription-registry.service";
+import {
+  AnchorGmailEnrichmentService,
+  toAnchorSignalConfidence,
+  toAnchorSignalMetadata,
+  toObservedAt
+} from "./anchor-gmail-enrichment.service";
 
 export type GmailMessageIngestionResult = {
   skippedAsExactDuplicate: boolean;
@@ -19,6 +25,7 @@ export class GmailIngestionService {
   private readonly ingestionService = new IngestionService();
   private readonly dedupeService = new GmailDedupeService();
   private readonly subscriptionRegistryService = new SubscriptionRegistryService();
+  private readonly anchorGmailEnrichmentService = new AnchorGmailEnrichmentService();
 
   async ingestMessage(input: {
     userId: string;
@@ -213,6 +220,7 @@ export class GmailIngestionService {
       });
 
       await this.emitIngestionAuditEvents(input, ingestion, dedupeReason, lifecycle);
+      await this.enrichTrackedAnchorsFromGmailSignal(input, ingestion, lifecycle);
 
       if (lifecycle.lifecycleEmailType !== "UNKNOWN") {
         const registryResult = await this.subscriptionRegistryService
@@ -392,8 +400,59 @@ export class GmailIngestionService {
       }
     });
   }
+
+  private async enrichTrackedAnchorsFromGmailSignal(
+    input: {
+      userId: string;
+      externalConnectionId: string;
+      matchedQueryKey: string;
+      normalizedMessage: NormalizedGmailMessage;
+    },
+    ingestion: IngestionResult,
+    lifecycle: GmailSubscriptionHeuristicResult
+  ) {
+    if (!ingestion.obligationId) {
+      return;
+    }
+
+    const dueDate = parseOptionalDate(ingestion.extracted.dueDate);
+    const observedAt = toObservedAt({
+      messageDate: input.normalizedMessage.messageDate,
+      internalDate: input.normalizedMessage.internalDate,
+      fallbackNow: new Date()
+    });
+
+    await this.anchorGmailEnrichmentService.enrichFromGmailSignal({
+      userId: input.userId,
+      signal: {
+        obligationId: ingestion.obligationId,
+        title: ingestion.extracted.title ?? input.normalizedMessage.subject,
+        vendorName: lifecycle.extraction.vendor ?? ingestion.extracted.vendor,
+        obligationType: ingestion.extracted.type ?? null,
+        dueDate,
+        recurrence: ingestion.extracted.recurrence,
+        amount: ingestion.extracted.amount,
+        currencyCode: ingestion.extracted.currency,
+        confidenceScore: toAnchorSignalConfidence(ingestion.confidence),
+        source: "EMAIL",
+        observedAt,
+        metadata: toAnchorSignalMetadata({
+          lifecycleEmailType: lifecycle.lifecycleEmailType,
+          matchedQueryKey: input.matchedQueryKey,
+          confidenceBand: lifecycle.confidence.confidenceBand
+        })
+      }
+    });
+  }
 }
 
 function isUniqueViolation(error: unknown) {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+}
+
+function parseOptionalDate(value: string | null) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
 }

@@ -548,6 +548,16 @@ export class TodayActionLoopService {
         remindAt: payload.remindAt ?? null
       }
     });
+    await createAuditEvent({
+      userId,
+      obligationId: anchor.linkedObligationId,
+      eventType: "anchor_action_completed",
+      metadata: {
+        anchorId,
+        actionKey: payload.actionKey,
+        status
+      }
+    });
 
     const today = await this.todayService.getTodayView(userId, {
       emitEvents: false

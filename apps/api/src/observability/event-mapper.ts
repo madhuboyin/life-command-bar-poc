@@ -237,6 +237,33 @@ function mapEventType(
     case "subscription_registry_update_skipped":
       return OBSERVABILITY_EVENT_TYPES.SUBSCRIPTION_REGISTRY_UPDATE_SKIPPED;
 
+    case "anchor_created":
+      return OBSERVABILITY_EVENT_TYPES.ANCHOR_CREATED;
+    case "anchor_updated":
+      return OBSERVABILITY_EVENT_TYPES.ANCHOR_UPDATED;
+    case "anchor_cancelled":
+      return OBSERVABILITY_EVENT_TYPES.ANCHOR_CANCELLED;
+    case "anchor_snoozed":
+      return OBSERVABILITY_EVENT_TYPES.ANCHOR_SNOOZED;
+    case "anchor_surfaced":
+      return OBSERVABILITY_EVENT_TYPES.ANCHOR_SURFACED;
+    case "anchor_action_completed":
+      return OBSERVABILITY_EVENT_TYPES.ANCHOR_ACTION_COMPLETED;
+    case "anchor_confirmed_by_gmail":
+      return OBSERVABILITY_EVENT_TYPES.ANCHOR_CONFIRMED_BY_GMAIL;
+    case "anchor_timing_refined":
+      return OBSERVABILITY_EVENT_TYPES.ANCHOR_TIMING_REFINED;
+    case "anchor_candidate_suppressed_by_dedupe":
+      return OBSERVABILITY_EVENT_TYPES.ANCHOR_CANDIDATE_SUPPRESSED_BY_DEDUPE;
+    case "anchor_candidate_merged":
+      return OBSERVABILITY_EVENT_TYPES.ANCHOR_CANDIDATE_MERGED;
+    case "anchor_fallback_used":
+      return OBSERVABILITY_EVENT_TYPES.ANCHOR_FALLBACK_USED;
+    case "anchor_matching_failed":
+      return OBSERVABILITY_EVENT_TYPES.ANCHOR_MATCHING_FAILED;
+    case "anchor_matching_ambiguous":
+      return OBSERVABILITY_EVENT_TYPES.ANCHOR_MATCHING_AMBIGUOUS;
+
     case "prediction_rebuilt":
     case "prediction_updated":
       return OBSERVABILITY_EVENT_TYPES.PREDICTION_CREATED;

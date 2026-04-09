@@ -140,3 +140,14 @@ test("suppresses anchor candidates that overlap known open obligations", () => {
 
   assert.equal(results.length, 0);
 });
+
+test("suppresses anchor candidates by explicit dedupe anchor ids", () => {
+  const normalizer = new AnchorTodayNormalizerService();
+  const results = normalizer.normalizeAnchorsForToday({
+    anchors: [createAnchor({ id: "anchor_suppressed" })],
+    suppressedAnchorIds: new Set(["anchor_suppressed"]),
+    now: FIXED_NOW
+  });
+
+  assert.equal(results.length, 0);
+});

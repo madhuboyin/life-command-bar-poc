@@ -8,6 +8,7 @@ import {
 } from "@prisma/client";
 import { z } from "zod";
 import { TrackedAnchorRepository } from "../repositories/tracked-anchor.repository";
+import { createAuditEvent } from "../observability/audit-event";
 import type {
   AnchorDueEvaluation,
   CreateTrackedAnchorInput,
@@ -71,18 +72,21 @@ type TrackedAnchorServiceDependencies = {
   repository?: TrackedAnchorRepository;
   trackingEngine?: AnchorTrackingEngineService;
   now?: () => Date;
+  emitAuditEvent?: typeof createAuditEvent;
 };
 
 export class TrackedAnchorService {
   private readonly repository: TrackedAnchorRepository;
   private readonly trackingEngine: AnchorTrackingEngineService;
   private readonly now: () => Date;
+  private readonly emitAuditEvent: typeof createAuditEvent;
 
   constructor(dependencies: TrackedAnchorServiceDependencies = {}) {
     this.repository = dependencies.repository ?? new TrackedAnchorRepository();
     this.trackingEngine =
       dependencies.trackingEngine ?? new AnchorTrackingEngineService();
     this.now = dependencies.now ?? (() => new Date());
+    this.emitAuditEvent = dependencies.emitAuditEvent ?? createAuditEvent;
   }
 
   async createAnchor(userId: string, payload: unknown) {
@@ -106,7 +110,7 @@ export class TrackedAnchorService {
       this.now()
     );
 
-    return this.repository.createAnchor(userId, {
+    const created = await this.repository.createAnchor(userId, {
       ...input,
       recurrenceType: recurrence.recurrenceType,
       recurrenceInterval: recurrence.recurrenceInterval,
@@ -116,6 +120,17 @@ export class TrackedAnchorService {
       expectedWindowEnd: timing.expectedWindowEnd,
       confidence: timing.confidence
     });
+    await this.emitAuditEvent({
+      userId,
+      obligationId: created.linkedObligationId,
+      eventType: "anchor_created",
+      metadata: {
+        anchorId: created.id,
+        category: created.category,
+        recurrenceType: created.recurrenceType
+      }
+    }).catch(() => null);
+    return created;
   }
 
   async getAnchorForUser(anchorId: string, userId: string) {
@@ -217,19 +232,66 @@ export class TrackedAnchorService {
       }
     }
 
-    return this.repository.updateAnchor(anchorId, userId, nextPatch);
+    const updated = await this.repository.updateAnchor(anchorId, userId, nextPatch);
+    if (updated) {
+      await this.emitAuditEvent({
+        userId,
+        obligationId: updated.linkedObligationId,
+        eventType: "anchor_updated",
+        metadata: {
+          anchorId: updated.id,
+          status: updated.status
+        }
+      }).catch(() => null);
+    }
+    return updated;
   }
 
   async pauseAnchor(anchorId: string, userId: string) {
-    return this.repository.pauseAnchor(anchorId, userId);
+    const paused = await this.repository.pauseAnchor(anchorId, userId);
+    if (paused) {
+      await this.emitAuditEvent({
+        userId,
+        obligationId: paused.linkedObligationId,
+        eventType: "anchor_updated",
+        metadata: {
+          anchorId: paused.id,
+          status: paused.status
+        }
+      }).catch(() => null);
+    }
+    return paused;
   }
 
   async cancelAnchor(anchorId: string, userId: string) {
-    return this.repository.cancelAnchor(anchorId, userId);
+    const cancelled = await this.repository.cancelAnchor(anchorId, userId);
+    if (cancelled) {
+      await this.emitAuditEvent({
+        userId,
+        obligationId: cancelled.linkedObligationId,
+        eventType: "anchor_cancelled",
+        metadata: {
+          anchorId: cancelled.id
+        }
+      }).catch(() => null);
+    }
+    return cancelled;
   }
 
   async archiveAnchor(anchorId: string, userId: string) {
-    return this.repository.archiveAnchor(anchorId, userId);
+    const archived = await this.repository.archiveAnchor(anchorId, userId);
+    if (archived) {
+      await this.emitAuditEvent({
+        userId,
+        obligationId: archived.linkedObligationId,
+        eventType: "anchor_updated",
+        metadata: {
+          anchorId: archived.id,
+          status: archived.status
+        }
+      }).catch(() => null);
+    }
+    return archived;
   }
 
   async markConfirmed(anchorId: string, userId: string, timestamp?: Date) {
@@ -245,7 +307,20 @@ export class TrackedAnchorService {
   }
 
   async snoozeAnchor(anchorId: string, userId: string, until: Date | string) {
-    return this.repository.snoozeAnchor(anchorId, userId, until);
+    const snoozed = await this.repository.snoozeAnchor(anchorId, userId, until);
+    if (snoozed) {
+      await this.emitAuditEvent({
+        userId,
+        obligationId: snoozed.linkedObligationId,
+        eventType: "anchor_snoozed",
+        metadata: {
+          anchorId: snoozed.id,
+          until:
+            (until instanceof Date ? until : new Date(until)).toISOString()
+        }
+      }).catch(() => null);
+    }
+    return snoozed;
   }
 
   async evaluateDueStatus(anchorId: string, userId: string, now = this.now()) {
