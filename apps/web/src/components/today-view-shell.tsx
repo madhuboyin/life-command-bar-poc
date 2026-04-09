@@ -14,6 +14,7 @@ import { useFlowSession } from "./flow-session-provider";
 import TodayEmptyState from "./today-empty-state";
 import TodayPrimaryItemCard from "./today-primary-item-card";
 import { useToast } from "./ui/toast-provider";
+import { shouldShowHeaderUpcomingAction } from "./today-view-shell.helpers";
 
 export default function TodayViewShell({
   initialData,
@@ -88,7 +89,7 @@ export default function TodayViewShell({
         title: result.message,
         description:
           nextRemaining === 0
-            ? "You are all set for now. Want us to keep an eye on anything important?"
+            ? "You are all set for now. Add one thing and we'll remind you before it comes up."
             : result.today.primaryItem
               ? `Up next: ${result.today.primaryItem.title}`
               : `${nextRemaining} left for today.`
@@ -130,7 +131,7 @@ export default function TodayViewShell({
             Know what matters. Act quickly. Stay in control.
           </p>
         </div>
-        {data?.viewUpcomingAvailable ? (
+        {shouldShowHeaderUpcomingAction(data) ? (
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Link href="/upcoming" style={buttonStyles.link}>
               View upcoming
@@ -159,6 +160,7 @@ export default function TodayViewShell({
               subheadline={data.subheadline}
               nextUp={data.nextUp}
               viewUpcomingAvailable={data.viewUpcomingAvailable}
+              mode="follow_up"
             />
           ) : (
             <>

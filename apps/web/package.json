@@ -6,7 +6,8 @@
     "dev": "next dev -p 3000",
     "build": "prisma generate --schema=../api/prisma/schema.prisma && next build",
     "typecheck": "next typegen && tsc --noEmit",
-    "lint": "eslint . --max-warnings=0"
+    "lint": "eslint . --max-warnings=0",
+    "test": "tsx --test src/**/*.test.ts src/**/*.test.tsx"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.4",
@@ -26,6 +27,7 @@
       "eslint-config-next": "^15.1.0",
       "@prisma/config": "6.4.1",
       "prisma": "6.4.1",
+      "tsx": "^4.19.2",
       "typescript": "^5.7.2"
   }
 }

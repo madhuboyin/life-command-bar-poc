@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import type React from "react";
+import React, { useMemo, useState } from "react";
 import { createTrackedAnchor } from "../lib/api";
 import type { TrackedAnchorCreateSuccess, TrackedAnchorItem } from "../lib/types";
 import {
